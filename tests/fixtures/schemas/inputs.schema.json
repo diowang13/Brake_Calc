@@ -1,0 +1,537 @@
+{
+  "$defs": {
+    "AirSpringParams": {
+      "description": "\u7a7a\u7c27\u914d\u7f6e\u3002",
+      "properties": {
+        "load_group_pressure_kpa": {
+          "additionalProperties": {
+            "type": "number"
+          },
+          "description": "\u5355\u4f4d: kPa",
+          "propertyNames": {
+            "enum": [
+              "AW0",
+              "AW2",
+              "AW3"
+            ]
+          },
+          "title": "Load Group Pressure Kpa",
+          "type": "object"
+        }
+      },
+      "required": [
+        "load_group_pressure_kpa"
+      ],
+      "title": "AirSpringParams",
+      "type": "object"
+    },
+    "BrakeTypeDefinition": {
+      "description": "\u5236\u52a8\u7c7b\u578b\u5b9a\u4e49\u3002",
+      "properties": {
+        "name": {
+          "description": "\u5355\u4f4d: -",
+          "title": "Name",
+          "type": "string"
+        },
+        "ratio": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "\u5355\u4f4d: -",
+          "title": "Ratio"
+        },
+        "source": {
+          "description": "\u5355\u4f4d: -",
+          "enum": [
+            "kinematic",
+            "copy_of_EB",
+            "ratio_of_FSB"
+          ],
+          "title": "Source",
+          "type": "string"
+        }
+      },
+      "required": [
+        "name",
+        "source"
+      ],
+      "title": "BrakeTypeDefinition",
+      "type": "object"
+    },
+    "ClampConfig": {
+      "description": "\u9600\u4ef6\u9650\u5e45\u914d\u7f6e\u3002",
+      "properties": {
+        "max_kpa_by_brake_type": {
+          "additionalProperties": {
+            "type": "number"
+          },
+          "description": "\u5355\u4f4d: kPa",
+          "title": "Max Kpa By Brake Type",
+          "type": "object"
+        },
+        "min_kpa_by_brake_type": {
+          "additionalProperties": {
+            "type": "number"
+          },
+          "description": "\u5355\u4f4d: kPa",
+          "title": "Min Kpa By Brake Type",
+          "type": "object"
+        }
+      },
+      "required": [
+        "min_kpa_by_brake_type",
+        "max_kpa_by_brake_type"
+      ],
+      "title": "ClampConfig",
+      "type": "object"
+    },
+    "ControllerConfig": {
+      "description": "\u63a7\u5236\u5668\u914d\u7f6e\u3002",
+      "properties": {
+        "car_type": {
+          "description": "\u5355\u4f4d: -",
+          "enum": [
+            "powered",
+            "trailer"
+          ],
+          "title": "Car Type",
+          "type": "string"
+        },
+        "load_group_shares": {
+          "additionalProperties": {
+            "type": "number"
+          },
+          "description": "\u5355\u4f4d: -",
+          "propertyNames": {
+            "enum": [
+              "AW0",
+              "AW2",
+              "AW3"
+            ]
+          },
+          "title": "Load Group Shares",
+          "type": "object"
+        },
+        "name": {
+          "description": "\u5355\u4f4d: -",
+          "title": "Name",
+          "type": "string"
+        }
+      },
+      "required": [
+        "name",
+        "car_type",
+        "load_group_shares"
+      ],
+      "title": "ControllerConfig",
+      "type": "object"
+    },
+    "ControllerMassParams": {
+      "description": "\u63a7\u5236\u5668\u8d28\u91cf\u53c2\u6570\u3002",
+      "properties": {
+        "mass_static_kg": {
+          "additionalProperties": {
+            "type": "number"
+          },
+          "description": "\u5355\u4f4d: kg",
+          "propertyNames": {
+            "enum": [
+              "AW0",
+              "AW2",
+              "AW3"
+            ]
+          },
+          "title": "Mass Static Kg",
+          "type": "object"
+        },
+        "rotational_mass_factor": {
+          "description": "\u5355\u4f4d: -",
+          "title": "Rotational Mass Factor",
+          "type": "number"
+        }
+      },
+      "required": [
+        "mass_static_kg",
+        "rotational_mass_factor"
+      ],
+      "title": "ControllerMassParams",
+      "type": "object"
+    },
+    "KConfig": {
+      "description": "k \u9ed8\u8ba4\u503c\u4e0e\u6807\u5b9a\u914d\u7f6e\u3002",
+      "properties": {
+        "calibrated": {
+          "additionalProperties": {
+            "additionalProperties": {
+              "$ref": "#/$defs/KCurve"
+            },
+            "type": "object"
+          },
+          "description": "\u5355\u4f4d: -",
+          "propertyNames": {
+            "enum": [
+              "AW0",
+              "AW2",
+              "AW3"
+            ]
+          },
+          "title": "Calibrated",
+          "type": "object"
+        },
+        "default": {
+          "additionalProperties": {
+            "$ref": "#/$defs/KDefaultEntry"
+          },
+          "description": "\u5355\u4f4d: -",
+          "title": "Default",
+          "type": "object"
+        },
+        "fallback": {
+          "additionalProperties": {
+            "enum": [
+              "AW0",
+              "AW2",
+              "AW3"
+            ],
+            "type": "string"
+          },
+          "description": "\u5355\u4f4d: -",
+          "propertyNames": {
+            "enum": [
+              "AW0",
+              "AW2",
+              "AW3"
+            ]
+          },
+          "title": "Fallback",
+          "type": "object"
+        }
+      },
+      "required": [
+        "default",
+        "calibrated"
+      ],
+      "title": "KConfig",
+      "type": "object"
+    },
+    "KCurve": {
+      "description": "k(f) \u66f2\u7ebf\u3002",
+      "properties": {
+        "segments": {
+          "description": "\u5355\u4f4d: -",
+          "items": {
+            "$ref": "#/$defs/KSegment"
+          },
+          "title": "Segments",
+          "type": "array"
+        }
+      },
+      "required": [
+        "segments"
+      ],
+      "title": "KCurve",
+      "type": "object"
+    },
+    "KDefaultEntry": {
+      "description": "\u9ed8\u8ba4 k \u53c2\u6570\u3002",
+      "properties": {
+        "k_const": {
+          "description": "\u5355\u4f4d: -",
+          "title": "K Const",
+          "type": "number"
+        }
+      },
+      "required": [
+        "k_const"
+      ],
+      "title": "KDefaultEntry",
+      "type": "object"
+    },
+    "KSegment": {
+      "description": "k(f) \u5206\u6bb5\u5b9a\u4e49\u3002",
+      "properties": {
+        "end_value": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "\u5355\u4f4d: -",
+          "title": "End Value"
+        },
+        "kind": {
+          "description": "\u5355\u4f4d: -",
+          "enum": [
+            "constant",
+            "linear"
+          ],
+          "title": "Kind",
+          "type": "string"
+        },
+        "max_f": {
+          "description": "\u5355\u4f4d: kN",
+          "title": "Max F",
+          "type": "number"
+        },
+        "min_f": {
+          "description": "\u5355\u4f4d: kN",
+          "title": "Min F",
+          "type": "number"
+        },
+        "start_value": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "\u5355\u4f4d: -",
+          "title": "Start Value"
+        },
+        "value": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "\u5355\u4f4d: -",
+          "title": "Value"
+        }
+      },
+      "required": [
+        "min_f",
+        "max_f",
+        "kind"
+      ],
+      "title": "KSegment",
+      "type": "object"
+    },
+    "MassParams": {
+      "description": "\u8d28\u91cf\u53c2\u6570\u96c6\u5408\u3002",
+      "properties": {
+        "controllers": {
+          "additionalProperties": {
+            "$ref": "#/$defs/ControllerMassParams"
+          },
+          "description": "\u5355\u4f4d: -",
+          "title": "Controllers",
+          "type": "object"
+        }
+      },
+      "required": [
+        "controllers"
+      ],
+      "title": "MassParams",
+      "type": "object"
+    },
+    "MechanicalParams": {
+      "description": "\u673a\u68b0\u6a21\u578b\u53c2\u6570\u3002",
+      "properties": {
+        "mechanical_gain_by_controller": {
+          "additionalProperties": {
+            "type": "number"
+          },
+          "description": "\u5355\u4f4d: kPa/kN",
+          "title": "Mechanical Gain By Controller",
+          "type": "object"
+        }
+      },
+      "required": [
+        "mechanical_gain_by_controller"
+      ],
+      "title": "MechanicalParams",
+      "type": "object"
+    },
+    "RequirementValue": {
+      "description": "\u6280\u672f\u6761\u4ef6\u8f93\u5165\u3002",
+      "properties": {
+        "mode": {
+          "description": "\u5355\u4f4d: -",
+          "enum": [
+            "a_mean",
+            "distance"
+          ],
+          "title": "Mode",
+          "type": "string"
+        },
+        "value": {
+          "description": "\u5355\u4f4d: m/s^2 or m",
+          "title": "Value",
+          "type": "number"
+        }
+      },
+      "required": [
+        "mode",
+        "value"
+      ],
+      "title": "RequirementValue",
+      "type": "object"
+    },
+    "ResponseTimeEntry": {
+      "description": "\u54cd\u5e94\u65f6\u95f4\u53c2\u6570\u3002",
+      "properties": {
+        "t1": {
+          "description": "\u5355\u4f4d: s",
+          "title": "T1",
+          "type": "number"
+        },
+        "t2": {
+          "description": "\u5355\u4f4d: s",
+          "title": "T2",
+          "type": "number"
+        }
+      },
+      "required": [
+        "t1",
+        "t2"
+      ],
+      "title": "ResponseTimeEntry",
+      "type": "object"
+    },
+    "VehicleConfig": {
+      "description": "\u63a7\u5236\u5668\u6240\u5728\u8f66\u8f86\u914d\u7f6e\u3002",
+      "properties": {
+        "controllers": {
+          "description": "\u5355\u4f4d: -",
+          "items": {
+            "$ref": "#/$defs/ControllerConfig"
+          },
+          "title": "Controllers",
+          "type": "array"
+        }
+      },
+      "required": [
+        "controllers"
+      ],
+      "title": "VehicleConfig",
+      "type": "object"
+    }
+  },
+  "description": "Workflow \u8f93\u5165\u6839\u6a21\u578b\u3002",
+  "properties": {
+    "V_list": {
+      "anyOf": [
+        {
+          "items": {
+            "type": "number"
+          },
+          "type": "array"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "\u5355\u4f4d: km/h",
+      "title": "V List"
+    },
+    "air_spring": {
+      "$ref": "#/$defs/AirSpringParams",
+      "description": "\u5355\u4f4d: -"
+    },
+    "allocation_strategy": {
+      "description": "\u5355\u4f4d: -",
+      "enum": [
+        "equal_wear",
+        "equal_adhesion"
+      ],
+      "title": "Allocation Strategy",
+      "type": "string"
+    },
+    "brake_types": {
+      "description": "\u5355\u4f4d: -",
+      "items": {
+        "$ref": "#/$defs/BrakeTypeDefinition"
+      },
+      "title": "Brake Types",
+      "type": "array"
+    },
+    "clamp_config": {
+      "$ref": "#/$defs/ClampConfig",
+      "description": "\u5355\u4f4d: -"
+    },
+    "k_config": {
+      "$ref": "#/$defs/KConfig",
+      "description": "\u5355\u4f4d: -"
+    },
+    "load_groups": {
+      "description": "\u5355\u4f4d: -",
+      "items": {
+        "enum": [
+          "AW0",
+          "AW2",
+          "AW3"
+        ],
+        "type": "string"
+      },
+      "title": "Load Groups",
+      "type": "array"
+    },
+    "mass_params": {
+      "$ref": "#/$defs/MassParams",
+      "description": "\u5355\u4f4d: -"
+    },
+    "mech_params": {
+      "$ref": "#/$defs/MechanicalParams",
+      "description": "\u5355\u4f4d: -"
+    },
+    "requirement": {
+      "additionalProperties": {
+        "$ref": "#/$defs/RequirementValue"
+      },
+      "description": "\u5355\u4f4d: -",
+      "title": "Requirement",
+      "type": "object"
+    },
+    "response_time": {
+      "additionalProperties": {
+        "$ref": "#/$defs/ResponseTimeEntry"
+      },
+      "description": "\u5355\u4f4d: s",
+      "title": "Response Time",
+      "type": "object"
+    },
+    "v0": {
+      "description": "\u5355\u4f4d: km/h",
+      "title": "V0",
+      "type": "number"
+    },
+    "vehicle_config": {
+      "$ref": "#/$defs/VehicleConfig",
+      "description": "\u5355\u4f4d: -"
+    }
+  },
+  "required": [
+    "v0",
+    "requirement",
+    "brake_types",
+    "response_time",
+    "load_groups",
+    "air_spring",
+    "mass_params",
+    "allocation_strategy",
+    "vehicle_config",
+    "mech_params",
+    "k_config",
+    "clamp_config"
+  ],
+  "title": "Inputs",
+  "type": "object"
+}

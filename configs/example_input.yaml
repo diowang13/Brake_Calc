@@ -1,0 +1,88 @@
+v0: 80.0
+brake_types:
+  - name: FSB
+    source: kinematic
+  - name: EB
+    source: kinematic
+requirement:
+  FSB:
+    mode: a_mean
+    value: 1.0
+  EB:
+    mode: a_mean
+    value: 1.2
+response_time:
+  FSB:
+    t1: 0.4
+    t2: 0.8
+  EB:
+    t1: 0.3
+    t2: 0.6
+load_groups: [AW0, AW2, AW3]
+allocation_strategy: equal_wear
+vehicle_config:
+  controllers:
+    - name: C1
+      car_type: powered
+      load_group_shares:
+        AW0: 1.0
+        AW2: 1.0
+        AW3: 1.0
+mass_params:
+  controllers:
+    C1:
+      mass_static_kg:
+        AW0: 10000.0
+        AW2: 11000.0
+        AW3: 12000.0
+      rotational_mass_factor: 0.08
+air_spring:
+  load_group_pressure_kpa:
+    AW0: 0.0
+    AW2: 100.0
+    AW3: 200.0
+mech_params:
+  mechanical_gain_by_controller:
+    C1: 1.0
+k_config:
+  default:
+    FSB:
+      k_const: 1.0
+    EB:
+      k_const: 1.1
+  calibrated:
+    AW0:
+      FSB:
+        segments:
+          - min_f: 0.0
+            max_f: 99999.0
+            kind: constant
+            value: 1.0
+      EB:
+        segments:
+          - min_f: 0.0
+            max_f: 99999.0
+            kind: constant
+            value: 1.1
+    AW3:
+      FSB:
+        segments:
+          - min_f: 0.0
+            max_f: 99999.0
+            kind: constant
+            value: 1.0
+      EB:
+        segments:
+          - min_f: 0.0
+            max_f: 99999.0
+            kind: constant
+            value: 1.1
+  fallback:
+    AW2: AW3
+clamp_config:
+  min_kpa_by_brake_type:
+    FSB: 0.0
+    EB: 0.0
+  max_kpa_by_brake_type:
+    FSB: 800.0
+    EB: 1200.0
