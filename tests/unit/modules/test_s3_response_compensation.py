@@ -15,6 +15,23 @@ def test_s3_generates_beta_list_with_copy_and_ratio_rules() -> None:
 
     out = run(ctx)
 
-    assert out.Beta_list["FB"] == pytest.approx(out.Beta_list["EB"])
     assert out.Beta_list["holding"] == pytest.approx(out.Beta_list["FSB"] * 0.5)
     assert out.Beta_list["EB"] >= out.a_mean_req["EB"]
+    assert out.Beta_list["FSB"] >= out.a_mean_req["FSB"]
+
+
+def test_s3_uses_impulse_rate_for_fsb_compensation() -> None:
+    payload = make_valid_payload()
+    payload["response_time"]["FSB"]["impulse_rate"] = 2.5
+    fast_ctx = Context(validated_inputs=Inputs.model_validate(payload))
+    fast_ctx = run_s2(fast_ctx)
+
+    slow_payload = make_valid_payload()
+    slow_payload["response_time"]["FSB"]["impulse_rate"] = 0.5
+    slow_ctx = Context(validated_inputs=Inputs.model_validate(slow_payload))
+    slow_ctx = run_s2(slow_ctx)
+
+    fast_out = run(fast_ctx)
+    slow_out = run(slow_ctx)
+
+    assert slow_out.Beta_list["FSB"] > fast_out.Beta_list["FSB"]

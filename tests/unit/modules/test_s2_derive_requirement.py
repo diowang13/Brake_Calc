@@ -15,3 +15,11 @@ def test_s2_derives_mean_deceleration_from_distance_requirement() -> None:
 
     assert out.a_mean_req["FSB"] == 1.0
     assert out.a_mean_req["EB"] > 1.0
+
+
+def test_s2_only_derives_requirement_for_kinematic_types() -> None:
+    ctx = Context(validated_inputs=Inputs.model_validate(make_valid_payload()))
+
+    out = run(ctx)
+
+    assert set(out.a_mean_req) == {"FSB", "EB"}

@@ -4,6 +4,9 @@ brake_types:
     source: kinematic
   - name: EB
     source: kinematic
+  - name: holding_brake
+    source: ratio_of_FSB
+    ratio: 0.5
 requirement:
   FSB:
     mode: a_mean
@@ -14,42 +17,59 @@ requirement:
 response_time:
   FSB:
     t1: 0.4
-    t2: 0.8
+    impulse_rate: 0.75
   EB:
     t1: 0.3
-    t2: 0.6
+    t2: 1.2
 load_groups: [AW0, AW2, AW3]
 allocation_strategy: equal_wear
 vehicle_config:
-  controllers:
-    - name: C1
-      car_type: powered
-      load_group_shares:
-        AW0: 1.0
-        AW2: 1.0
-        AW3: 1.0
+  bogies:
+    - name: trailer_bogie_1
+      bogie_type: trailer_bogie
+    - name: trailer_bogie_2
+      bogie_type: trailer_bogie
+    - name: powered_bogie_3
+      bogie_type: powered_bogie
+    - name: powered_bogie_4
+      bogie_type: powered_bogie
+    - name: powered_bogie_5
+      bogie_type: powered_bogie
+    - name: powered_bogie_6
+      bogie_type: powered_bogie
 mass_params:
-  controllers:
-    C1:
-      mass_static_kg:
-        AW0: 10000.0
-        AW2: 11000.0
-        AW3: 12000.0
-      rotational_mass_factor: 0.08
+  powered_bogie:
+    mass_static:
+      AW0: 15.83
+      AW2: 23.33
+      AW3: 26.39
+    bogie_weight: 2.8
+    rotational_mass_factor: 0.1
+  trailer_bogie:
+    mass_static:
+      AW0: 15.37
+      AW2: 22.27
+      AW3: 25.18
+    bogie_weight: 2.4
+    rotational_mass_factor: 0.05
 air_spring:
-  load_group_pressure_kpa:
-    AW0: 0.0
-    AW2: 100.0
-    AW3: 200.0
+  powered_bogie:
+    mode: explicit_linear
+    airspring_k: 20.0
+    airspring_b: -10.0
+  trailer_bogie:
+    mode: fitted_from_points
+    points:
+      - pressure_kpa: 250.0
+        sprung_mass_ton: 12.97
+      - pressure_kpa: 401.0
+        sprung_mass_ton: 19.87
+      - pressure_kpa: 465.0
+        sprung_mass_ton: 22.78
 mech_params:
-  mechanical_gain_by_controller:
-    C1: 1.0
+  Nbc: 1.0
+  eta: 0.9
 k_config:
-  default:
-    FSB:
-      k_const: 1.0
-    EB:
-      k_const: 1.1
   calibrated:
     AW0:
       FSB:
@@ -79,10 +99,4 @@ k_config:
             value: 1.1
   fallback:
     AW2: AW3
-clamp_config:
-  min_kpa_by_brake_type:
-    FSB: 0.0
-    EB: 0.0
-  max_kpa_by_brake_type:
-    FSB: 800.0
-    EB: 1200.0
+EB_limit_min: 150.0

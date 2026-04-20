@@ -3,11 +3,109 @@
     "AirSpringParams": {
       "description": "\u7a7a\u7c27\u914d\u7f6e\u3002",
       "properties": {
-        "load_group_pressure_kpa": {
+        "powered_bogie": {
+          "discriminator": {
+            "mapping": {
+              "explicit_linear": "#/$defs/ExplicitLinearAirSpringConfig",
+              "fitted_from_points": "#/$defs/FittedAirSpringConfig"
+            },
+            "propertyName": "mode"
+          },
+          "oneOf": [
+            {
+              "$ref": "#/$defs/FittedAirSpringConfig"
+            },
+            {
+              "$ref": "#/$defs/ExplicitLinearAirSpringConfig"
+            }
+          ],
+          "title": "Powered Bogie"
+        },
+        "trailer_bogie": {
+          "discriminator": {
+            "mapping": {
+              "explicit_linear": "#/$defs/ExplicitLinearAirSpringConfig",
+              "fitted_from_points": "#/$defs/FittedAirSpringConfig"
+            },
+            "propertyName": "mode"
+          },
+          "oneOf": [
+            {
+              "$ref": "#/$defs/FittedAirSpringConfig"
+            },
+            {
+              "$ref": "#/$defs/ExplicitLinearAirSpringConfig"
+            }
+          ],
+          "title": "Trailer Bogie"
+        }
+      },
+      "required": [
+        "powered_bogie",
+        "trailer_bogie"
+      ],
+      "title": "AirSpringParams",
+      "type": "object"
+    },
+    "AirSpringPoint": {
+      "description": "\u7a7a\u7c27\u7279\u5f81\u70b9\u3002",
+      "properties": {
+        "pressure_kpa": {
+          "description": "\u5355\u4f4d: kPa",
+          "title": "Pressure Kpa",
+          "type": "number"
+        },
+        "sprung_mass_ton": {
+          "description": "\u5355\u4f4d: ton",
+          "title": "Sprung Mass Ton",
+          "type": "number"
+        }
+      },
+      "required": [
+        "pressure_kpa",
+        "sprung_mass_ton"
+      ],
+      "title": "AirSpringPoint",
+      "type": "object"
+    },
+    "BogieConfig": {
+      "description": "\u8f6c\u5411\u67b6\u5b9e\u4f8b\u914d\u7f6e\u3002",
+      "properties": {
+        "bogie_type": {
+          "description": "\u5355\u4f4d: -",
+          "enum": [
+            "powered_bogie",
+            "trailer_bogie"
+          ],
+          "title": "Bogie Type",
+          "type": "string"
+        },
+        "name": {
+          "description": "\u5355\u4f4d: -",
+          "title": "Name",
+          "type": "string"
+        }
+      },
+      "required": [
+        "name",
+        "bogie_type"
+      ],
+      "title": "BogieConfig",
+      "type": "object"
+    },
+    "BogieTypeMassParams": {
+      "description": "\u8f6c\u5411\u67b6\u7c7b\u578b\u8d28\u91cf\u53c2\u6570\u3002",
+      "properties": {
+        "bogie_weight": {
+          "description": "\u8f93\u5165\u5355\u4f4d: ton; \u5185\u90e8\u5355\u4f4d: kg",
+          "title": "Bogie Weight",
+          "type": "number"
+        },
+        "mass_static": {
           "additionalProperties": {
             "type": "number"
           },
-          "description": "\u5355\u4f4d: kPa",
+          "description": "\u8f93\u5165\u5355\u4f4d: ton; \u5185\u90e8\u5355\u4f4d: kg",
           "propertyNames": {
             "enum": [
               "AW0",
@@ -15,14 +113,21 @@
               "AW3"
             ]
           },
-          "title": "Load Group Pressure Kpa",
+          "title": "Mass Static",
           "type": "object"
+        },
+        "rotational_mass_factor": {
+          "description": "\u5355\u4f4d: -",
+          "title": "Rotational Mass Factor",
+          "type": "number"
         }
       },
       "required": [
-        "load_group_pressure_kpa"
+        "mass_static",
+        "bogie_weight",
+        "rotational_mass_factor"
       ],
-      "title": "AirSpringParams",
+      "title": "BogieTypeMassParams",
       "type": "object"
     },
     "BrakeTypeDefinition": {
@@ -50,7 +155,6 @@
           "description": "\u5355\u4f4d: -",
           "enum": [
             "kinematic",
-            "copy_of_EB",
             "ratio_of_FSB"
           ],
           "title": "Source",
@@ -64,107 +168,103 @@
       "title": "BrakeTypeDefinition",
       "type": "object"
     },
-    "ClampConfig": {
-      "description": "\u9600\u4ef6\u9650\u5e45\u914d\u7f6e\u3002",
+    "EBResponseTime": {
+      "description": "EB \u54cd\u5e94\u53c2\u6570\u3002",
       "properties": {
-        "max_kpa_by_brake_type": {
-          "additionalProperties": {
-            "type": "number"
-          },
-          "description": "\u5355\u4f4d: kPa",
-          "title": "Max Kpa By Brake Type",
-          "type": "object"
+        "t1": {
+          "description": "\u5355\u4f4d: s",
+          "title": "T1",
+          "type": "number"
         },
-        "min_kpa_by_brake_type": {
-          "additionalProperties": {
-            "type": "number"
-          },
-          "description": "\u5355\u4f4d: kPa",
-          "title": "Min Kpa By Brake Type",
-          "type": "object"
-        }
-      },
-      "required": [
-        "min_kpa_by_brake_type",
-        "max_kpa_by_brake_type"
-      ],
-      "title": "ClampConfig",
-      "type": "object"
-    },
-    "ControllerConfig": {
-      "description": "\u63a7\u5236\u5668\u914d\u7f6e\u3002",
-      "properties": {
-        "car_type": {
-          "description": "\u5355\u4f4d: -",
-          "enum": [
-            "powered",
-            "trailer"
-          ],
-          "title": "Car Type",
-          "type": "string"
-        },
-        "load_group_shares": {
-          "additionalProperties": {
-            "type": "number"
-          },
-          "description": "\u5355\u4f4d: -",
-          "propertyNames": {
-            "enum": [
-              "AW0",
-              "AW2",
-              "AW3"
-            ]
-          },
-          "title": "Load Group Shares",
-          "type": "object"
-        },
-        "name": {
-          "description": "\u5355\u4f4d: -",
-          "title": "Name",
-          "type": "string"
-        }
-      },
-      "required": [
-        "name",
-        "car_type",
-        "load_group_shares"
-      ],
-      "title": "ControllerConfig",
-      "type": "object"
-    },
-    "ControllerMassParams": {
-      "description": "\u63a7\u5236\u5668\u8d28\u91cf\u53c2\u6570\u3002",
-      "properties": {
-        "mass_static_kg": {
-          "additionalProperties": {
-            "type": "number"
-          },
-          "description": "\u5355\u4f4d: kg",
-          "propertyNames": {
-            "enum": [
-              "AW0",
-              "AW2",
-              "AW3"
-            ]
-          },
-          "title": "Mass Static Kg",
-          "type": "object"
-        },
-        "rotational_mass_factor": {
-          "description": "\u5355\u4f4d: -",
-          "title": "Rotational Mass Factor",
+        "t2": {
+          "description": "\u5355\u4f4d: s",
+          "title": "T2",
           "type": "number"
         }
       },
       "required": [
-        "mass_static_kg",
-        "rotational_mass_factor"
+        "t1",
+        "t2"
       ],
-      "title": "ControllerMassParams",
+      "title": "EBResponseTime",
+      "type": "object"
+    },
+    "ExplicitLinearAirSpringConfig": {
+      "description": "\u663e\u5f0f\u7ebf\u6027\u7a7a\u7c27\u914d\u7f6e\u3002",
+      "properties": {
+        "airspring_b": {
+          "description": "\u5355\u4f4d: kPa",
+          "title": "Airspring B",
+          "type": "number"
+        },
+        "airspring_k": {
+          "description": "\u5355\u4f4d: kPa/ton",
+          "title": "Airspring K",
+          "type": "number"
+        },
+        "mode": {
+          "const": "explicit_linear",
+          "description": "\u5355\u4f4d: -",
+          "title": "Mode",
+          "type": "string"
+        }
+      },
+      "required": [
+        "mode",
+        "airspring_k",
+        "airspring_b"
+      ],
+      "title": "ExplicitLinearAirSpringConfig",
+      "type": "object"
+    },
+    "FSBResponseTime": {
+      "description": "FSB \u54cd\u5e94\u53c2\u6570\u3002",
+      "properties": {
+        "impulse_rate": {
+          "description": "\u5355\u4f4d: m/s^3",
+          "title": "Impulse Rate",
+          "type": "number"
+        },
+        "t1": {
+          "description": "\u5355\u4f4d: s",
+          "title": "T1",
+          "type": "number"
+        }
+      },
+      "required": [
+        "t1",
+        "impulse_rate"
+      ],
+      "title": "FSBResponseTime",
+      "type": "object"
+    },
+    "FittedAirSpringConfig": {
+      "description": "\u57fa\u4e8e\u7279\u5f81\u70b9\u62df\u5408\u7684\u7a7a\u7c27\u914d\u7f6e\u3002",
+      "properties": {
+        "mode": {
+          "const": "fitted_from_points",
+          "description": "\u5355\u4f4d: -",
+          "title": "Mode",
+          "type": "string"
+        },
+        "points": {
+          "description": "\u5355\u4f4d: -",
+          "items": {
+            "$ref": "#/$defs/AirSpringPoint"
+          },
+          "title": "Points",
+          "type": "array"
+        }
+      },
+      "required": [
+        "mode",
+        "points"
+      ],
+      "title": "FittedAirSpringConfig",
       "type": "object"
     },
     "KConfig": {
-      "description": "k \u9ed8\u8ba4\u503c\u4e0e\u6807\u5b9a\u914d\u7f6e\u3002",
+      "description": "k \u6807\u5b9a\u914d\u7f6e\u3002",
       "properties": {
         "calibrated": {
           "additionalProperties": {
@@ -182,14 +282,6 @@
             ]
           },
           "title": "Calibrated",
-          "type": "object"
-        },
-        "default": {
-          "additionalProperties": {
-            "$ref": "#/$defs/KDefaultEntry"
-          },
-          "description": "\u5355\u4f4d: -",
-          "title": "Default",
           "type": "object"
         },
         "fallback": {
@@ -214,7 +306,6 @@
         }
       },
       "required": [
-        "default",
         "calibrated"
       ],
       "title": "KConfig",
@@ -236,21 +327,6 @@
         "segments"
       ],
       "title": "KCurve",
-      "type": "object"
-    },
-    "KDefaultEntry": {
-      "description": "\u9ed8\u8ba4 k \u53c2\u6570\u3002",
-      "properties": {
-        "k_const": {
-          "description": "\u5355\u4f4d: -",
-          "title": "K Const",
-          "type": "number"
-        }
-      },
-      "required": [
-        "k_const"
-      ],
-      "title": "KDefaultEntry",
       "type": "object"
     },
     "KSegment": {
@@ -326,36 +402,26 @@
     "MassParams": {
       "description": "\u8d28\u91cf\u53c2\u6570\u96c6\u5408\u3002",
       "properties": {
-        "controllers": {
-          "additionalProperties": {
-            "$ref": "#/$defs/ControllerMassParams"
-          },
-          "description": "\u5355\u4f4d: -",
-          "title": "Controllers",
-          "type": "object"
+        "powered_bogie": {
+          "$ref": "#/$defs/BogieTypeMassParams",
+          "description": "\u5355\u4f4d: -"
+        },
+        "trailer_bogie": {
+          "$ref": "#/$defs/BogieTypeMassParams",
+          "description": "\u5355\u4f4d: -"
         }
       },
       "required": [
-        "controllers"
+        "powered_bogie",
+        "trailer_bogie"
       ],
       "title": "MassParams",
       "type": "object"
     },
     "MechanicalParams": {
+      "additionalProperties": true,
       "description": "\u673a\u68b0\u6a21\u578b\u53c2\u6570\u3002",
-      "properties": {
-        "mechanical_gain_by_controller": {
-          "additionalProperties": {
-            "type": "number"
-          },
-          "description": "\u5355\u4f4d: kPa/kN",
-          "title": "Mechanical Gain By Controller",
-          "type": "object"
-        }
-      },
-      "required": [
-        "mechanical_gain_by_controller"
-      ],
+      "properties": {},
       "title": "MechanicalParams",
       "type": "object"
     },
@@ -384,41 +450,40 @@
       "title": "RequirementValue",
       "type": "object"
     },
-    "ResponseTimeEntry": {
-      "description": "\u54cd\u5e94\u65f6\u95f4\u53c2\u6570\u3002",
+    "ResponseTimeConfig": {
+      "additionalProperties": false,
+      "description": "\u54cd\u5e94\u65f6\u95f4\u914d\u7f6e\u3002",
       "properties": {
-        "t1": {
-          "description": "\u5355\u4f4d: s",
-          "title": "T1",
-          "type": "number"
+        "EB": {
+          "$ref": "#/$defs/EBResponseTime",
+          "description": "\u5355\u4f4d: -"
         },
-        "t2": {
-          "description": "\u5355\u4f4d: s",
-          "title": "T2",
-          "type": "number"
+        "FSB": {
+          "$ref": "#/$defs/FSBResponseTime",
+          "description": "\u5355\u4f4d: -"
         }
       },
       "required": [
-        "t1",
-        "t2"
+        "FSB",
+        "EB"
       ],
-      "title": "ResponseTimeEntry",
+      "title": "ResponseTimeConfig",
       "type": "object"
     },
     "VehicleConfig": {
-      "description": "\u63a7\u5236\u5668\u6240\u5728\u8f66\u8f86\u914d\u7f6e\u3002",
+      "description": "\u9010\u8f6c\u5411\u67b6\u5b9e\u4f8b\u914d\u7f6e\u3002",
       "properties": {
-        "controllers": {
+        "bogies": {
           "description": "\u5355\u4f4d: -",
           "items": {
-            "$ref": "#/$defs/ControllerConfig"
+            "$ref": "#/$defs/BogieConfig"
           },
-          "title": "Controllers",
+          "title": "Bogies",
           "type": "array"
         }
       },
       "required": [
-        "controllers"
+        "bogies"
       ],
       "title": "VehicleConfig",
       "type": "object"
@@ -426,6 +491,11 @@
   },
   "description": "Workflow \u8f93\u5165\u6839\u6a21\u578b\u3002",
   "properties": {
+    "EB_limit_min": {
+      "description": "\u5355\u4f4d: kPa",
+      "title": "Eb Limit Min",
+      "type": "number"
+    },
     "V_list": {
       "anyOf": [
         {
@@ -463,10 +533,6 @@
       "title": "Brake Types",
       "type": "array"
     },
-    "clamp_config": {
-      "$ref": "#/$defs/ClampConfig",
-      "description": "\u5355\u4f4d: -"
-    },
     "k_config": {
       "$ref": "#/$defs/KConfig",
       "description": "\u5355\u4f4d: -"
@@ -501,12 +567,8 @@
       "type": "object"
     },
     "response_time": {
-      "additionalProperties": {
-        "$ref": "#/$defs/ResponseTimeEntry"
-      },
-      "description": "\u5355\u4f4d: s",
-      "title": "Response Time",
-      "type": "object"
+      "$ref": "#/$defs/ResponseTimeConfig",
+      "description": "\u5355\u4f4d: -"
     },
     "v0": {
       "description": "\u5355\u4f4d: km/h",
@@ -530,7 +592,7 @@
     "vehicle_config",
     "mech_params",
     "k_config",
-    "clamp_config"
+    "EB_limit_min"
   ],
   "title": "Inputs",
   "type": "object"

@@ -17,4 +17,4 @@ def test_s7_converts_force_to_pressure_with_default_k() -> None:
 
     out = run(ctx)
 
-    assert out.BCP_base_by_controller["FSB"]["AW0"]["C1"] > 0.0
+    assert out.BCP_base_by_controller["FSB"]["AW0"]["powered_bogie_1"] > 0.0

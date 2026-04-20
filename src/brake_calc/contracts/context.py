@@ -11,6 +11,8 @@ MassVector = dict[str, dict[str, dict[str, float]]]
 ForceTensor = dict[str, dict[str, dict[str, float]]]
 PressureTensor = dict[str, dict[str, dict[str, float]]]
 KTensor = dict[str, dict[str, dict[str, float]]]
+PressureVector = dict[str, dict[str, float]]
+AirSpringFitMap = dict[str, dict[str, float | str]]
 
 
 class Context(BaseModel):
@@ -20,6 +22,14 @@ class Context(BaseModel):
     a_mean_req: dict[str, float] = Field(default_factory=dict, description="单位: m/s^2")
     Beta_list: dict[str, float] = Field(default_factory=dict, description="单位: m/s^2")
     Mass_by_controller: MassVector = Field(default_factory=dict, description="单位: kg")
+    AirSpringPressure_by_controller: PressureVector = Field(
+        default_factory=dict,
+        description="单位: kPa",
+    )
+    AirSpringFit_by_bogie_type: AirSpringFitMap = Field(
+        default_factory=dict,
+        description="单位: kPa/ton, kPa",
+    )
     F_by_controller: ForceTensor = Field(default_factory=dict, description="单位: kN")
     BCP_base_by_controller: PressureTensor = Field(default_factory=dict, description="单位: kPa")
     k_used_by_controller: KTensor = Field(default_factory=dict, description="单位: -")

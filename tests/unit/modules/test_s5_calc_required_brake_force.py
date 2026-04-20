@@ -17,9 +17,9 @@ def test_s5_applies_equal_wear_for_fsb_and_equal_adhesion_for_eb() -> None:
 
     out = run(ctx)
 
-    assert out.F_by_controller["FSB"]["AW0"]["C1"] == pytest.approx(
-        out.F_by_controller["FSB"]["AW0"]["C2"]
+    assert out.F_by_controller["FSB"]["AW0"]["powered_bogie_1"] == pytest.approx(
+        out.F_by_controller["FSB"]["AW0"]["trailer_bogie_1"]
     )
-    assert out.F_by_controller["EB"]["AW0"]["C1"] != pytest.approx(
-        out.F_by_controller["EB"]["AW0"]["C2"]
+    assert out.F_by_controller["EB"]["AW0"]["powered_bogie_1"] != pytest.approx(
+        out.F_by_controller["EB"]["AW0"]["trailer_bogie_1"]
     )

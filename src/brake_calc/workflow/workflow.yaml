@@ -13,7 +13,7 @@ workflow:
   - id: s4
     use: calc_dynamic_load_and_mass
     needs: [s3]
-    desc: 按 AW0/AW2/AW3 和控制器 car_type 计算 Mass_by_controller（静态+含旋转质量的动态制动质量）
+    desc: 按 AW0/AW2/AW3 和转向架类型计算质量向量、空簧压力标准与空簧拟合公式
   - id: s5
     use: calc_required_brake_force
     needs: [s4]

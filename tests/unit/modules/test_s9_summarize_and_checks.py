@@ -20,5 +20,5 @@ def test_s9_builds_report_with_pressure_matrix_and_delta() -> None:
     out = run(ctx)
 
     assert out.report is not None
-    assert out.report.BCP_calibrated_by_controller["AW0"]["FSB"]["C1"] > 0.0
+    assert out.report.BCP_calibrated_by_controller["AW0"]["FSB"]["powered_bogie_1"] > 0.0
     assert "AW0" in out.report.delta_BCP

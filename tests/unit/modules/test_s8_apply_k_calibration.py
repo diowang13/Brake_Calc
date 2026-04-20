@@ -19,5 +19,5 @@ def test_s8_uses_aw2_fallback_and_records_warning() -> None:
 
     out = run(ctx)
 
-    assert out.k_used_by_controller["FSB"]["AW2"]["C1"] == 1.0
+    assert out.k_used_by_controller["FSB"]["AW2"]["powered_bogie_1"] == 1.0
     assert any(item.code == "k_fallback_aw2" for item in out.warnings)

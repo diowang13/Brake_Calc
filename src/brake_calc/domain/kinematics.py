@@ -10,6 +10,8 @@ def kmh_to_mps(speed_kmh: float) -> float:
 
 def derive_mean_deceleration(v0_kmh: float, mode: str, value: float) -> float:
     """将输入 requirement 统一换算为平均减速度。"""
+    if value <= 0:
+        raise ValueError("requirement value must be > 0")
     if mode == "a_mean":
         return value
     v0_mps = kmh_to_mps(v0_kmh)
@@ -22,3 +24,25 @@ def compensate_target_deceleration(v0_kmh: float, a_mean_req: float, t1: float, 
     stop_time = max(v0_mps / max(a_mean_req, 1e-6), 1e-6)
     lost_time_ratio = min((t1 + 0.5 * t2) / stop_time, 0.95)
     return a_mean_req / max(1.0 - lost_time_ratio, 0.05)
+
+
+def solve_fsb_target_deceleration(
+    v0_kmh: float,
+    a_mean_req: float,
+    t1: float,
+    impulse_rate: float,
+) -> float:
+    """根据 FSB 的 t1 与 impulse_rate 联立求解控制用目标减速度。"""
+    if impulse_rate <= 0:
+        raise ValueError("impulse_rate must be > 0")
+
+    v0_mps = kmh_to_mps(v0_kmh)
+    stop_time = max(v0_mps / max(a_mean_req, 1e-6), 1e-6)
+    linear_term = 1.0 - (t1 / stop_time)
+    quadratic_term = 0.5 / (impulse_rate * stop_time)
+    discriminant = linear_term**2 - (4.0 * quadratic_term * a_mean_req)
+
+    if discriminant < 0:
+        raise ValueError("FSB response parameters do not yield a real control deceleration")
+
+    return (linear_term - discriminant**0.5) / (2.0 * quadratic_term)

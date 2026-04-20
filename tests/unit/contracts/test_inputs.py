@@ -14,7 +14,6 @@ def make_valid_payload() -> dict[str, object]:
         "brake_types": [
             {"name": "FSB", "source": "kinematic"},
             {"name": "EB", "source": "kinematic"},
-            {"name": "FB", "source": "copy_of_EB"},
             {"name": "holding", "source": "ratio_of_FSB", "ratio": 0.5},
         ],
         "requirement": {
@@ -22,42 +21,55 @@ def make_valid_payload() -> dict[str, object]:
             "EB": {"mode": "a_mean", "value": 1.2},
         },
         "response_time": {
-            "FSB": {"t1": 0.4, "t2": 0.8},
+            "FSB": {"t1": 0.4, "impulse_rate": 1.5},
             "EB": {"t1": 0.3, "t2": 0.6},
-            "FB": {"t1": 0.3, "t2": 0.6},
         },
         "load_groups": ["AW0", "AW2", "AW3"],
         "allocation_strategy": "equal_wear",
         "vehicle_config": {
-            "controllers": [
+            "bogies": [
                 {
-                    "name": "C1",
-                    "car_type": "powered",
-                    "load_group_shares": {"AW0": 0.5, "AW2": 0.5, "AW3": 0.5},
+                    "name": "powered_bogie_1",
+                    "bogie_type": "powered_bogie",
                 },
                 {
-                    "name": "C2",
-                    "car_type": "trailer",
-                    "load_group_shares": {"AW0": 0.5, "AW2": 0.5, "AW3": 0.5},
+                    "name": "trailer_bogie_1",
+                    "bogie_type": "trailer_bogie",
                 },
             ]
         },
         "mass_params": {
-            "controllers": {
-                "C1": {
-                    "mass_static_kg": {"AW0": 10000.0, "AW2": 11000.0, "AW3": 12000.0},
-                    "rotational_mass_factor": 0.08,
-                },
-                "C2": {
-                    "mass_static_kg": {"AW0": 9000.0, "AW2": 10000.0, "AW3": 11000.0},
-                    "rotational_mass_factor": 0.04,
-                },
-            }
+            "powered_bogie": {
+                "mass_static": {"AW0": 10.0, "AW2": 11.0, "AW3": 12.0},
+                "bogie_weight": 2.0,
+                "rotational_mass_factor": 0.08,
+            },
+            "trailer_bogie": {
+                "mass_static": {"AW0": 9.0, "AW2": 10.0, "AW3": 11.0},
+                "bogie_weight": 1.5,
+                "rotational_mass_factor": 0.04,
+            },
         },
-        "air_spring": {"load_group_pressure_kpa": {"AW0": 0.0, "AW2": 100.0, "AW3": 200.0}},
-        "mech_params": {"mechanical_gain_by_controller": {"C1": 1.0, "C2": 1.0}},
+        "air_spring": {
+            "powered_bogie": {
+                "mode": "explicit_linear",
+                "airspring_k": 20.0,
+                "airspring_b": 100.0,
+            },
+            "trailer_bogie": {
+                "mode": "fitted_from_points",
+                "points": [
+                    {"pressure_kpa": 180.0, "sprung_mass_ton": 5.0},
+                    {"pressure_kpa": 220.0, "sprung_mass_ton": 7.0},
+                    {"pressure_kpa": 260.0, "sprung_mass_ton": 9.0},
+                ],
+            },
+        },
+        "mech_params": {
+            "Nbc": 1.0,
+            "eta": 0.9,
+        },
         "k_config": {
-            "default": {"FSB": {"k_const": 1.0}, "EB": {"k_const": 1.1}},
             "calibrated": {
                 "AW0": {
                     "FSB": {
@@ -86,10 +98,7 @@ def make_valid_payload() -> dict[str, object]:
             },
             "fallback": {"AW2": "AW3"},
         },
-        "clamp_config": {
-            "min_kpa_by_brake_type": {"FSB": 0.0, "EB": 0.0, "FB": 0.0, "holding": 0.0},
-            "max_kpa_by_brake_type": {"FSB": 800.0, "EB": 1200.0, "FB": 1200.0, "holding": 600.0},
-        },
+        "EB_limit_min": 100.0,
     }
 
 
@@ -98,8 +107,37 @@ def test_inputs_accepts_minimal_supported_shape() -> None:
 
     model = Inputs.model_validate(payload)
 
-    assert model.brake_types[2].name == "FB"
+    assert model.brake_types[2].name == "holding"
+    assert model.response_time.FSB.impulse_rate == 1.5
+    assert model.mass_params.powered_bogie.mass_static["AW0"] == 10000.0
+    assert model.mass_params.powered_bogie.bogie_weight == 2000.0
+    assert model.air_spring.powered_bogie.mode == "explicit_linear"
+    assert model.air_spring.trailer_bogie.mode == "fitted_from_points"
     assert model.k_config.fallback["AW2"] == "AW3"
+
+
+def test_fsb_requirement_only_accepts_a_mean() -> None:
+    payload = make_valid_payload()
+    payload["requirement"]["FSB"] = {"mode": "distance", "value": 180.0}
+
+    with pytest.raises(ValueError, match="FSB"):
+        Inputs.model_validate(payload)
+
+
+def test_ratio_of_fsb_does_not_accept_requirement_entry() -> None:
+    payload = make_valid_payload()
+    payload["requirement"]["holding"] = {"mode": "a_mean", "value": 0.5}
+
+    with pytest.raises(ValueError, match="ratio_of_FSB"):
+        Inputs.model_validate(payload)
+
+
+def test_inputs_require_response_time_for_fsb_and_eb_only() -> None:
+    payload = make_valid_payload()
+    del payload["response_time"]["FSB"]
+
+    with pytest.raises(ValueError, match="response_time"):
+        Inputs.model_validate(payload)
 
 
 def test_inputs_require_fsb_and_eb_brake_types() -> None:
@@ -119,6 +157,40 @@ def test_ratio_of_fsb_requires_ratio_value() -> None:
     ]
 
     with pytest.raises(ValueError, match="ratio"):
+        Inputs.model_validate(payload)
+
+
+def test_inputs_require_positive_bogie_weight() -> None:
+    payload = make_valid_payload()
+    payload["mass_params"]["powered_bogie"]["bogie_weight"] = 0.0
+
+    with pytest.raises(ValueError, match="bogie_weight"):
+        Inputs.model_validate(payload)
+
+
+def test_inputs_require_two_or_more_points_for_air_spring_fit() -> None:
+    payload = make_valid_payload()
+    payload["air_spring"]["trailer_bogie"]["points"] = [
+        {"pressure_kpa": 180.0, "sprung_mass_ton": 5.0}
+    ]
+
+    with pytest.raises(ValueError, match="at least two"):
+        Inputs.model_validate(payload)
+
+
+def test_inputs_require_air_spring_fields_for_explicit_linear_mode() -> None:
+    payload = make_valid_payload()
+    del payload["air_spring"]["powered_bogie"]["airspring_k"]
+
+    with pytest.raises(ValueError, match="airspring_k"):
+        Inputs.model_validate(payload)
+
+
+def test_inputs_reject_unknown_air_spring_mode() -> None:
+    payload = make_valid_payload()
+    payload["air_spring"]["powered_bogie"]["mode"] = "piecewise"
+
+    with pytest.raises(ValueError, match="mode"):
         Inputs.model_validate(payload)
 
 

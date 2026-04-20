@@ -2,17 +2,18 @@
 
 from __future__ import annotations
 
-from typing import Literal
+from typing import Annotated, Literal
 
-from pydantic import BaseModel, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 LoadGroup = Literal["AW0", "AW2", "AW3"]
-BrakeTypeSource = Literal["kinematic", "copy_of_EB", "ratio_of_FSB"]
+BrakeTypeSource = Literal["kinematic", "ratio_of_FSB"]
 BrakeTypeName = str
 RequirementMode = Literal["a_mean", "distance"]
 AllocationStrategy = Literal["equal_wear", "equal_adhesion"]
-CarType = Literal["powered", "trailer"]
+BogieType = Literal["powered_bogie", "trailer_bogie"]
 PiecewiseKind = Literal["constant", "linear"]
+AirSpringMode = Literal["fitted_from_points", "explicit_linear"]
 
 
 class BrakeTypeDefinition(BaseModel):
@@ -25,8 +26,11 @@ class BrakeTypeDefinition(BaseModel):
     @model_validator(mode="after")
     def validate_ratio(self) -> "BrakeTypeDefinition":
         """校验比例制动的 ratio。"""
-        if self.source == "ratio_of_FSB" and self.ratio is None:
-            raise ValueError("ratio_of_FSB brake types require ratio")
+        if self.source == "ratio_of_FSB":
+            if self.ratio is None:
+                raise ValueError("ratio_of_FSB brake types require ratio")
+            if self.ratio <= 0:
+                raise ValueError("ratio_of_FSB brake types require ratio > 0")
         return self
 
 
@@ -36,57 +40,163 @@ class RequirementValue(BaseModel):
     mode: RequirementMode = Field(..., description="单位: -")
     value: float = Field(..., description="单位: m/s^2 or m")
 
+    @model_validator(mode="after")
+    def validate_positive_value(self) -> "RequirementValue":
+        """校验技术条件值为正。"""
+        if self.value <= 0:
+            raise ValueError("requirement value must be > 0")
+        return self
 
-class ResponseTimeEntry(BaseModel):
-    """响应时间参数。"""
+
+class FSBResponseTime(BaseModel):
+    """FSB 响应参数。"""
+
+    t1: float = Field(..., description="单位: s")
+    impulse_rate: float = Field(..., description="单位: m/s^3")
+
+    @model_validator(mode="after")
+    def validate_values(self) -> "FSBResponseTime":
+        """校验 FSB 响应参数。"""
+        if self.t1 < 0:
+            raise ValueError("FSB response_time.t1 must be >= 0")
+        if self.impulse_rate <= 0:
+            raise ValueError("FSB response_time.impulse_rate must be > 0")
+        return self
+
+
+class EBResponseTime(BaseModel):
+    """EB 响应参数。"""
 
     t1: float = Field(..., description="单位: s")
     t2: float = Field(..., description="单位: s")
 
+    @model_validator(mode="after")
+    def validate_values(self) -> "EBResponseTime":
+        """校验 EB 响应参数。"""
+        if self.t1 < 0:
+            raise ValueError("EB response_time.t1 must be >= 0")
+        if self.t2 <= 0:
+            raise ValueError("EB response_time.t2 must be > 0")
+        return self
 
-class ControllerConfig(BaseModel):
-    """控制器配置。"""
+
+class ResponseTimeConfig(BaseModel):
+    """响应时间配置。"""
+
+    model_config = ConfigDict(extra="forbid")
+
+    FSB: FSBResponseTime = Field(..., description="单位: -")
+    EB: EBResponseTime = Field(..., description="单位: -")
+
+
+class BogieConfig(BaseModel):
+    """转向架实例配置。"""
 
     name: str = Field(..., description="单位: -")
-    car_type: CarType = Field(..., description="单位: -")
-    load_group_shares: dict[LoadGroup, float] = Field(..., description="单位: -")
+    bogie_type: BogieType = Field(..., description="单位: -")
 
 
 class VehicleConfig(BaseModel):
-    """控制器所在车辆配置。"""
+    """逐转向架实例配置。"""
 
-    controllers: list[ControllerConfig] = Field(..., description="单位: -")
+    bogies: list[BogieConfig] = Field(..., description="单位: -")
+
+    @model_validator(mode="after")
+    def validate_unique_names(self) -> "VehicleConfig":
+        """校验转向架名称唯一。"""
+        names = [bogie.name for bogie in self.bogies]
+        if len(names) != len(set(names)):
+            raise ValueError("vehicle_config bogie names must be unique")
+        return self
 
 
-class ControllerMassParams(BaseModel):
-    """控制器质量参数。"""
+class BogieTypeMassParams(BaseModel):
+    """转向架类型质量参数。"""
 
-    mass_static_kg: dict[LoadGroup, float] = Field(..., description="单位: kg")
+    mass_static: dict[LoadGroup, float] = Field(..., description="输入单位: ton; 内部单位: kg")
+    bogie_weight: float = Field(..., description="输入单位: ton; 内部单位: kg")
     rotational_mass_factor: float = Field(..., description="单位: -")
+
+    @model_validator(mode="after")
+    def validate_params(self) -> "BogieTypeMassParams":
+        """校验类型级质量参数。"""
+        if any(value <= 0 for value in self.mass_static.values()):
+            raise ValueError("mass_static values must be > 0")
+        if self.bogie_weight <= 0:
+            raise ValueError("bogie_weight must be > 0")
+        if any(value <= self.bogie_weight for value in self.mass_static.values()):
+            raise ValueError("mass_static must be > bogie_weight")
+        if self.rotational_mass_factor < 0:
+            raise ValueError("rotational_mass_factor must be >= 0")
+        self.mass_static = {
+            load_group: value * 1000.0 for load_group, value in self.mass_static.items()
+        }
+        self.bogie_weight *= 1000.0
+        return self
 
 
 class MassParams(BaseModel):
     """质量参数集合。"""
 
-    controllers: dict[str, ControllerMassParams] = Field(..., description="单位: -")
+    powered_bogie: BogieTypeMassParams = Field(..., description="单位: -")
+    trailer_bogie: BogieTypeMassParams = Field(..., description="单位: -")
+
+
+class AirSpringPoint(BaseModel):
+    """空簧特征点。"""
+
+    pressure_kpa: float = Field(..., description="单位: kPa")
+    sprung_mass_ton: float = Field(..., description="单位: ton")
+
+    @model_validator(mode="after")
+    def validate_point(self) -> "AirSpringPoint":
+        """校验空簧特征点。"""
+        if self.pressure_kpa <= 0:
+            raise ValueError("pressure_kpa must be > 0")
+        if self.sprung_mass_ton <= 0:
+            raise ValueError("sprung_mass_ton must be > 0")
+        return self
+
+
+class FittedAirSpringConfig(BaseModel):
+    """基于特征点拟合的空簧配置。"""
+
+    mode: Literal["fitted_from_points"] = Field(..., description="单位: -")
+    points: list[AirSpringPoint] = Field(..., description="单位: -")
+
+    @model_validator(mode="after")
+    def validate_points(self) -> "FittedAirSpringConfig":
+        """校验拟合特征点数量。"""
+        if len(self.points) < 2:
+            raise ValueError("fitted_from_points mode requires at least two points")
+        return self
+
+
+class ExplicitLinearAirSpringConfig(BaseModel):
+    """显式线性空簧配置。"""
+
+    mode: Literal["explicit_linear"] = Field(..., description="单位: -")
+    airspring_k: float = Field(..., description="单位: kPa/ton")
+    airspring_b: float = Field(..., description="单位: kPa")
+
+
+AirSpringConfig = Annotated[
+    FittedAirSpringConfig | ExplicitLinearAirSpringConfig,
+    Field(discriminator="mode"),
+]
 
 
 class AirSpringParams(BaseModel):
     """空簧配置。"""
 
-    load_group_pressure_kpa: dict[LoadGroup, float] = Field(..., description="单位: kPa")
+    powered_bogie: AirSpringConfig
+    trailer_bogie: AirSpringConfig
 
 
 class MechanicalParams(BaseModel):
     """机械模型参数。"""
 
-    mechanical_gain_by_controller: dict[str, float] = Field(..., description="单位: kPa/kN")
-
-
-class KDefaultEntry(BaseModel):
-    """默认 k 参数。"""
-
-    k_const: float = Field(..., description="单位: -")
+    model_config = ConfigDict(extra="allow")
 
 
 class KSegment(BaseModel):
@@ -116,18 +226,10 @@ class KCurve(BaseModel):
 
 
 class KConfig(BaseModel):
-    """k 默认值与标定配置。"""
+    """k 标定配置。"""
 
-    default: dict[str, KDefaultEntry] = Field(..., description="单位: -")
     calibrated: dict[LoadGroup, dict[str, KCurve]] = Field(..., description="单位: -")
     fallback: dict[LoadGroup, LoadGroup] = Field(default_factory=dict, description="单位: -")
-
-
-class ClampConfig(BaseModel):
-    """阀件限幅配置。"""
-
-    min_kpa_by_brake_type: dict[str, float] = Field(..., description="单位: kPa")
-    max_kpa_by_brake_type: dict[str, float] = Field(..., description="单位: kPa")
 
 
 class Inputs(BaseModel):
@@ -137,7 +239,7 @@ class Inputs(BaseModel):
     V_list: list[float] | None = Field(default=None, description="单位: km/h")
     requirement: dict[str, RequirementValue] = Field(..., description="单位: -")
     brake_types: list[BrakeTypeDefinition] = Field(..., description="单位: -")
-    response_time: dict[str, ResponseTimeEntry] = Field(..., description="单位: s")
+    response_time: ResponseTimeConfig = Field(..., description="单位: -")
     load_groups: list[LoadGroup] = Field(..., description="单位: -")
     air_spring: AirSpringParams = Field(..., description="单位: -")
     mass_params: MassParams = Field(..., description="单位: -")
@@ -145,31 +247,42 @@ class Inputs(BaseModel):
     vehicle_config: VehicleConfig = Field(..., description="单位: -")
     mech_params: MechanicalParams = Field(..., description="单位: -")
     k_config: KConfig = Field(..., description="单位: -")
-    clamp_config: ClampConfig = Field(..., description="单位: -")
+    EB_limit_min: float = Field(..., description="单位: kPa")
 
     @model_validator(mode="after")
     def validate_required_shapes(self) -> "Inputs":
         """校验必须的 brake type 与依赖输入。"""
-        brake_type_names = {item.name for item in self.brake_types}
+        brake_type_names = [item.name for item in self.brake_types]
+        if len(brake_type_names) != len(set(brake_type_names)):
+            raise ValueError("brake_types must not contain duplicate names")
+
         if not {"FSB", "EB"}.issubset(brake_type_names):
             raise ValueError("brake_types must include FSB and EB")
 
         for brake_type in self.brake_types:
-            if brake_type.source == "kinematic" and brake_type.name not in self.requirement:
-                raise ValueError(f"missing requirement for {brake_type.name}")
-            if brake_type.source == "kinematic" and brake_type.name not in self.response_time:
-                raise ValueError(f"missing response_time for {brake_type.name}")
-            if brake_type.source == "copy_of_EB" and "EB" not in self.response_time:
-                raise ValueError("copy_of_EB requires EB response_time")
+            if brake_type.source == "kinematic" and brake_type.name not in {"FSB", "EB"}:
+                raise ValueError("only FSB and EB may use source=kinematic")
 
-        controller_names = {controller.name for controller in self.vehicle_config.controllers}
-        if controller_names != set(self.mass_params.controllers):
-            raise ValueError("vehicle_config controllers must match mass_params controllers")
-        if controller_names != set(self.mech_params.mechanical_gain_by_controller):
-            raise ValueError("vehicle_config controllers must match mech_params controllers")
+        allowed_requirement_names = {"FSB", "EB"}
+        extra_requirement_names = set(self.requirement) - allowed_requirement_names
+        if extra_requirement_names:
+            raise ValueError(
+                "ratio_of_FSB brake types must not define requirement: "
+                + ", ".join(sorted(extra_requirement_names))
+            )
 
-        if "FSB" not in self.k_config.default or "EB" not in self.k_config.default:
-            raise ValueError("k_config.default must include FSB and EB")
+        missing_requirement_names = allowed_requirement_names - set(self.requirement)
+        if missing_requirement_names:
+            raise ValueError(
+                "missing requirement for " + ", ".join(sorted(missing_requirement_names))
+            )
+
+        if self.requirement["FSB"].mode != "a_mean":
+            raise ValueError("FSB requirement must use mode=a_mean")
+
+        if self.EB_limit_min < 0:
+            raise ValueError("EB_limit_min must be >= 0")
+
         if "AW0" not in self.k_config.calibrated or "AW3" not in self.k_config.calibrated:
             raise ValueError("k_config.calibrated must include AW0 and AW3")
 
