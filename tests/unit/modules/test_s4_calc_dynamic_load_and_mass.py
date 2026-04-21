@@ -14,10 +14,12 @@ def test_s4_calculates_static_and_dynamic_mass_by_controller() -> None:
 
     out = run(ctx)
 
-    assert out.Mass_by_controller["AW0"]["powered_bogie_1"]["mass_static"] == 10000.0
-    assert out.Mass_by_controller["AW0"]["powered_bogie_1"]["mass_dynamic"] == 10800.0
-    assert out.Mass_by_controller["AW0"]["trailer_bogie_1"]["mass_static"] == 9000.0
-    assert out.Mass_by_controller["AW0"]["trailer_bogie_1"]["mass_dynamic"] == 9360.0
+    assert out.Mass_by_controller["AW0"]["powered_bogie_1"]["mass_static"] == 10.0
+    assert out.Mass_by_controller["AW0"]["powered_bogie_1"]["mass_dynamic"] == 10.8
+    assert out.Mass_by_controller["AW0"]["trailer_bogie_1"]["mass_static"] == 9.0
+    assert out.Mass_by_controller["AW0"]["trailer_bogie_1"]["mass_dynamic"] == 9.36
+    assert out.Mass_by_controller["AW2"]["powered_bogie_1"]["mass_dynamic"] == 11.8
+    assert out.Mass_by_controller["AW2"]["trailer_bogie_1"]["mass_dynamic"] == 10.36
 
 
 def test_s4_outputs_air_spring_pressures_by_controller() -> None:
@@ -26,10 +28,10 @@ def test_s4_outputs_air_spring_pressures_by_controller() -> None:
 
     out = run(ctx)
 
-    assert out.AirSpringPressure_by_controller["AW0"]["powered_bogie_1"] == 260.0
-    assert out.AirSpringPressure_by_controller["AW2"]["powered_bogie_1"] == 280.0
-    assert out.AirSpringPressure_by_controller["AW0"]["trailer_bogie_1"] == 230.0
-    assert out.AirSpringPressure_by_controller["AW3"]["trailer_bogie_1"] == 270.0
+    assert out.AirSpringPressure_by_controller["AW0"]["powered_bogie_1"] == 180.0
+    assert out.AirSpringPressure_by_controller["AW2"]["powered_bogie_1"] == 190.0
+    assert out.AirSpringPressure_by_controller["AW0"]["trailer_bogie_1"] == 155.0
+    assert out.AirSpringPressure_by_controller["AW3"]["trailer_bogie_1"] == 175.0
 
 
 def test_s4_outputs_air_spring_fit_by_bogie_type() -> None:

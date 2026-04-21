@@ -25,6 +25,10 @@ def make_valid_payload() -> dict[str, object]:
             "EB": {"t1": 0.3, "t2": 0.6},
         },
         "load_groups": ["AW0", "AW2", "AW3"],
+        "controller_type": "bogie",
+        "n_bogies_by_controller": 1,
+        "n_springs_by_controller": 2,
+        "n_cylinders_by_controller": 4,
         "allocation_strategy": "equal_wear",
         "vehicle_config": {
             "bogies": [
@@ -59,9 +63,9 @@ def make_valid_payload() -> dict[str, object]:
             "trailer_bogie": {
                 "mode": "fitted_from_points",
                 "points": [
-                    {"pressure_kpa": 180.0, "sprung_mass_ton": 5.0},
-                    {"pressure_kpa": 220.0, "sprung_mass_ton": 7.0},
-                    {"pressure_kpa": 260.0, "sprung_mass_ton": 9.0},
+                    {"pressure_kpa": 180.0, "sprung_mass_by_spring_ton": 5.0},
+                    {"pressure_kpa": 220.0, "sprung_mass_by_spring_ton": 7.0},
+                    {"pressure_kpa": 260.0, "sprung_mass_by_spring_ton": 9.0},
                 ],
             },
         },
@@ -109,10 +113,14 @@ def test_inputs_accepts_minimal_supported_shape() -> None:
 
     assert model.brake_types[2].name == "holding"
     assert model.response_time.FSB.impulse_rate == 1.5
-    assert model.mass_params.powered_bogie.mass_static["AW0"] == 10000.0
-    assert model.mass_params.powered_bogie.bogie_weight == 2000.0
+    assert model.mass_params.powered_bogie.mass_static["AW0"] == 10.0
+    assert model.mass_params.powered_bogie.bogie_weight == 2.0
     assert model.air_spring.powered_bogie.mode == "explicit_linear"
     assert model.air_spring.trailer_bogie.mode == "fitted_from_points"
+    assert model.controller_type == "bogie"
+    assert model.n_bogies_by_controller == 1
+    assert model.n_springs_by_controller == 2
+    assert model.n_cylinders_by_controller == 4
     assert model.k_config.fallback["AW2"] == "AW3"
 
 
@@ -171,7 +179,7 @@ def test_inputs_require_positive_bogie_weight() -> None:
 def test_inputs_require_two_or_more_points_for_air_spring_fit() -> None:
     payload = make_valid_payload()
     payload["air_spring"]["trailer_bogie"]["points"] = [
-        {"pressure_kpa": 180.0, "sprung_mass_ton": 5.0}
+        {"pressure_kpa": 180.0, "sprung_mass_by_spring_ton": 5.0}
     ]
 
     with pytest.raises(ValueError, match="at least two"):
@@ -191,6 +199,52 @@ def test_inputs_reject_unknown_air_spring_mode() -> None:
     payload["air_spring"]["powered_bogie"]["mode"] = "piecewise"
 
     with pytest.raises(ValueError, match="mode"):
+        Inputs.model_validate(payload)
+
+
+def test_inputs_reject_legacy_sprung_mass_ton_air_spring_point_name() -> None:
+    payload = make_valid_payload()
+    payload["air_spring"]["trailer_bogie"]["points"] = [
+        {"pressure_kpa": 180.0, "sprung_mass_ton": 5.0},
+        {"pressure_kpa": 220.0, "sprung_mass_ton": 7.0},
+    ]
+
+    with pytest.raises(ValueError, match="sprung_mass_by_spring_ton"):
+        Inputs.model_validate(payload)
+
+
+def test_inputs_reject_car_controller_type_during_mvp() -> None:
+    payload = make_valid_payload()
+    payload["controller_type"] = "car"
+    payload["n_bogies_by_controller"] = 2
+    payload["n_springs_by_controller"] = 4
+    payload["n_cylinders_by_controller"] = 8
+
+    with pytest.raises(ValueError, match="controller_type=bogie"):
+        Inputs.model_validate(payload)
+
+
+def test_inputs_require_one_bogie_for_bogie_controller() -> None:
+    payload = make_valid_payload()
+    payload["n_bogies_by_controller"] = 2
+
+    with pytest.raises(ValueError, match="n_bogies_by_controller"):
+        Inputs.model_validate(payload)
+
+
+def test_inputs_require_two_springs_for_bogie_controller() -> None:
+    payload = make_valid_payload()
+    payload["n_springs_by_controller"] = 4
+
+    with pytest.raises(ValueError, match="n_springs_by_controller"):
+        Inputs.model_validate(payload)
+
+
+def test_inputs_require_four_cylinders_for_bogie_controller() -> None:
+    payload = make_valid_payload()
+    payload["n_cylinders_by_controller"] = 8
+
+    with pytest.raises(ValueError, match="n_cylinders_by_controller"):
         Inputs.model_validate(payload)
 
 

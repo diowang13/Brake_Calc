@@ -12,6 +12,7 @@ BrakeTypeName = str
 RequirementMode = Literal["a_mean", "distance"]
 AllocationStrategy = Literal["equal_wear", "equal_adhesion"]
 BogieType = Literal["powered_bogie", "trailer_bogie"]
+ControllerType = Literal["bogie", "car"]
 PiecewiseKind = Literal["constant", "linear"]
 AirSpringMode = Literal["fitted_from_points", "explicit_linear"]
 
@@ -113,8 +114,8 @@ class VehicleConfig(BaseModel):
 class BogieTypeMassParams(BaseModel):
     """转向架类型质量参数。"""
 
-    mass_static: dict[LoadGroup, float] = Field(..., description="输入单位: ton; 内部单位: kg")
-    bogie_weight: float = Field(..., description="输入单位: ton; 内部单位: kg")
+    mass_static: dict[LoadGroup, float] = Field(..., description="单位: ton")
+    bogie_weight: float = Field(..., description="单位: ton")
     rotational_mass_factor: float = Field(..., description="单位: -")
 
     @model_validator(mode="after")
@@ -128,10 +129,6 @@ class BogieTypeMassParams(BaseModel):
             raise ValueError("mass_static must be > bogie_weight")
         if self.rotational_mass_factor < 0:
             raise ValueError("rotational_mass_factor must be >= 0")
-        self.mass_static = {
-            load_group: value * 1000.0 for load_group, value in self.mass_static.items()
-        }
-        self.bogie_weight *= 1000.0
         return self
 
 
@@ -146,15 +143,15 @@ class AirSpringPoint(BaseModel):
     """空簧特征点。"""
 
     pressure_kpa: float = Field(..., description="单位: kPa")
-    sprung_mass_ton: float = Field(..., description="单位: ton")
+    sprung_mass_by_spring_ton: float = Field(..., description="单位: ton")
 
     @model_validator(mode="after")
     def validate_point(self) -> "AirSpringPoint":
         """校验空簧特征点。"""
         if self.pressure_kpa <= 0:
             raise ValueError("pressure_kpa must be > 0")
-        if self.sprung_mass_ton <= 0:
-            raise ValueError("sprung_mass_ton must be > 0")
+        if self.sprung_mass_by_spring_ton <= 0:
+            raise ValueError("sprung_mass_by_spring_ton must be > 0")
         return self
 
 
@@ -241,6 +238,10 @@ class Inputs(BaseModel):
     brake_types: list[BrakeTypeDefinition] = Field(..., description="单位: -")
     response_time: ResponseTimeConfig = Field(..., description="单位: -")
     load_groups: list[LoadGroup] = Field(..., description="单位: -")
+    controller_type: ControllerType = Field(..., description="单位: -")
+    n_bogies_by_controller: int = Field(..., description="单位: -")
+    n_springs_by_controller: int = Field(..., description="单位: -")
+    n_cylinders_by_controller: int = Field(..., description="单位: -")
     air_spring: AirSpringParams = Field(..., description="单位: -")
     mass_params: MassParams = Field(..., description="单位: -")
     allocation_strategy: AllocationStrategy = Field(..., description="单位: -")
@@ -279,6 +280,18 @@ class Inputs(BaseModel):
 
         if self.requirement["FSB"].mode != "a_mean":
             raise ValueError("FSB requirement must use mode=a_mean")
+
+        if self.controller_type != "bogie":
+            raise ValueError("MVP only supports controller_type=bogie")
+
+        if self.n_bogies_by_controller != 1:
+            raise ValueError("controller_type=bogie requires n_bogies_by_controller=1")
+
+        if self.n_springs_by_controller != 2:
+            raise ValueError("controller_type=bogie requires n_springs_by_controller=2")
+
+        if self.n_cylinders_by_controller != 4:
+            raise ValueError("controller_type=bogie requires n_cylinders_by_controller=4")
 
         if self.EB_limit_min < 0:
             raise ValueError("EB_limit_min must be >= 0")

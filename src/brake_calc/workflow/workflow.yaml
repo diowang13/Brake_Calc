@@ -17,7 +17,7 @@ workflow:
   - id: s5
     use: calc_required_brake_force
     needs: [s4]
-    desc: 结合 Beta_list、Mass_by_controller 与分配策略（EB/FB 等黏着、FSB/比例类型按配置）得出 F_by_controller
+    desc: 结合 Beta_list、Mass_by_controller 与分配策略（EB 强制等黏着、FSB/比例类型按配置）得出 F_by_controller
   - id: s6
     use: allocate_brake_force
     needs: [s5]

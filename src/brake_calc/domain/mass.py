@@ -3,9 +3,13 @@
 from __future__ import annotations
 
 
-def calc_dynamic_mass(static_mass: float, rotational_mass_factor: float) -> float:
+def calc_dynamic_mass(
+    static_mass: float,
+    aw0_static_mass: float,
+    rotational_mass_factor: float,
+) -> float:
     """计算含旋转质量的动态制动质量。"""
-    return static_mass * (1.0 + rotational_mass_factor)
+    return static_mass + aw0_static_mass * rotational_mass_factor
 
 
 def fit_air_spring_linear_formula(points: list[tuple[float, float]]) -> tuple[float, float]:
@@ -26,6 +30,14 @@ def fit_air_spring_linear_formula(points: list[tuple[float, float]]) -> tuple[fl
     return k, b
 
 
-def calc_air_spring_pressure(sprung_mass_ton: float, k: float, b: float) -> float:
-    """按线性公式计算空簧压力。"""
-    return k * sprung_mass_ton + b
+def calc_air_spring_pressure(
+    sprung_mass_ton: float,
+    n_springs_by_controller: int,
+    k: float,
+    b: float,
+) -> float:
+    """按单个空簧承担的簧上质量计算空簧压力。"""
+    if n_springs_by_controller <= 0:
+        raise ValueError("n_springs_by_controller must be > 0")
+    sprung_mass_per_spring = sprung_mass_ton / n_springs_by_controller
+    return k * sprung_mass_per_spring + b

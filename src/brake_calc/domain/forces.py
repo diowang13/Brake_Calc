@@ -6,7 +6,7 @@ from __future__ import annotations
 def total_brake_force_kn(dynamic_masses: dict[str, float], beta: float) -> float:
     """按控制器动态质量汇总整车目标制动力。"""
     total_mass = sum(dynamic_masses.values())
-    return total_mass * beta / 1000.0
+    return total_mass * beta
 
 
 def equal_wear_distribution(controllers: list[str], total_force: float) -> dict[str, float]:
@@ -16,14 +16,14 @@ def equal_wear_distribution(controllers: list[str], total_force: float) -> dict[
 
 
 def equal_adhesion_distribution(
-    static_masses: dict[str, float],
+    dynamic_masses: dict[str, float],
     total_force: float,
 ) -> dict[str, float]:
-    """按静态质量比例做等黏着分配。"""
-    total_mass = sum(static_masses.values())
+    """按动态质量比例做等黏着分配。"""
+    total_mass = sum(dynamic_masses.values())
     if total_mass <= 0:
-        return {controller: 0.0 for controller in static_masses}
+        return {controller: 0.0 for controller in dynamic_masses}
     return {
         controller: total_force * (mass / total_mass)
-        for controller, mass in static_masses.items()
+        for controller, mass in dynamic_masses.items()
     }

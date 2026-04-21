@@ -55,15 +55,15 @@
           "title": "Pressure Kpa",
           "type": "number"
         },
-        "sprung_mass_ton": {
+        "sprung_mass_by_spring_ton": {
           "description": "\u5355\u4f4d: ton",
-          "title": "Sprung Mass Ton",
+          "title": "Sprung Mass By Spring Ton",
           "type": "number"
         }
       },
       "required": [
         "pressure_kpa",
-        "sprung_mass_ton"
+        "sprung_mass_by_spring_ton"
       ],
       "title": "AirSpringPoint",
       "type": "object"
@@ -97,7 +97,7 @@
       "description": "\u8f6c\u5411\u67b6\u7c7b\u578b\u8d28\u91cf\u53c2\u6570\u3002",
       "properties": {
         "bogie_weight": {
-          "description": "\u8f93\u5165\u5355\u4f4d: ton; \u5185\u90e8\u5355\u4f4d: kg",
+          "description": "\u5355\u4f4d: ton",
           "title": "Bogie Weight",
           "type": "number"
         },
@@ -105,7 +105,7 @@
           "additionalProperties": {
             "type": "number"
           },
-          "description": "\u8f93\u5165\u5355\u4f4d: ton; \u5185\u90e8\u5355\u4f4d: kg",
+          "description": "\u5355\u4f4d: ton",
           "propertyNames": {
             "enum": [
               "AW0",
@@ -353,6 +353,15 @@
           "title": "Brake Types",
           "type": "array"
         },
+        "controller_type": {
+          "description": "\u5355\u4f4d: -",
+          "enum": [
+            "bogie",
+            "car"
+          ],
+          "title": "Controller Type",
+          "type": "string"
+        },
         "k_config": {
           "$ref": "#/$defs/KConfig",
           "description": "\u5355\u4f4d: -"
@@ -377,6 +386,21 @@
         "mech_params": {
           "$ref": "#/$defs/MechanicalParams",
           "description": "\u5355\u4f4d: -"
+        },
+        "n_bogies_by_controller": {
+          "description": "\u5355\u4f4d: -",
+          "title": "N Bogies By Controller",
+          "type": "integer"
+        },
+        "n_cylinders_by_controller": {
+          "description": "\u5355\u4f4d: -",
+          "title": "N Cylinders By Controller",
+          "type": "integer"
+        },
+        "n_springs_by_controller": {
+          "description": "\u5355\u4f4d: -",
+          "title": "N Springs By Controller",
+          "type": "integer"
         },
         "requirement": {
           "additionalProperties": {
@@ -406,6 +430,10 @@
         "brake_types",
         "response_time",
         "load_groups",
+        "controller_type",
+        "n_bogies_by_controller",
+        "n_springs_by_controller",
+        "n_cylinders_by_controller",
         "air_spring",
         "mass_params",
         "allocation_strategy",
@@ -892,7 +920,7 @@
         },
         "type": "object"
       },
-      "description": "\u5355\u4f4d: kg",
+      "description": "\u5355\u4f4d: ton",
       "title": "Mass By Controller",
       "type": "object"
     },

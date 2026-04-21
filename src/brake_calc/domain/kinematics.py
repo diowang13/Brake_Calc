@@ -14,16 +14,28 @@ def derive_mean_deceleration(v0_kmh: float, mode: str, value: float) -> float:
         raise ValueError("requirement value must be > 0")
     if mode == "a_mean":
         return value
+    if mode == "distance":
+        v0_mps = kmh_to_mps(v0_kmh)
+        return (v0_mps**2) / (2.0 * value)
+    raise ValueError(f"unsupported requirement mode: {mode}")
+
+
+def braking_distance_from_mean_deceleration(v0_kmh: float, a_mean_req: float) -> float:
+    """按平均减速度要求反算标准制动距离。"""
+    if a_mean_req <= 0:
+        raise ValueError("a_mean_req must be > 0")
     v0_mps = kmh_to_mps(v0_kmh)
-    return (v0_mps**2) / (2.0 * value)
+    return (v0_mps**2) / (2.0 * a_mean_req)
 
 
 def compensate_target_deceleration(v0_kmh: float, a_mean_req: float, t1: float, t2: float) -> float:
-    """根据响应时间补偿控制用目标减速度。"""
+    """按距离扣除模型补偿控制用目标减速度。"""
     v0_mps = kmh_to_mps(v0_kmh)
-    stop_time = max(v0_mps / max(a_mean_req, 1e-6), 1e-6)
-    lost_time_ratio = min((t1 + 0.5 * t2) / stop_time, 0.95)
-    return a_mean_req / max(1.0 - lost_time_ratio, 0.05)
+    braking_distance = braking_distance_from_mean_deceleration(v0_kmh, a_mean_req)
+    effective_distance = braking_distance - v0_mps * (t1 + 0.5 * t2)
+    if effective_distance <= 0:
+        raise ValueError("response distance loss exceeds braking distance")
+    return (v0_mps**2) / (2.0 * effective_distance)
 
 
 def solve_fsb_target_deceleration(
@@ -32,16 +44,19 @@ def solve_fsb_target_deceleration(
     t1: float,
     impulse_rate: float,
 ) -> float:
-    """根据 FSB 的 t1 与 impulse_rate 联立求解控制用目标减速度。"""
+    """按距离扣除模型和 FSB 冲击率联立求解控制用目标减速度。"""
     if impulse_rate <= 0:
         raise ValueError("impulse_rate must be > 0")
 
     v0_mps = kmh_to_mps(v0_kmh)
-    stop_time = max(v0_mps / max(a_mean_req, 1e-6), 1e-6)
-    linear_term = 1.0 - (t1 / stop_time)
-    quadratic_term = 0.5 / (impulse_rate * stop_time)
-    discriminant = linear_term**2 - (4.0 * quadratic_term * a_mean_req)
+    braking_distance = braking_distance_from_mean_deceleration(v0_kmh, a_mean_req)
+    distance_after_dead_time = braking_distance - v0_mps * t1
+    if distance_after_dead_time <= 0:
+        raise ValueError("FSB dead-time distance loss exceeds braking distance")
 
+    quadratic_term = v0_mps / impulse_rate
+    linear_term = 2.0 * distance_after_dead_time
+    discriminant = linear_term**2 - (4.0 * quadratic_term * v0_mps**2)
     if discriminant < 0:
         raise ValueError("FSB response parameters do not yield a real control deceleration")
 

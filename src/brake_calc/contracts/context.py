@@ -21,7 +21,7 @@ class Context(BaseModel):
     validated_inputs: Inputs | None = Field(default=None, description="单位: -")
     a_mean_req: dict[str, float] = Field(default_factory=dict, description="单位: m/s^2")
     Beta_list: dict[str, float] = Field(default_factory=dict, description="单位: m/s^2")
-    Mass_by_controller: MassVector = Field(default_factory=dict, description="单位: kg")
+    Mass_by_controller: MassVector = Field(default_factory=dict, description="单位: ton")
     AirSpringPressure_by_controller: PressureVector = Field(
         default_factory=dict,
         description="单位: kPa",

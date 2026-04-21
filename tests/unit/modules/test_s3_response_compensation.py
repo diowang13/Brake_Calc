@@ -20,6 +20,24 @@ def test_s3_generates_beta_list_with_copy_and_ratio_rules() -> None:
     assert out.Beta_list["FSB"] >= out.a_mean_req["FSB"]
 
 
+def test_s3_uses_distance_loss_model_for_eb_compensation() -> None:
+    ctx = Context(validated_inputs=Inputs.model_validate(make_valid_payload()))
+    ctx = run_s2(ctx)
+
+    out = run(ctx)
+
+    assert out.Beta_list["EB"] == pytest.approx(1.2831479897348161)
+
+
+def test_s3_uses_distance_loss_model_for_fsb_impulse_compensation() -> None:
+    ctx = Context(validated_inputs=Inputs.model_validate(make_valid_payload()))
+    ctx = run_s2(ctx)
+
+    out = run(ctx)
+
+    assert out.Beta_list["FSB"] == pytest.approx(1.0731866021704843)
+
+
 def test_s3_uses_impulse_rate_for_fsb_compensation() -> None:
     payload = make_valid_payload()
     payload["response_time"]["FSB"]["impulse_rate"] = 2.5

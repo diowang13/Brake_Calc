@@ -33,16 +33,12 @@ def run(ctx: Context) -> Context:
                 controller: values["mass_dynamic"]
                 for controller, values in ctx.Mass_by_controller[load_group].items()
             }
-            static_masses = {
-                controller: values["mass_static"]
-                for controller, values in ctx.Mass_by_controller[load_group].items()
-            }
             total_force = total_brake_force_kn(dynamic_masses, beta)
             if brake_mode in {"EB", "FB"} or brake_type == "EB":
-                per_group[load_group] = equal_adhesion_distribution(static_masses, total_force)
+                per_group[load_group] = equal_adhesion_distribution(dynamic_masses, total_force)
             elif inputs.allocation_strategy == "equal_adhesion":
-                per_group[load_group] = equal_adhesion_distribution(static_masses, total_force)
+                per_group[load_group] = equal_adhesion_distribution(dynamic_masses, total_force)
             else:
-                per_group[load_group] = equal_wear_distribution(list(static_masses), total_force)
+                per_group[load_group] = equal_wear_distribution(list(dynamic_masses), total_force)
         forces[brake_type] = per_group
     return ctx.model_copy(update={"F_by_controller": forces})

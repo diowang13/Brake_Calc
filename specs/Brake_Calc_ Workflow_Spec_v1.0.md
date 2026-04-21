@@ -92,14 +92,18 @@
     - `t2`：建立时间（build-up time），从开始产生减速度到减速度达到目标值 90% 的时间
   - `ratio_of_FSB` 类型不单独配置响应参数，直接沿用 FSB 的派生结果进行缩放
 - 在 `response_compensation` 模块中：
-  - `EB` 使用 `t1` 和 `t2` 由平均减速度要求反推控制用目标减速度
-  - `FSB` 使用 `t1` 和 `impulse_rate` 联立反求控制用目标减速度
+  - `EB` 使用距离扣除模型，结合 `t1` 和 `t2` 由 `a_mean_req` 反推控制用目标减速度
+  - `FSB` 使用距离扣除模型，结合 `t1` 和 `impulse_rate` 联立反求控制用目标减速度
 
+- `controller_type`：控制器粒度，取值为 `bogie` / `car`。MVP 阶段固定为 `bogie`，即一个 controller 对应一个转向架；未来支持 `car` 时，一个 controller 对应一辆车。
+- `n_bogies_by_controller` ：每个controller对应的bogie数量，关联 `controller_type`。当 `controller_type = bogie` 时为 1；当 `controller_type = car` 时为 2。MVP 阶段固定为 1。
+- `n_springs_by_controller`：每个 controller 对应的空簧数量，关联 `controller_type`。当 `controller_type = bogie` 时为 2；当 `controller_type = car` 时为 4。MVP 阶段固定为 2。
+- `n_cylinders_by_controller`：每个 controller 对应的制动缸数量，关联 `controller_type`。当 `controller_type = bogie` 时为 4；当 `controller_type = car` 时为 8。MVP 阶段固定为 4。
 - `load_groups`：实验条件载荷组，取值为 AW0 / AW2 / AW3
-- `air_spring`：支持空簧特征点和显式公式两种空簧特性输入。根据特征点拟合时不做分段线性，只收敛为单条直线 pressure_kpa = k * sprung_mass_ton + b
-  - fitted_from_points：输入若干 [pressure_kpa, sprung_mass_ton]
+- `air_spring`：支持空簧特征点和显式公式两种空簧特性输入。根据特征点拟合时不做分段线性，只收敛为单条直线 `pressure_kpa = k * sprung_mass_by_spring_ton + b`。运行时由 `sprung_mass = mass_static - bogie_weight` 得到控制器簧上质量，再按 `sprung_mass_by_spring_ton = sprung_mass / n_springs_by_controller` 计算单个空簧承担的簧上质量，并代入空簧公式。
+  - fitted_from_points：输入若干 `[pressure_kpa, sprung_mass_by_spring_ton]`
   - explicit_linear：输入 airspring_k、airspring_b
-- `mass_params`：转向架类型级质量参数，承载静态质量、转向架自重和旋转质量因子。外部质量输入优先使用 `ton`。
+- `mass_params`：转向架类型级质量参数，承载静态质量、转向架自重和旋转质量因子。`mass_static` 与 `bogie_weight` 均使用 `ton`，并在后续计算中保持 `ton`，不再换算为 `kg`。
   - `powered_bogie` / `trailer_bogie` 的旋转质量参数（如 `rotational_mass_factor`）
   - 建议结构：
       ```yaml
@@ -121,12 +125,12 @@
 
 - `allocation_strategy`：制动力分配策略配置，可选一个：
     - `equal_wear`（等磨耗分配）：尽量在所有控制器上平均分配目标制动力
-    - `equal_adhesion`（等黏着分配）：按各控制器控制范围内的载荷比例分配
+    - `equal_adhesion`（等黏着分配）：按各控制器控制范围内的载荷（`mass_dynamic`）比例分配
     - **适用规则**：
         - 紧急制动（EB）**必须**采用 `equal_adhesion`，不受本配置影响
         - 最大常用制动（FSB）及以 FSB 百分比定义的自定义类型（保持、跳跃等）按 `allocation_strategy` 配置执行
-- `vehicle_config`：逐转向架实例配置
-    - 每个转向架实例对应一个控制器
+- `vehicle_config`：逐控制器实例配置。MVP 阶段 `controller_type = bogie`，因此配置形态为逐转向架实例配置
+    - 当 `controller_type = bogie` 时，每个转向架实例对应一个控制器
     - 每个转向架实例需显式给出：
         - `name`
         - `bogie_type`：`powered_bogie` / `trailer_bogie`
@@ -174,7 +178,7 @@
 | `validated_inputs` | 嵌套对象 | — | s1 | s2–s9 |
 | `a_mean_req` | `[brake_type]`（仅 kinematic 类型） | m/s² | s2 | s3 |
 | `Beta_list` | `[brake_type]` | m/s² | s3 | s4, s5 |
-| `Mass_by_controller` | `[load_group, controller]` → `{mass_static, mass_dynamic}` | kg | s4 | s5, s6 |
+| `Mass_by_controller` | `[load_group, controller]` → `{mass_static, mass_dynamic}` | ton | s4 | s5, s6 |
 | `F_by_controller` | `[brake_type, load_group, controller]` | kN | s5 (+ s6 规范化) | s7, s8 |
 | `BCP_base_by_controller` | `[brake_type, load_group, controller]` | kPa | s7 | s8 |
 | `k_used_by_controller` | `[brake_type, load_group, controller]` | 无量纲 | s8 | s9 |
@@ -243,7 +247,7 @@ flowchart TD
 
 - in: inputs
 - out: validated_inputs
-- 作用：对输入参数做结构/类型/单位校验与归一化，填默认值，产出后续模块可信赖的 `validated_inputs`；外部质量字段以 ton 为主，s1 负责统一到内部计算单位kg。
+- 作用：对输入参数做结构/类型/单位校验与归一化，填默认值，产出后续模块可信赖的 `validated_inputs`；质量字段在输入、Context 和计算中统一使用 `ton`。
 
 2) `derive_requirement`
 
@@ -256,25 +260,29 @@ flowchart TD
 - in: validated_inputs（含 `brake_types`、`response_time`） + a_mean_req
 - out: `Beta_list`（与 `brake_types` 顺序对应的控制用目标减速度向量）
 - note:
-    - 对 `source: kinematic` 的制动类型EB，运动学方程需同时考虑空走时间 t1（无减速度段）与建立时间 t2（减速度从 0 线性/近似上升至目标 90% 段），由平均减速度要求反推稳态目标减速度
-    - 对 `source: kinematic` 的制动类型FSB，由于建立时间的计算与控制减速度相互依赖，程序需要基于 `a_mean_req`、`t1`、`impulse_rate` 联立求解 FSB 的控制减速度
-    - 对 `source: ratio_of_FSB` 的用户自定义类型，直接按 `ratio * Beta[FSB]` 得到，不再单独做运动学补偿
+    - 对 `source: kinematic` 的制动类型 EB，先由 `a_mean_req` 反算标准制动距离 `S = v^2 / (2 * a_mean_req)`，再按距离扣除模型补偿响应损失：`Beta_EB = v^2 / (2 * (S - v * (t1_EB + t2_EB / 2)))`。
+    - 对 `source: kinematic` 的制动类型 FSB，先由 `a_mean_req` 反算标准制动距离 `S = v^2 / (2 * a_mean_req)`；建立时间由冲击率决定，`t2_FSB = Beta_FSB / impulse_rate`，并与距离扣除模型 `Beta_FSB = v^2 / (2 * (S - v * (t1_FSB + t2_FSB / 2)))` 联立求解控制减速度。
+    - 若响应损失距离不小于标准制动距离，则该输入无物理可行解，应报错。
+    - 对 `source: ratio_of_FSB` 的用户自定义类型，直接按 `ratio * Beta[FSB]` 得到，不再单独做运动学补偿。
 
 4) `calc_dynamic_load_and_mass`
 
 - in: validated_inputs（由实例的 bogie_type 去 mass_params 中读取该类型的 `mass_static `和 `rotational_mass_factor`、`mass_params`、`air_spring`、`bogie_weight`）
 - out: `Mass_by_controller`（按 `load_group × controller` 的质量向量）、`AirSpringPressure_by_controller`、`AirSpringFit_by_bogie_type`;
-- note: 不同 `bogie_type`（`powered_bogie` / `trailer_bogie`）的旋转质量参数不同，需按转向架类型分别计算;先算 `sprung_mass` = `mass_static` - `bogie_weight`,再按线性公式计算空簧压力标准，最后计算质量向量、空簧压力标准与空簧拟合公式；
+- note: 不同 `bogie_type`（`powered_bogie` / `trailer_bogie`）的旋转质量参数不同，需按转向架类型分别计算;先算 `sprung_mass` = `mass_static` - `bogie_weight`,再按线性公式计算空簧压力标准，最后计算质量向量、空簧压力标准与空簧拟合公式；动态制动质量按 `mass_dynamic = mass_static[load_group] + mass_static[AW0] * rotational_mass_factor` 计算，即旋转质量增量以同一转向架类型的 AW0 静态质量为基准。
 
 5) `calc_required_brake_force`
 
 - in: `Beta_list` + `Mass_by_controller`
 - out: F_by_controller（kN），按 `brake_type × load_group × controller` 组织
 - note: 各控制器目标制动力的计算需结合 `allocation_strategy` 与适用规则：
+    - 各制动类型的总目标制动力均按 `F_kN = mass_dynamic_ton * Beta` 计算。
     - `EB` 强制采用 `equal_adhesion`
     - `FSB` 及 `ratio_of_FSB` 类型：
         - 若 `allocation_strategy = equal_wear`，则各控制器平均分配
-        - 若 `allocation_strategy = equal_adhesion`，则按载荷比例分配
+        - 若 `allocation_strategy = equal_adhesion`，则按各 controller 的 `mass_dynamic` 比例分配
+        - 质量单位采用 `ton`，制动力单位采用 `kN`；此处参与目标制动力计算与等黏着分配的质量均为 `mass_dynamic`。
+
 
 6) `allocate_brake_force`
 

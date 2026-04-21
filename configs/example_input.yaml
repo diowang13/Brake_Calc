@@ -12,8 +12,8 @@ requirement:
     mode: a_mean
     value: 1.0
   EB:
-    mode: a_mean
-    value: 1.2
+    mode: distance
+    value: 205
 response_time:
   FSB:
     t1: 0.4
@@ -22,6 +22,10 @@ response_time:
     t1: 0.3
     t2: 1.2
 load_groups: [AW0, AW2, AW3]
+controller_type: bogie
+n_bogies_by_controller: 1
+n_springs_by_controller: 2
+n_cylinders_by_controller: 4
 allocation_strategy: equal_wear
 vehicle_config:
   bogies:
@@ -40,32 +44,31 @@ vehicle_config:
 mass_params:
   powered_bogie:
     mass_static:
-      AW0: 15.83
-      AW2: 23.33
+      AW0: 15.82
+      AW2: 23.32
       AW3: 26.39
-    bogie_weight: 2.8
+    bogie_weight: 6.3
     rotational_mass_factor: 0.1
   trailer_bogie:
     mass_static:
       AW0: 15.37
       AW2: 22.27
       AW3: 25.18
-    bogie_weight: 2.4
+    bogie_weight: 4.1
     rotational_mass_factor: 0.05
 air_spring:
   powered_bogie:
     mode: explicit_linear
-    airspring_k: 20.0
-    airspring_b: -10.0
+    airspring_k: 43.7
+    airspring_b: 4.13
   trailer_bogie:
     mode: fitted_from_points
     points:
       - pressure_kpa: 250.0
-        sprung_mass_ton: 12.97
-      - pressure_kpa: 401.0
-        sprung_mass_ton: 19.87
+        sprung_mass_by_spring_ton: 5.635
       - pressure_kpa: 465.0
-        sprung_mass_ton: 22.78
+        sprung_mass_by_spring_ton: 10.54
+
 mech_params:
   Nbc: 1.0
   eta: 0.9

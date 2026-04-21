@@ -5,7 +5,10 @@ from __future__ import annotations
 import logging
 
 from brake_calc.contracts.context import Context
-from brake_calc.domain.kinematics import compensate_target_deceleration, solve_fsb_target_deceleration
+from brake_calc.domain.kinematics import (
+    compensate_target_deceleration,
+    solve_fsb_target_deceleration,
+)
 from brake_calc.errors import InputValidationError
 
 logger = logging.getLogger(__name__)

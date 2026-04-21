@@ -4,7 +4,7 @@
 
 **Goal:** 让 `s4 calc_dynamic_load_and_mass` 与更新后的业务建模对齐：基于逐转向架实例、类型级质量参数、转向架自重和空簧线性特性，正确产出质量向量、空簧压力标准和空簧拟合公式。
 
-**Architecture:** 保留 `Context.Mass_by_controller[load_group][controller] -> {mass_static, mass_dynamic}` 这一既有主张量形状，同时扩展 `s4` 负责两类新增中间量：一是基于 `mass_static - bogie_weight` 反算得到的空簧压力标准，二是用于调试追溯的空簧线性公式。`controller` 的来源继续采用 `vehicle_config.bogies[*].name`，类型级参数由 `bogie_type` 映射读取。外部质量输入按 `ton` 表达，内部在 `s1` 统一归一化；空簧模型统一收敛为单条直线 `pressure_kpa = k * sprung_mass_ton + b`，支持“特征点整体线性拟合”与“人工显式输入 k/b”两种来源。
+**Architecture:** 保留 `Context.Mass_by_controller[load_group][controller] -> {mass_static, mass_dynamic}` 这一既有主张量形状，同时扩展 `s4` 负责两类新增中间量：一是基于 `mass_static - bogie_weight` 反算得到的空簧压力标准，二是用于调试追溯的空簧线性公式。`controller` 的来源继续采用 `vehicle_config.bogies[*].name`，类型级参数由 `bogie_type` 映射读取。质量单位在输入、Context 和计算中统一采用 `ton`；空簧模型统一收敛为单条直线 `pressure_kpa = k * sprung_mass_ton + b`，支持“特征点整体线性拟合”与“人工显式输入 k/b”两种来源。
 
 **Tech Stack:** Python 3.11+, pydantic v2, pytest, uv, ruff, mypy
 
@@ -64,7 +64,7 @@
 - 修正 `s4` 对新输入契约的字段访问。
 - 扩展 `mass_params` 的业务建模，引入 `bogie_weight`。
 - 扩展 `air_spring` 的业务建模，支持“特征点拟合”与“显式 k/b”两种输入形式。
-- 明确外部质量单位采用 `ton`，并要求在 `s1` 完成单位归一化。
+- 明确质量单位在输入、Context 和计算中统一采用 `ton`，不再换算为 `kg`。
 - 在 `s4` 增加空簧压力标准与空簧线性公式两个显式中间输出。
 - 更新 `s4` 单测，使其验证新业务语义。
 - 补齐 `s4` 关键覆盖用例。
@@ -133,14 +133,14 @@ def test_s4_uses_bogie_name_as_controller_key() -> None:
 
 def test_s4_reads_mass_params_by_bogie_type() -> None:
     ...
-    assert out.Mass_by_controller["AW0"]["powered_bogie_1"]["mass_static"] == 10000.0
-    assert out.Mass_by_controller["AW0"]["trailer_bogie_1"]["mass_static"] == 9000.0
+    assert out.Mass_by_controller["AW0"]["powered_bogie_1"]["mass_static"] == 10.0
+    assert out.Mass_by_controller["AW0"]["trailer_bogie_1"]["mass_static"] == 9.0
 
 
 def test_s4_calculates_dynamic_mass_with_type_specific_rotational_factor() -> None:
     ...
-    assert out.Mass_by_controller["AW0"]["powered_bogie_1"]["mass_dynamic"] == 10800.0
-    assert out.Mass_by_controller["AW0"]["trailer_bogie_1"]["mass_dynamic"] == 9360.0
+    assert out.Mass_by_controller["AW0"]["powered_bogie_1"]["mass_dynamic"] == 10.8
+    assert out.Mass_by_controller["AW0"]["trailer_bogie_1"]["mass_dynamic"] == 9.36
 
 
 def test_s4_calculates_sprung_mass_from_mass_static_minus_bogie_weight() -> None:
