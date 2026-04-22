@@ -5,8 +5,8 @@
 
 这份文档是你这个“制动力计算 skill”的**确定性工作流 Spec**（面向 Codex 实现与 Hermes 调用）。
 
-- `k` 不作为用户输入显式配置；基础换算中的 `k` 由 `mech_params` 内部推导
-- 调试后：按载荷组（AW0/AW3 必须，AW2 可选）启用 k(f) 校准曲线
+- 基础力-压力转换系数 `k_initial` 与初闸压力 `BCP0_initial` 不作为用户输入显式配置；由 `mech_params` 与 `n_cylinders_by_controller` 在 S7 内部推导
+- 调试后：S8 可选按载荷组（AW0/AW3 必须，AW2 可选）、制动模式和 controller 目标制动力启用 `k(f)` 标定曲线，并按载荷组与制动模式选择固定 `BCP0`
 </aside>
 
 ## 1. 输出位置与使用方式
@@ -19,9 +19,11 @@
 
 ### 2.1 主要输出
 
-- `BCP_calibrated_by_controller`：每个控制器的目标控制压力/压力标准（带单位）
+- `report`：最终结构化报告对象，包含压力标准、理论速度检查、控制器开发参数、告警、限幅事件与 trace。
+- `BCP_calibrated_by_controller` / `controller_pressure_standards`：每个控制器的目标控制压力/压力标准，单位 `kPa`
     - 输出按**实验条件载荷**（AW0 / AW2 / AW3）× **制动类型向量**（见 Inputs `brake_types`）组织，形成压力标准矩阵
     - 结构示意：`BCP_calibrated_by_controller[load_group][brake_type][controller] = pressure`
+- Markdown 报告：CLI 可通过 `--markdown-output <path>` 导出 Markdown；PDF 暂不作为内置输出，由外部工具从 Markdown 转换。
 
 ### 2.2 必须可追溯的中间量
 
@@ -35,8 +37,11 @@
     - 维度：`[load_group] × [controller]`
     - 动态质量的计算依赖该控制器对应转向架实例的 `bogie_type`（`powered_bogie` / `trailer_bogie`），两者转动惯量不同
 - `F_by_controller`：每控制器目标制动力 f（kN）
-- `BCP_base_by_controller`：基础模型压力（未校准）
-- `k_used_by_controller`：本次实际使用的 k
+- `k_initial`：S7 由机械模型推导的理论基础力-压力转换系数，单位 `kPa/kN`
+- `BCP0_initial`：S7 由机械模型推导的理论初闸压力，单位 `kPa`
+- `BCP_base_by_controller`：基础模型压力（未调试标定），按 `BCP_base = k_initial * F_by_controller + BCP0_initial` 计算
+- `k_used_by_controller`：S8 最终实际使用的力-压力转换系数，单位 `kPa/kN`
+- `BCP0_used_by_controller`：S8 最终实际使用的初闸压力，单位 `kPa`
 - `AirSpringPressure_by_controller`
     - 维度：[load_group] × [controller]
     - 单位：kPa
@@ -49,14 +54,15 @@
 ## 3. 关键工程规则（必须满足）
 
 1. **载荷 AW0/AW2/AW3 仅用于选择参数组**，运行时不做组间插值
-2. **k 的自变量为目标制动力 f**（控制器粒度），即 `k = k_of_f(load_group, brake_mode, f)`
-3. 校准不回写到 μ 或机械模型本体；只影响输出侧 `k(f)`/压力标准
-4. 所有模式必须应用阀件限幅（如 EB 的 min/max）并在 report 中记录限幅触发
+2. **标定曲线 `k(f)` 的自变量为单 controller 目标制动力 f**，即 `k = k_of_f(load_group, brake_mode, F_by_controller)`；不使用全列总力
+3. **S7 机械模型参数与 S8 调试标定参数分离**：S7 推导 `k_initial` 与 `BCP0_initial`，S8 可选使用调试后的 `k(f)` 与 `BCP0` 计算最终压力
+4. 校准不回写到 μ 或机械模型本体；只影响输出侧压力标准
+5. 所有模式必须应用阀件限幅（如 EB 的 min/max）并在 report 中记录限幅触发
 
 ## 4. Inputs（输入参数，待你后续补齐单位/范围/默认值）
 
 - `v0`：最高速度（技术条件定义点）
-- `V_list`：可选（用于输出全速度向量结果）
+- `V_list`：可选速度列表，单位 `km/h`，用于 S9 输出 `theoretical_speed_checks`。未配置时仅使用 `v0`；当前只对 FSB/EB 生成理论速度检查，`ratio_of_FSB` 类型不单独生成。
 - `requirement`：基础制动类型的技术条件输入
   - `FSB`：仅接受平均减速度要求 `a_mean`
   - `EB`：可接受平均减速度要求 `a_mean` 或制动距离要求 `distance`
@@ -149,8 +155,24 @@
       powered_bogie_3 表示编号为 3 的动力转向架实例
 - `mass_static` = `sprung_mass` + `bogie_weight`
 - `sprung_mass` = `mass_static` - `bogie_weight`    
-- `mech_params`：制动缸参数（Nbc、η、Sp、L_bc、Fs1/Fs2、ξ 等）,全列共享的一套机械模型参数，用于由制动力推导基础压力，并内部推导基础换算中的 `k`
-- `k_config`：k(f) 校准曲线配置，仅用于输出侧校准，不包含默认 k 输入（见第 6 节）
+- `mech_params`：制动缸机械模型参数，全列共享一套，用于在 S7 中由 `F_by_controller` 反算基础制动缸压力 `BCP_base_by_controller`，并内部推导基础力-压力转换系数 `k_initial`。MVP 阶段仅支持 `cylinder_type: tread_cylinder`（踏面制动缸），不支持 `caliper_cylinder`；`caliper_cylinder` 后续扩展。制动缸数量不在 `mech_params` 中重复配置，统一使用顶层 `n_cylinders_by_controller`。
+  - MVP tread_cylinder 配置字段：
+    ```yaml
+    mech_params:
+      cylinder_type: tread_cylinder
+      Sc: 0.0248     # 单位: m^2，活塞有效面积
+      xi: 0.29       # 单位: -，动摩擦系数
+      Li: 3.4        # 单位: -，单元内部倍率
+      eta_i: 0.95    # 单位: -，单元内部效率
+      Lo: 1.0        # 单位: -，外部倍率
+      eta_o: 1.0     # 单位: -，外部效率
+      Fs1: 1.0       # 单位: kN，单元复位力 1
+      Fs2: 0.25      # 单位: kN，单元复位力 2
+    ```
+  - `Fw` 暂不作为 YAML 接口暴露，MVP 按 `Fw = 0` 处理。
+  - 对 `tread_cylinder`，踏面摩擦半径等效为车轮滚动半径，标准公式中的 `Dw / (2 * Rf)` 按 1 处理；因此 MVP 不配置 `Dw` 和 `Rf`。
+
+- `pressure_calibration`：可选压力标定配置，用于 S8 输出侧标定；包含 `enabled`、按载荷组与制动模式组织的 `k(f)` 曲线、固定 `BCP0` 标定值以及 fallback 规则。不包含 S7 的基础机械模型默认参数。
 - `EB_limit_min`：紧急制动输出最小压力值
 - 压力限制规则：
     - `EB max = 600`
@@ -180,14 +202,22 @@
 | `Beta_list` | `[brake_type]` | m/s² | s3 | s4, s5 |
 | `Mass_by_controller` | `[load_group, controller]` → `{mass_static, mass_dynamic}` | ton | s4 | s5, s6 |
 | `F_by_controller` | `[brake_type, load_group, controller]` | kN | s5 (+ s6 规范化) | s7, s8 |
+| `k_initial` | 标量 | kPa/kN | s7 | s8, s9 |
+| `BCP0_initial` | 标量 | kPa | s7 | s8, s9 |
 | `BCP_base_by_controller` | `[brake_type, load_group, controller]` | kPa | s7 | s8 |
-| `k_used_by_controller` | `[brake_type, load_group, controller]` | 无量纲 | s8 | s9 |
+| `k_used_by_controller` | `[brake_type, load_group, controller]` | kPa/kN | s8 | s9 |
+| `BCP0_used_by_controller` | `[brake_type, load_group, controller]` | kPa | s8 | s9 |
 | `BCP_calibrated_by_controller` | `[load_group, brake_type, controller]` | kPa | s8 | s9（最终输出） |
-| `clamp_events` | `List[{brake_type, load_group, controller, kind, value_before, value_after}]` | — | s7, s8 | s9 |
+| `clamp_events` | `List[{brake_type, load_group, controller, kind, value_before, value_after}]` | — | s8 | s9 |
 | `warnings` | `List[{code, message, context}]` | — | 任意模块 | s9 |
 | `trace` | `List[{step_id, module, inputs_hash, outputs_keys, elapsed_ms}]` | — | runner | s9 |
 | `AirSpringPressure_by_controller` | `[load_group, controller]` | kPa | s4 | s9 |
 | `AirSpringFit_by_bogie_type` | `[bogie_type]` -> `{k, b, source_mode}` | kPa/ton, kPa | s4 | s9 |
+| `brake_summary` | `[brake_type] -> {beta}` | m/s² | s9 | report |
+| `load_summary` | `[load_group, controller] -> {mass_dynamic, spring_pressure}` | ton, kPa | s9 | report |
+| `controller_pressure_standards` | `[load_group, brake_type, controller]` | kPa | s9 | report / Markdown |
+| `theoretical_speed_checks` | `[brake_type, speed_kmh] -> {requirement_a_mean, theoretical_distance_m, beta_used}` | m/s², m | s9 | report / Markdown |
+| `controller_code_params` | `{dynamic_mass_formula, pressure_conversion}` | mixed | s9 | report / Markdown |
 
 ### 5.3 关键张量形状（约定）
 
@@ -229,11 +259,10 @@ flowchart TD
   S5 -->|F_by_controller| S6[s6 allocate_brake_force]
   S1 -->|allocation_strategy, vehicle_config| S6
   S6 -->|F_by_controller| S7[s7 force_to_pressure_base]
-  S1 -->|mech_params| S7
-  S7 -->|BCP_base_by_controller| S8[s8 apply_k_calibration]
-  S1 -->|k_config, EB_limit_min| S8
-  S8 -->|BCP_calibrated_by_controller, k_used_by_controller| S9[s9 summarize_and_checks]
-  S7 -.clamp_events.-> S9
+  S1 -->|mech_params, n_cylinders_by_controller| S7
+  S7 -->|BCP_base_by_controller, k_initial, BCP0_initial| S8[s8 apply_pressure_calibration]
+  S1 -->|pressure_calibration, EB_limit_min| S8
+  S8 -->|BCP_calibrated_by_controller, k_used_by_controller, BCP0_used_by_controller| S9[s9 summarize_and_checks]
   S8 -.clamp_events, warnings.-> S9
   S9 --> OUT[report + BCP_calibrated_by_controller]
 ```
@@ -292,43 +321,110 @@ flowchart TD
 
 7) `force_to_pressure_base`
 
-- in: F_by_controller + mech_params
-- out: BCP_base_by_controller
+- in: `F_by_controller` + `n_cylinders_by_controller` + `mech_params`
+- out: `k_initial` + `BCP0_initial` + `BCP_base_by_controller`
+- 作用：按制动缸机械模型推导理论基础力-压力转换参数，并将每 controller 目标制动力 `F_by_controller`（kN）反算为未标定的基础制动缸压力 `BCP_base_by_controller`（kPa）。
 - note:
-    - 基础换算中的 `k` 不作为输入显式配置
-    - `k` 由 `mech_params` 内部推导
+    - `k_initial` 与 `BCP0_initial` 不作为输入显式配置，由 `mech_params` 与 `n_cylinders_by_controller` 内部推导。
+    - MVP 阶段仅支持 `cylinder_type = tread_cylinder`。
+    - 标准公式中由总目标制动力反算制动缸压力。MVP 中 `Fw = 0`，且踏面制动 `Dw / (2 * Rf) = 1`，因此使用：
+      ```text
+      BCP_base =
+      (
+        (
+          F_by_controller
+          / (n_cylinders_by_controller * Lo * eta_o * xi)
+          + Fs1
+        )
+        / (Li * eta_i)
+        + Fs2
+      )
+      / Sc
+      ```
+    - 单位约定：`F_by_controller`、`Fs1`、`Fs2` 使用 kN，`Sc` 使用 m²，因此 `kN / m² = kPa`，输出 `BCP_base` 为 kPa。
+    - 该公式可整理为线性形式：
+      ```text
+      BCP_base = k_initial * F_by_controller + BCP0_initial
+      k_initial = 1 / (n_cylinders_by_controller * Lo * eta_o * xi * Li * eta_i * Sc)
+      BCP0_initial = (Fs1 / (Li * eta_i) + Fs2) / Sc
+      ```
+    - `k_initial` 与 `BCP0_initial` 必须由当前 `mech_params` 与 `n_cylinders_by_controller` 按上述公式实时计算，不设置、不读取、不校准为固定示例值。
 
+8) `apply_pressure_calibration`
 
-8) `apply_k_calibration`（模块 8.5）
+- in: `F_by_controller` + `BCP_base_by_controller` + `k_initial` + `BCP0_initial` + `pressure_calibration` + `EB_limit_min`
+- out: `k_used_by_controller` + `BCP0_used_by_controller` + `BCP_calibrated_by_controller`
+- 作用：可选应用调试标定参数，决定最终用于每个 controller 的 `k_used` 与 `BCP0_used`，计算最终压力标准并执行阀件限幅。
+- note:
+    - 若未启用标定，`k_used = k_initial`，`BCP0_used = BCP0_initial`。
+    - 若启用标定，按 `load_group + brake_mode + F_by_controller` 查询 `k(f)`，按 `load_group + brake_mode` 选择固定 `BCP0`。
+    - 最终压力统一按：
+      ```text
+      BCP_calibrated = k_used * F_by_controller + BCP0_used
+      ```
+    - `BCP_calibrated_by_controller` 以 `[load_group ∈ {AW0, AW2, AW3}] × [brake_type ∈ brake_types] × [controller]` 的三维结构输出。
+    - 如需观察标定幅度，可在 `summarize_and_checks` 的 report 中临时计算 `BCP_calibrated - BCP_base`，不作为持久化字段。
 
-- in: load_group + brake_mode + F_by_controller + k_config + BCP_base_by_controller
-- out: k_used_by_controller + BCP_calibrated_by_controller
-- note: 如需观察校准幅度，可在 `summarize_and_checks` 的 report 中临时计算 `BCP_calibrated - BCP_base`，不作为持久化字段。最终 `BCP_calibrated_by_controller` 以 `[load_group ∈ {AW0, AW2, AW3}] × [brake_type ∈ brake_types] × [controller]` 的三维结构输出，用于实验条件下的压力标准比对
 
 9) `summarize_and_checks`
 
 - in: all
-- out: report
-- 作用：汇总中间量、限幅事件、告警和追溯信息，生成人/机可读的 `report`（包含压力标准矩阵、`delta_BCP` 临时统计、k 来源、clamp 触发统计等），供本地调试与 Hermes 返回
+- out: `report`
+- 作用：汇总正式报告数据，供本地调试、Hermes 返回和 Markdown 导出使用。
+- report 内容包括：
+  - `brake_summary`：各 `brake_type` 的 `beta`
+  - `load_summary`：各 `load_group × controller` 的 `mass_dynamic` 与 `spring_pressure`
+  - `controller_pressure_standards` / `BCP_calibrated_by_controller`：各 `load_group × brake_type × controller` 的 BC 压力标准
+  - `theoretical_speed_checks`：按 `V_list` 或默认 `v0` 输出 FSB/EB 的理论速度检查值；固定使用 S3 在 `v0` 下得到的 `Beta_list[brake_type]` 前向计算各初速度的理论制动距离与平均减速度，不在每个速度点重新反求控制减速度，也不使用 BCP 反推性能。
+  - 报告显示精度：距离与 kPa 四舍五入到整数，载重 ton 四舍五入到小数点后 2 位，减速度四舍五入到小数点后 3 位。
+  - `controller_code_params`：控制器开发用动态载荷公式和压力转换圆整参数
+  - `delta_BCP`、`warnings`、`clamp_events`、`trace`
 
-## 7. k_config（标定曲线 + fallback）
+## 7. pressure_calibration（压力标定曲线 + fallback）
 
 ### 7.1 默认基础换算
 
-- 默认基础换算中的 `k` 不作为输入显式配置，由 `mech_params` 内部推导
+- 默认基础换算中的 `k_initial` 与 `BCP0_initial` 不作为用户输入显式配置，由 S7 根据 `mech_params` 与 `n_cylinders_by_controller` 推导。
+- S7 理论基础压力为：
+  ```text
+  BCP_base = k_initial * F_by_controller + BCP0_initial
+  ```
+- `pressure_calibration` 仅描述输出侧调试标定参数，不覆盖 S7 的机械模型本体。
 
-### 7.2 调试后标定（可选启用）
+### 7.2 标定开关
 
-- 必须提供：AW0、AW3
-- 可选提供：AW2
+- `pressure_calibration.enabled = false` 时，S8 不做调试标定：
+  - k_used = k_initial
+  - BCP0_used = BCP0_initial
+  - BCP_calibrated = k_used * F_by_controller + BCP0_used
+- `pressure_calibration.enabled = true` 时，S8 使用标定配置：
+  ```text
+  k_used = k_of_f(load_group, brake_mode, F_by_controller)
+  BCP0_used = BCP0_calibrated(load_group, brake_mode)
+  BCP_calibrated = k_used * F_by_controller + BCP0_used
+  ```
 
-### 7.3 AW2 fallback（当 AW2 缺失时）
+### 7.3 标定参数的作用域
 
-- 默认建议：`fallback.AW2 = AW3`
+- k_initial、BCP0_initial 由 S7 机械模型推导，作为未调试状态的理论基础值。
+- 调试后的 k(f) 表示实际使用的力-压力转换系数，单位为 kPa/kN，不是无量纲倍率。
+- 调试后的 BCP0 表示实际使用的初闸压力，单位为 kPa；MVP 中 BCP0 按 load_group + brake_mode 取固定值，不随 f 插值。
+- k(f) 与 BCP0 的作用域为全列共享；每个 controller 使用自身的 F_by_controller 查询同一套曲线。
+- 常用制动与紧急制动允许使用不同标定参数：FSB 及 ratio_of_FSB 类型使用 FSB 对应标定，EB 使用 EB 对应标定。
 
-### 7.4 k(f) 表达形式（推荐 piecewise）
+### 7.4 标定曲线配置
 
-- 支持：分段常数 + 中段线性（与你 Mathcad 范例一致）
+- 必须提供：AW0、AW3。
+- 可选提供：AW2。
+- 当 AW2 缺失时，默认建议：fallback.AW2 = AW3。
+- k(f) 支持分段常数与分段线性；分段曲线自变量始终为单 controller 的 F_by_controller（kN），不使用全列总力。
+- YAML 中保存物理量原值：k 使用 kPa/kN，BCP0 使用 kPa。S9 输出控制器代码参数时执行向上圆整：`k_used_for_code = ceil(k_used * 100)`，`BCP0_used_for_code = ceil(BCP0_used / 5) * 5`。
+  
+### 7.5 标定曲线生成规则
+- 调试人员可在 AW0 空载试验中确定某制动模式的 k_aw0 与 BCP0_aw0，在 AW3 重载试验中确定同一制动模式的 k_aw3 与 BCP0_aw3。
+- 生成 k(f) 曲线时，使用 AW0 工况下该制动模式的 controller 最大 F_by_controller 对应 k_aw0，使用 AW3 工况下该制动模式的 controller 最小 F_by_controller 对应 k_aw3，由两点形成线性段，并按需要扩展为分段曲线。
+- EB 与 FSB 分别按各自试验结果生成曲线。ratio_of_FSB 类型沿用 FSB 标定曲线。
+- BCP0 不做线性插值；按 load_group + brake_mode 选择固定标定值。若某载荷组缺失，按 fallback 规则选择。
 
 ## 8. Workflow（确定执行顺序）
 
@@ -363,15 +459,15 @@ workflow:
   - id: s7
     use: force_to_pressure_base
     needs: [s6]
-    desc: 用机械模型（mech_params）将 F_by_controller 换算为未校准的 BCP_base_by_controller
+    desc: 用踏面制动缸机械模型（mech_params + n_cylinders_by_controller）将 F_by_controller 反算为未校准的 BCP_base_by_controller
   - id: s8
-    use: apply_k_calibration
+    use: apply_pressure_calibration
     needs: [s7]
-    desc: 按 load_group + brake_mode 选取 k(f) 标定曲线，对 BCP_base 做校准与限幅，得到最终 BCP_calibrated_by_controller
+    desc: 可选应用压力标定；按 load_group + brake_mode + controller force 选取 k(f)，按 load_group + brake_mode 选取 BCP0，计算最终 BCP_calibrated_by_controller 并执行限幅
   - id: s9
     use: summarize_and_checks
     needs: [s8]
-    desc: 汇总输出、告警、clamp 事件与 trace，生成 report
+    desc: 汇总压力标准、理论速度检查、控制器开发参数、告警、clamp 事件与 trace，生成结构化 report；CLI 可选导出 Markdown
 ```
 
 ## 9. 与 Mathcad 范例对齐（待补）

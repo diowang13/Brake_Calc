@@ -33,8 +33,11 @@ def test_context_accepts_spec_defined_fields() -> None:
             }
         },
         F_by_controller={"FSB": {"AW0": {"powered_bogie_1": 10.0}}},
+        k_initial=10.73,
+        BCP0_initial=22.5,
         BCP_base_by_controller={"FSB": {"AW0": {"powered_bogie_1": 12.0}}},
-        k_used_by_controller={"FSB": {"AW0": {"powered_bogie_1": 1.0}}},
+        k_used_by_controller={"FSB": {"AW0": {"powered_bogie_1": 10.7}}},
+        BCP0_used_by_controller={"FSB": {"AW0": {"powered_bogie_1": 25.0}}},
         BCP_calibrated_by_controller={"AW0": {"FSB": {"powered_bogie_1": 12.0}}},
         clamp_events=[],
         warnings=[],

@@ -3,10 +3,27 @@
 from __future__ import annotations
 
 
-def force_to_pressure_kpa(force_kn: float, k_value: float, mechanical_gain: float) -> float:
-    """用默认 k 与机械增益换算基础压力。"""
-    gain = mechanical_gain if mechanical_gain > 0 else 1.0
-    return force_kn * k_value / gain
+def derive_tread_pressure_parameters(
+    *,
+    n_cylinders: int,
+    sc: float,
+    xi: float,
+    li: float,
+    eta_i: float,
+    lo: float,
+    eta_o: float,
+    fs1: float,
+    fs2: float,
+) -> tuple[float, float]:
+    """推导踏面制动缸的 k_initial 与 BCP0_initial。"""
+    k_initial = 1.0 / (n_cylinders * lo * eta_o * xi * li * eta_i * sc)
+    bcp0_initial = (fs1 / (li * eta_i) + fs2) / sc
+    return k_initial, bcp0_initial
+
+
+def force_to_pressure_kpa(force_kn: float, k_value: float, bcp0_kpa: float) -> float:
+    """按线性力-压力关系换算制动缸压力。"""
+    return k_value * force_kn + bcp0_kpa
 
 
 def clamp_value(value: float, min_value: float, max_value: float) -> tuple[float, bool]:

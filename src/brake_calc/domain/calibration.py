@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from brake_calc.contracts.inputs import KCurve, KSegment
+from brake_calc.contracts.inputs import KSegment, PressureCalibrationEntry
 
 
 def resolve_brake_mode(brake_type_name: str, brake_type_source: str) -> str:
@@ -28,9 +28,9 @@ def evaluate_segment(segment: KSegment, force_kn: float) -> float:
     return segment.start_value + (segment.end_value - segment.start_value) * ratio
 
 
-def evaluate_k_curve(curve: KCurve, force_kn: float) -> tuple[float | None, bool]:
+def evaluate_k_curve(curve: PressureCalibrationEntry, force_kn: float) -> tuple[float | None, bool]:
     """按力值评估 k(f)，返回值与是否越界。"""
-    for segment in curve.segments:
+    for segment in curve.k_segments:
         if segment.min_f <= force_kn <= segment.max_f:
             return evaluate_segment(segment, force_kn), False
     return None, True

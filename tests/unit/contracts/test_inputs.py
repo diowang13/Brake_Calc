@@ -70,32 +70,44 @@ def make_valid_payload() -> dict[str, object]:
             },
         },
         "mech_params": {
-            "Nbc": 1.0,
-            "eta": 0.9,
+            "cylinder_type": "tread_cylinder",
+            "Sc": 0.0248,
+            "xi": 0.29,
+            "Li": 3.4,
+            "eta_i": 0.95,
+            "Lo": 1.0,
+            "eta_o": 1.0,
+            "Fs1": 1.0,
+            "Fs2": 0.25,
         },
-        "k_config": {
+        "pressure_calibration": {
+            "enabled": True,
             "calibrated": {
                 "AW0": {
                     "FSB": {
-                        "segments": [
-                            {"min_f": 0.0, "max_f": 9999.0, "kind": "constant", "value": 1.0}
+                        "BCP0": 25.0,
+                        "k_segments": [
+                            {"min_f": 0.0, "max_f": 9999.0, "kind": "constant", "value": 10.7}
                         ]
                     },
                     "EB": {
-                        "segments": [
-                            {"min_f": 0.0, "max_f": 9999.0, "kind": "constant", "value": 1.1}
+                        "BCP0": 25.0,
+                        "k_segments": [
+                            {"min_f": 0.0, "max_f": 9999.0, "kind": "constant", "value": 11.0}
                         ]
                     },
                 },
                 "AW3": {
                     "FSB": {
-                        "segments": [
-                            {"min_f": 0.0, "max_f": 9999.0, "kind": "constant", "value": 1.0}
+                        "BCP0": 30.0,
+                        "k_segments": [
+                            {"min_f": 0.0, "max_f": 9999.0, "kind": "constant", "value": 12.0}
                         ]
                     },
                     "EB": {
-                        "segments": [
-                            {"min_f": 0.0, "max_f": 9999.0, "kind": "constant", "value": 1.1}
+                        "BCP0": 35.0,
+                        "k_segments": [
+                            {"min_f": 0.0, "max_f": 9999.0, "kind": "constant", "value": 13.0}
                         ]
                     },
                 },
@@ -121,7 +133,9 @@ def test_inputs_accepts_minimal_supported_shape() -> None:
     assert model.n_bogies_by_controller == 1
     assert model.n_springs_by_controller == 2
     assert model.n_cylinders_by_controller == 4
-    assert model.k_config.fallback["AW2"] == "AW3"
+    assert model.mech_params.cylinder_type == "tread_cylinder"
+    assert model.pressure_calibration.calibrated["AW0"]["FSB"].BCP0 == 25.0
+    assert model.pressure_calibration.fallback["AW2"] == "AW3"
 
 
 def test_fsb_requirement_only_accepts_a_mean() -> None:
@@ -245,6 +259,22 @@ def test_inputs_require_four_cylinders_for_bogie_controller() -> None:
     payload["n_cylinders_by_controller"] = 8
 
     with pytest.raises(ValueError, match="n_cylinders_by_controller"):
+        Inputs.model_validate(payload)
+
+
+def test_inputs_reject_legacy_k_config_name() -> None:
+    payload = make_valid_payload()
+    payload["k_config"] = payload.pop("pressure_calibration")
+
+    with pytest.raises(ValueError, match="pressure_calibration"):
+        Inputs.model_validate(payload)
+
+
+def test_inputs_reject_legacy_nbc_mech_param() -> None:
+    payload = make_valid_payload()
+    payload["mech_params"] = {"Nbc": 4.0, "eta": 0.95}
+
+    with pytest.raises(ValueError, match="cylinder_type"):
         Inputs.model_validate(payload)
 
 

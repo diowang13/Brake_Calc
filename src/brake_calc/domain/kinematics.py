@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import math
+
 
 def kmh_to_mps(speed_kmh: float) -> float:
     """将 km/h 转为 m/s。"""
@@ -60,4 +62,4 @@ def solve_fsb_target_deceleration(
     if discriminant < 0:
         raise ValueError("FSB response parameters do not yield a real control deceleration")
 
-    return (linear_term - discriminant**0.5) / (2.0 * quadratic_term)
+    return (linear_term - math.sqrt(discriminant)) / (2.0 * quadratic_term)

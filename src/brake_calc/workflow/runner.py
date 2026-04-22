@@ -35,7 +35,7 @@ MODULE_REGISTRY: dict[str, ModuleFn] = {
     "calc_required_brake_force": s5_calc_required_brake_force.run,
     "allocate_brake_force": s6_allocate_brake_force.run,
     "force_to_pressure_base": s7_force_to_pressure_base.run,
-    "apply_k_calibration": s8_apply_k_calibration.run,
+    "apply_pressure_calibration": s8_apply_k_calibration.run,
     "summarize_and_checks": s9_summarize_and_checks.run,
 }
 

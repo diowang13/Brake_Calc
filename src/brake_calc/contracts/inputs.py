@@ -15,6 +15,7 @@ BogieType = Literal["powered_bogie", "trailer_bogie"]
 ControllerType = Literal["bogie", "car"]
 PiecewiseKind = Literal["constant", "linear"]
 AirSpringMode = Literal["fitted_from_points", "explicit_linear"]
+CylinderType = Literal["tread_cylinder"]
 
 
 class BrakeTypeDefinition(BaseModel):
@@ -193,7 +194,38 @@ class AirSpringParams(BaseModel):
 class MechanicalParams(BaseModel):
     """机械模型参数。"""
 
-    model_config = ConfigDict(extra="allow")
+    model_config = ConfigDict(extra="forbid")
+
+    cylinder_type: CylinderType = Field(..., description="单位: -")
+    Sc: float = Field(..., description="单位: m^2")
+    xi: float = Field(..., description="单位: -")
+    Li: float = Field(..., description="单位: -")
+    eta_i: float = Field(..., description="单位: -")
+    Lo: float = Field(..., description="单位: -")
+    eta_o: float = Field(..., description="单位: -")
+    Fs1: float = Field(..., description="单位: kN")
+    Fs2: float = Field(..., description="单位: kN")
+
+    @model_validator(mode="after")
+    def validate_values(self) -> "MechanicalParams":
+        """校验踏面制动缸机械模型参数。"""
+        if self.Sc <= 0:
+            raise ValueError("Sc must be > 0")
+        if self.xi <= 0:
+            raise ValueError("xi must be > 0")
+        if self.Li <= 0:
+            raise ValueError("Li must be > 0")
+        if self.eta_i <= 0:
+            raise ValueError("eta_i must be > 0")
+        if self.Lo <= 0:
+            raise ValueError("Lo must be > 0")
+        if self.eta_o <= 0:
+            raise ValueError("eta_o must be > 0")
+        if self.Fs1 < 0:
+            raise ValueError("Fs1 must be >= 0")
+        if self.Fs2 < 0:
+            raise ValueError("Fs2 must be >= 0")
+        return self
 
 
 class KSegment(BaseModel):
@@ -216,16 +248,28 @@ class KSegment(BaseModel):
         return self
 
 
-class KCurve(BaseModel):
-    """k(f) 曲线。"""
+class PressureCalibrationEntry(BaseModel):
+    """单个载荷组和制动模式的压力标定参数。"""
 
-    segments: list[KSegment] = Field(..., description="单位: -")
+    BCP0: float = Field(..., description="单位: kPa")
+    k_segments: list[KSegment] = Field(..., description="单位: -")
+
+    @model_validator(mode="after")
+    def validate_values(self) -> "PressureCalibrationEntry":
+        """校验压力标定值。"""
+        if self.BCP0 < 0:
+            raise ValueError("BCP0 must be >= 0")
+        return self
 
 
-class KConfig(BaseModel):
-    """k 标定配置。"""
+class PressureCalibrationConfig(BaseModel):
+    """压力标定配置。"""
 
-    calibrated: dict[LoadGroup, dict[str, KCurve]] = Field(..., description="单位: -")
+    enabled: bool = Field(default=True, description="单位: -")
+    calibrated: dict[LoadGroup, dict[str, PressureCalibrationEntry]] = Field(
+        ...,
+        description="单位: -",
+    )
     fallback: dict[LoadGroup, LoadGroup] = Field(default_factory=dict, description="单位: -")
 
 
@@ -247,7 +291,7 @@ class Inputs(BaseModel):
     allocation_strategy: AllocationStrategy = Field(..., description="单位: -")
     vehicle_config: VehicleConfig = Field(..., description="单位: -")
     mech_params: MechanicalParams = Field(..., description="单位: -")
-    k_config: KConfig = Field(..., description="单位: -")
+    pressure_calibration: PressureCalibrationConfig = Field(..., description="单位: -")
     EB_limit_min: float = Field(..., description="单位: kPa")
 
     @model_validator(mode="after")
@@ -296,7 +340,10 @@ class Inputs(BaseModel):
         if self.EB_limit_min < 0:
             raise ValueError("EB_limit_min must be >= 0")
 
-        if "AW0" not in self.k_config.calibrated or "AW3" not in self.k_config.calibrated:
-            raise ValueError("k_config.calibrated must include AW0 and AW3")
+        if (
+            "AW0" not in self.pressure_calibration.calibrated
+            or "AW3" not in self.pressure_calibration.calibrated
+        ):
+            raise ValueError("pressure_calibration.calibrated must include AW0 and AW3")
 
         return self

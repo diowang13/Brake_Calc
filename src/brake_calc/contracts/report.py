@@ -35,6 +35,10 @@ class TraceEntry(BaseModel):
 
 
 PressureMatrix = dict[str, dict[str, dict[str, float]]]
+MetricMatrix = dict[str, dict[str, dict[str, float]]]
+BrakeSummary = dict[str, dict[str, float]]
+SpeedCheckMatrix = dict[str, dict[str, dict[str, float]]]
+ControllerCodeParams = dict[str, object]
 
 
 class Report(BaseModel):
@@ -44,6 +48,20 @@ class Report(BaseModel):
 
     pressure_standards: PressureMatrix = Field(..., description="单位: kPa")
     BCP_calibrated_by_controller: PressureMatrix = Field(..., description="单位: kPa")
+    brake_summary: BrakeSummary = Field(default_factory=dict, description="单位: m/s^2")
+    load_summary: MetricMatrix = Field(default_factory=dict, description="单位: ton, kPa")
+    controller_pressure_standards: PressureMatrix = Field(
+        default_factory=dict,
+        description="单位: kPa",
+    )
+    theoretical_speed_checks: SpeedCheckMatrix = Field(
+        default_factory=dict,
+        description="单位: km/h, m/s^2, m",
+    )
+    controller_code_params: ControllerCodeParams = Field(
+        default_factory=dict,
+        description="单位: -",
+    )
     warnings: list[WarningEntry] = Field(default_factory=list, description="单位: -")
     clamp_events: list[ClampEvent] = Field(default_factory=list, description="单位: -")
     trace: list[TraceEntry] = Field(default_factory=list, description="单位: -")

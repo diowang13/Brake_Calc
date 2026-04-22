@@ -1,4 +1,5 @@
 v0: 80.0
+V_list: [20.0, 40.0, 60.0, 80.0]
 brake_types:
   - name: FSB
     source: kinematic
@@ -70,36 +71,48 @@ air_spring:
         sprung_mass_by_spring_ton: 10.54
 
 mech_params:
-  Nbc: 1.0
-  eta: 0.9
-k_config:
+  cylinder_type: tread_cylinder
+  Sc: 0.0248
+  xi: 0.29
+  Li: 3.4
+  eta_i: 0.95
+  Lo: 1.0
+  eta_o: 1.0
+  Fs1: 1.0
+  Fs2: 0.25
+pressure_calibration:
+  enabled: false
   calibrated:
     AW0:
       FSB:
-        segments:
+        BCP0: 25.0
+        k_segments:
           - min_f: 0.0
             max_f: 99999.0
             kind: constant
-            value: 1.0
+            value: 10.73
       EB:
-        segments:
+        BCP0: 25.0
+        k_segments:
           - min_f: 0.0
             max_f: 99999.0
             kind: constant
-            value: 1.1
+            value: 10.73
     AW3:
       FSB:
-        segments:
+        BCP0: 25.0
+        k_segments:
           - min_f: 0.0
             max_f: 99999.0
             kind: constant
-            value: 1.0
+            value: 10.73
       EB:
-        segments:
+        BCP0: 25.0
+        k_segments:
           - min_f: 0.0
             max_f: 99999.0
             kind: constant
-            value: 1.1
+            value: 10.73
   fallback:
     AW2: AW3
 EB_limit_min: 150.0

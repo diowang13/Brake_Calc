@@ -31,8 +31,11 @@ class Context(BaseModel):
         description="单位: kPa/ton, kPa",
     )
     F_by_controller: ForceTensor = Field(default_factory=dict, description="单位: kN")
+    k_initial: float = Field(default=0.0, description="单位: kPa/kN")
+    BCP0_initial: float = Field(default=0.0, description="单位: kPa")
     BCP_base_by_controller: PressureTensor = Field(default_factory=dict, description="单位: kPa")
-    k_used_by_controller: KTensor = Field(default_factory=dict, description="单位: -")
+    k_used_by_controller: KTensor = Field(default_factory=dict, description="单位: kPa/kN")
+    BCP0_used_by_controller: KTensor = Field(default_factory=dict, description="单位: kPa")
     BCP_calibrated_by_controller: PressureTensor = Field(
         default_factory=dict,
         description="单位: kPa",

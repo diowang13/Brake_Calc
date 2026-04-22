@@ -9,7 +9,7 @@ workflow:
   - id: s3
     use: response_compensation
     needs: [s2]
-    desc: 根据 t1/t2 反推稳态目标减速度，产出 Beta_list（含 FSB/EB 运动学解、FB 复用 EB、比例类型缩放）
+    desc: 根据 FSB 的 t1 + impulse_rate 与 EB 的 t1 + t2 反求稳态目标减速度，产出 Beta_list（含 FSB/EB 运动学解、比例类型缩放）
   - id: s4
     use: calc_dynamic_load_and_mass
     needs: [s3]
@@ -25,11 +25,11 @@ workflow:
   - id: s7
     use: force_to_pressure_base
     needs: [s6]
-    desc: 用机械模型（mech_params + 默认 k）将 F_by_controller 换算为未校准的 BCP_base_by_controller
+    desc: 用踏面制动缸机械模型（mech_params + n_cylinders_by_controller）将 F_by_controller 反算为未校准的 BCP_base_by_controller
   - id: s8
-    use: apply_k_calibration
+    use: apply_pressure_calibration
     needs: [s7]
-    desc: 按 load_group + brake_mode 选取 k(f) 标定曲线，对 BCP_base 做校准与限幅，得到最终 BCP_calibrated_by_controller
+    desc: 可选应用压力标定；按 load_group + brake_mode + controller force 选取 k(f)，按 load_group + brake_mode 选取 BCP0，计算最终 BCP_calibrated_by_controller 并执行限幅
   - id: s9
     use: summarize_and_checks
     needs: [s8]

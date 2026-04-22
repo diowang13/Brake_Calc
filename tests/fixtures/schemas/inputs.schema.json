@@ -263,72 +263,6 @@
       "title": "FittedAirSpringConfig",
       "type": "object"
     },
-    "KConfig": {
-      "description": "k \u6807\u5b9a\u914d\u7f6e\u3002",
-      "properties": {
-        "calibrated": {
-          "additionalProperties": {
-            "additionalProperties": {
-              "$ref": "#/$defs/KCurve"
-            },
-            "type": "object"
-          },
-          "description": "\u5355\u4f4d: -",
-          "propertyNames": {
-            "enum": [
-              "AW0",
-              "AW2",
-              "AW3"
-            ]
-          },
-          "title": "Calibrated",
-          "type": "object"
-        },
-        "fallback": {
-          "additionalProperties": {
-            "enum": [
-              "AW0",
-              "AW2",
-              "AW3"
-            ],
-            "type": "string"
-          },
-          "description": "\u5355\u4f4d: -",
-          "propertyNames": {
-            "enum": [
-              "AW0",
-              "AW2",
-              "AW3"
-            ]
-          },
-          "title": "Fallback",
-          "type": "object"
-        }
-      },
-      "required": [
-        "calibrated"
-      ],
-      "title": "KConfig",
-      "type": "object"
-    },
-    "KCurve": {
-      "description": "k(f) \u66f2\u7ebf\u3002",
-      "properties": {
-        "segments": {
-          "description": "\u5355\u4f4d: -",
-          "items": {
-            "$ref": "#/$defs/KSegment"
-          },
-          "title": "Segments",
-          "type": "array"
-        }
-      },
-      "required": [
-        "segments"
-      ],
-      "title": "KCurve",
-      "type": "object"
-    },
     "KSegment": {
       "description": "k(f) \u5206\u6bb5\u5b9a\u4e49\u3002",
       "properties": {
@@ -419,10 +353,146 @@
       "type": "object"
     },
     "MechanicalParams": {
-      "additionalProperties": true,
+      "additionalProperties": false,
       "description": "\u673a\u68b0\u6a21\u578b\u53c2\u6570\u3002",
-      "properties": {},
+      "properties": {
+        "Fs1": {
+          "description": "\u5355\u4f4d: kN",
+          "title": "Fs1",
+          "type": "number"
+        },
+        "Fs2": {
+          "description": "\u5355\u4f4d: kN",
+          "title": "Fs2",
+          "type": "number"
+        },
+        "Li": {
+          "description": "\u5355\u4f4d: -",
+          "title": "Li",
+          "type": "number"
+        },
+        "Lo": {
+          "description": "\u5355\u4f4d: -",
+          "title": "Lo",
+          "type": "number"
+        },
+        "Sc": {
+          "description": "\u5355\u4f4d: m^2",
+          "title": "Sc",
+          "type": "number"
+        },
+        "cylinder_type": {
+          "const": "tread_cylinder",
+          "description": "\u5355\u4f4d: -",
+          "title": "Cylinder Type",
+          "type": "string"
+        },
+        "eta_i": {
+          "description": "\u5355\u4f4d: -",
+          "title": "Eta I",
+          "type": "number"
+        },
+        "eta_o": {
+          "description": "\u5355\u4f4d: -",
+          "title": "Eta O",
+          "type": "number"
+        },
+        "xi": {
+          "description": "\u5355\u4f4d: -",
+          "title": "Xi",
+          "type": "number"
+        }
+      },
+      "required": [
+        "cylinder_type",
+        "Sc",
+        "xi",
+        "Li",
+        "eta_i",
+        "Lo",
+        "eta_o",
+        "Fs1",
+        "Fs2"
+      ],
       "title": "MechanicalParams",
+      "type": "object"
+    },
+    "PressureCalibrationConfig": {
+      "description": "\u538b\u529b\u6807\u5b9a\u914d\u7f6e\u3002",
+      "properties": {
+        "calibrated": {
+          "additionalProperties": {
+            "additionalProperties": {
+              "$ref": "#/$defs/PressureCalibrationEntry"
+            },
+            "type": "object"
+          },
+          "description": "\u5355\u4f4d: -",
+          "propertyNames": {
+            "enum": [
+              "AW0",
+              "AW2",
+              "AW3"
+            ]
+          },
+          "title": "Calibrated",
+          "type": "object"
+        },
+        "enabled": {
+          "default": true,
+          "description": "\u5355\u4f4d: -",
+          "title": "Enabled",
+          "type": "boolean"
+        },
+        "fallback": {
+          "additionalProperties": {
+            "enum": [
+              "AW0",
+              "AW2",
+              "AW3"
+            ],
+            "type": "string"
+          },
+          "description": "\u5355\u4f4d: -",
+          "propertyNames": {
+            "enum": [
+              "AW0",
+              "AW2",
+              "AW3"
+            ]
+          },
+          "title": "Fallback",
+          "type": "object"
+        }
+      },
+      "required": [
+        "calibrated"
+      ],
+      "title": "PressureCalibrationConfig",
+      "type": "object"
+    },
+    "PressureCalibrationEntry": {
+      "description": "\u5355\u4e2a\u8f7d\u8377\u7ec4\u548c\u5236\u52a8\u6a21\u5f0f\u7684\u538b\u529b\u6807\u5b9a\u53c2\u6570\u3002",
+      "properties": {
+        "BCP0": {
+          "description": "\u5355\u4f4d: kPa",
+          "title": "Bcp0",
+          "type": "number"
+        },
+        "k_segments": {
+          "description": "\u5355\u4f4d: -",
+          "items": {
+            "$ref": "#/$defs/KSegment"
+          },
+          "title": "K Segments",
+          "type": "array"
+        }
+      },
+      "required": [
+        "BCP0",
+        "k_segments"
+      ],
+      "title": "PressureCalibrationEntry",
       "type": "object"
     },
     "RequirementValue": {
@@ -542,10 +612,6 @@
       "title": "Controller Type",
       "type": "string"
     },
-    "k_config": {
-      "$ref": "#/$defs/KConfig",
-      "description": "\u5355\u4f4d: -"
-    },
     "load_groups": {
       "description": "\u5355\u4f4d: -",
       "items": {
@@ -581,6 +647,10 @@
       "description": "\u5355\u4f4d: -",
       "title": "N Springs By Controller",
       "type": "integer"
+    },
+    "pressure_calibration": {
+      "$ref": "#/$defs/PressureCalibrationConfig",
+      "description": "\u5355\u4f4d: -"
     },
     "requirement": {
       "additionalProperties": {
@@ -619,7 +689,7 @@
     "allocation_strategy",
     "vehicle_config",
     "mech_params",
-    "k_config",
+    "pressure_calibration",
     "EB_limit_min"
   ],
   "title": "Inputs",
