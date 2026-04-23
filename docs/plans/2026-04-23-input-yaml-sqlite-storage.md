@@ -1,72 +1,72 @@
-# Input YAML SQLite Storage Implementation Plan
+# input.yaml SQLite 持久化实施计划
 
-> **For Claude:** REQUIRED SUB-SKILL: Use superpowers:executing-plans to implement this plan task-by-task.
+> **给执行 agent 的要求：** 按本计划逐项执行时，必须使用 `superpowers:executing-plans` 技能。
 
-**Goal:** Design and implement lightweight SQL persistence for project metadata, generated input YAML versions, validation results, and future Hermes calculation/report delivery records.
+**目标：** 设计并实现轻量 SQL 持久化，用于保存项目元数据、生成的 input YAML 版本、校验结果，以及未来 Hermes 计算记录和报告邮件发送记录。
 
-**Architecture:** Store UI-only project metadata separately from the brake-calc `input.yaml` contract. Each project can have multiple configuration versions; each version stores deterministic YAML text, normalized UI FormState JSON, validation status, and later calculation/report metadata.
+**架构：** UI-only 项目元数据与 brake-calc 的 `input.yaml` 契约分开存储。一个项目可以有多个配置版本；每个版本保存确定性的 YAML 文本、规范化 UI FormState JSON、校验状态，以及后续计算/报告相关元数据。
 
-**Tech Stack:** SQLite for MVP persistence, accessed through a small backend repository/service layer. Python standard `sqlite3` is sufficient for MVP; introduce SQLAlchemy only if the backend plan explicitly needs richer migrations or ORM behavior.
-
----
-
-## Scope
-
-In scope:
-- SQLite schema design.
-- Project metadata persistence.
-- Config version persistence.
-- Validation result persistence.
-- Import/export audit fields.
-- Future Hermes run/report/email records.
-- Repository/service responsibilities.
-- Migration approach for MVP.
-
-Out of scope:
-- Frontend UI implementation.
-- Backend HTTP route implementation details.
-- Actual brake calculation execution.
-- Actual email sending.
-- Multi-user authentication and permission model.
-
-## Storage Principles
-
-- `input.yaml` remains the contract passed to brake-calc.
-- UI metadata stays outside YAML.
-- Store both YAML text and UI FormState JSON:
-  - YAML supports reproducible backend/Hermes execution.
-  - FormState supports reopening the web UI without reverse-engineering every control from YAML.
-- Keep all records append-friendly. Do not overwrite historical config versions.
-- Use `project_code` as a human lookup key, but keep numeric UUID/string `id` values as primary keys.
-- Store timestamps in UTC ISO-8601 text.
-- SQLite is the MVP store; schema should not assume local-only deployment.
+**技术栈：** MVP 使用 SQLite。后端通过一个小型 repository/service 层访问数据库。MVP 阶段 Python 标准库 `sqlite3` 足够；只有在后端计划明确需要更复杂 migration 或 ORM 时，才考虑 SQLAlchemy。
 
 ---
 
-## Proposed Database File
+## 范围
 
-Recommended development path:
+包含：
+- SQLite schema 设计。
+- 项目元数据持久化。
+- 配置版本持久化。
+- 校验结果持久化。
+- 导入/导出审计字段。
+- 未来 Hermes run/report/email 记录。
+- repository/service 职责。
+- MVP migration 方式。
+
+不包含：
+- 前端 UI 实现。
+- 后端 HTTP route 细节。
+- 实际制动计算执行。
+- 实际邮件发送。
+- 多用户认证和权限模型。
+
+## 存储原则
+
+- `input.yaml` 仍然是传给 brake-calc 的计算契约。
+- UI 元数据不写入 YAML。
+- 同时保存 YAML 文本和 UI FormState JSON：
+  - YAML 用于后端/Hermes 可复现计算。
+  - FormState 用于重新打开 Web UI 并编辑配置，避免完全从 YAML 反推控件状态。
+- 配置版本尽量 append-only，不覆盖历史版本。
+- `project_code` 作为人工检索字段；主键仍使用 UUID/string `id`。
+- 时间戳统一保存 UTC ISO-8601 文本。
+- SQLite 是 MVP 存储，但 schema 不应假设只能本地使用。
+
+---
+
+## 数据库文件建议
+
+开发环境推荐路径：
 
 ```text
 data/brake_calc.sqlite3
 ```
 
-Open decision:
-- `data/` is a new top-level directory and requires approval under repository rules.
-- Alternative: backend config points to an external path outside the repo in deployment.
+待确认：
+- `data/` 是新顶层目录，按仓库规则需要批准。
+- 另一个做法是后端通过配置指向仓库外部路径。
 
-Recommended approach:
-- In development, use an environment variable `BRAKE_CALC_DB_PATH`.
-- If unset, default to `out/brake_calc.sqlite3` to avoid adding a new top-level directory.
-- In cloud deployment, set `BRAKE_CALC_DB_PATH` to a persistent volume path.
+推荐做法：
+- 开发环境使用环境变量 `BRAKE_CALC_DB_PATH`。
+- 如果未设置，默认使用 `out/brake_calc.sqlite3`，避免新增顶层目录。
+- 云端部署时，将 `BRAKE_CALC_DB_PATH` 指向持久化卷路径。
 
 ---
 
-## Tables
+## 数据表
 
 ### `projects`
 
-Stores searchable project metadata.
+保存可检索项目元数据。
 
 ```sql
 CREATE TABLE projects (
@@ -81,21 +81,21 @@ CREATE TABLE projects (
 );
 ```
 
-Indexes:
+索引：
 
 ```sql
 CREATE INDEX idx_projects_project_name ON projects(project_name);
 CREATE INDEX idx_projects_email ON projects(email);
 ```
 
-Notes:
-- `project_code` corresponds to TKQ in the prototype.
-- `email` is not required for local YAML generation, but needed for future cloud report delivery.
-- `archived_at` supports soft delete.
+说明：
+- `project_code` 对应 UI 原型里的 TKQ。
+- `email` 本地生成 YAML 时不是必需，但后续云端发送报告需要。
+- `archived_at` 支持软删除。
 
 ### `input_configs`
 
-Stores generated YAML versions.
+保存生成的 YAML 版本。
 
 ```sql
 CREATE TABLE input_configs (
@@ -117,31 +117,31 @@ CREATE TABLE input_configs (
 );
 ```
 
-Allowed `validation_status` values:
+`validation_status` 可选值：
 - `not_validated`
 - `valid`
 - `invalid`
 
-Allowed `source` values:
+`source` 可选值：
 - `created_in_ui`
 - `imported_yaml`
 - `duplicated`
 
-Indexes:
+索引：
 
 ```sql
 CREATE INDEX idx_input_configs_project_id ON input_configs(project_id);
 CREATE INDEX idx_input_configs_yaml_sha256 ON input_configs(yaml_sha256);
 ```
 
-Notes:
-- Store backend S1 validation errors as JSON text.
-- `version` increments per project.
-- `yaml_sha256` supports deduplication and reproducibility checks.
+说明：
+- 后端 S1 校验错误以 JSON 文本保存。
+- `version` 按项目递增。
+- `yaml_sha256` 用于去重和复现校验。
 
 ### `calculation_runs`
 
-Stores future Hermes/backend calculation executions.
+保存未来 Hermes/backend 的计算执行记录。
 
 ```sql
 CREATE TABLE calculation_runs (
@@ -162,19 +162,19 @@ CREATE TABLE calculation_runs (
 );
 ```
 
-Allowed `status` values:
+`status` 可选值：
 - `queued`
 - `running`
 - `succeeded`
 - `failed`
 - `cancelled`
 
-Allowed `triggered_by` values:
+`triggered_by` 可选值：
 - `web_ui`
 - `hermes`
 - `api`
 
-Indexes:
+索引：
 
 ```sql
 CREATE INDEX idx_calculation_runs_project_id ON calculation_runs(project_id);
@@ -182,13 +182,13 @@ CREATE INDEX idx_calculation_runs_input_config_id ON calculation_runs(input_conf
 CREATE INDEX idx_calculation_runs_status ON calculation_runs(status);
 ```
 
-Notes:
-- `report_json` can store structured report output for MVP.
-- `markdown_report_path` can point to a generated Markdown artifact if file storage is used.
+说明：
+- MVP 可以把结构化报告放到 `report_json`。
+- 如果报告落盘，`markdown_report_path` 保存 Markdown 文件路径。
 
 ### `email_deliveries`
 
-Stores future report email delivery attempts.
+保存未来报告邮件发送尝试。
 
 ```sql
 CREATE TABLE email_deliveries (
@@ -204,13 +204,13 @@ CREATE TABLE email_deliveries (
 );
 ```
 
-Allowed `status` values:
+`status` 可选值：
 - `pending`
 - `sent`
 - `failed`
 - `skipped`
 
-Indexes:
+索引：
 
 ```sql
 CREATE INDEX idx_email_deliveries_run_id ON email_deliveries(calculation_run_id);
@@ -219,46 +219,46 @@ CREATE INDEX idx_email_deliveries_status ON email_deliveries(status);
 
 ---
 
-## Data Flow
+## 数据流
 
-### Save New Config
+### 保存新配置
 
 ```text
 Frontend FormState
-  -> backend serializes or receives YAML
-  -> backend validates through S1/Inputs
-  -> projects upsert by project_code
-  -> input_configs insert version N+1
-  -> return project_id + input_config_id + version
+  -> 后端序列化，或接收前端传来的 YAML
+  -> 后端通过 S1/Inputs 校验
+  -> 按 project_code upsert projects
+  -> input_configs 插入 version N+1
+  -> 返回 project_id + input_config_id + version
 ```
 
-### Import Existing YAML
+### 导入已有 YAML
 
 ```text
-Uploaded YAML
-  -> backend parses YAML
-  -> backend validates through S1/Inputs
-  -> backend derives FormState where possible
-  -> UI asks user for project metadata if missing
-  -> input_configs insert with source=imported_yaml
+上传 YAML
+  -> 后端解析 YAML
+  -> 后端通过 S1/Inputs 校验
+  -> 后端尽可能派生 FormState
+  -> 如果缺少项目元数据，UI 要求用户补填
+  -> input_configs 以 source=imported_yaml 插入
 ```
 
-### Hermes Calculation
+### Hermes 计算
 
 ```text
-Hermes receives project_code or input_config_id
-  -> backend loads input_configs.yaml_text
-  -> backend validates current YAML
-  -> backend runs brake_calc.workflow.runner
-  -> calculation_runs updated
-  -> report/email flow reads projects.email
+Hermes 接收 project_code 或 input_config_id
+  -> 后端读取 input_configs.yaml_text
+  -> 后端校验当前 YAML
+  -> 后端运行 brake_calc.workflow.runner
+  -> 更新 calculation_runs
+  -> 报告/邮件流程读取 projects.email
 ```
 
 ---
 
-## Repository Layer
+## Repository 层
 
-Recommended backend files for implementation:
+建议后端文件：
 
 ```text
 src/brake_calc/storage/
@@ -269,19 +269,19 @@ src/brake_calc/storage/
   models.py
 ```
 
-Responsibilities:
+职责：
 
 - `db.py`
-  - Resolve database path.
-  - Open SQLite connections.
-  - Configure `PRAGMA foreign_keys = ON`.
+  - 解析数据库路径。
+  - 打开 SQLite connection。
+  - 配置 `PRAGMA foreign_keys = ON`。
 
 - `migrations.py`
-  - Create tables if missing.
-  - Track schema version.
+  - 创建缺失表。
+  - 记录 schema version。
 
 - `models.py`
-  - Define small dataclasses or typed dicts for project/config/run records.
+  - 定义项目、配置、run 记录的小型 dataclass 或 typed dict。
 
 - `repositories.py`
   - `ProjectRepository`
@@ -289,13 +289,13 @@ Responsibilities:
   - `CalculationRunRepository`
   - `EmailDeliveryRepository`
 
-Do not let route handlers write raw SQL directly.
+不要让 route handler 直接写 raw SQL。
 
 ---
 
-## Migration Strategy
+## Migration 策略
 
-MVP can use a simple schema metadata table:
+MVP 可以使用一个简单的 schema 元数据表：
 
 ```sql
 CREATE TABLE schema_migrations (
@@ -304,228 +304,226 @@ CREATE TABLE schema_migrations (
 );
 ```
 
-Migration files are optional for MVP. A Python function can apply ordered SQL statements.
+MVP 不一定需要独立 migration 文件。可以用一个 Python 函数按顺序执行 SQL。
 
-Recommended first migration:
+第一版 migration 建议命名：
 
 ```text
 001_initial_storage_schema
 ```
 
-Future migration candidates:
-- Add user accounts.
-- Add organization/project ownership.
-- Add artifact storage records.
-- Add cloud email provider metadata.
-- Move from SQLite to Postgres if concurrency or deployment requires it.
+未来 migration：
+- 增加用户账号。
+- 增加组织/项目归属。
+- 增加 artifact 存储记录。
+- 增加云端邮件 provider 元数据。
+- 如果并发或部署需要，从 SQLite 迁移到 Postgres。
 
 ---
 
-## Implementation Tasks
+## 实施任务
 
-### Task 1: Confirm Storage Location and Library
+### 任务 1：确认数据库路径和访问库
 
-**Files:**
-- Read: `AGENTS.md`
-- No code changes yet
+**文件：**
+- 读取：`AGENTS.md`
+- 暂不改代码
 
-**Step 1: Confirm SQLite path behavior**
+**步骤 1：确认 SQLite 路径**
 
-Choose:
-- default `out/brake_calc.sqlite3`
-- or approved new `data/brake_calc.sqlite3`
+选择：
+- 默认 `out/brake_calc.sqlite3`
+- 或批准新增 `data/brake_calc.sqlite3`
 
-**Step 2: Confirm DB access library**
+**步骤 2：确认数据库访问库**
 
-Choose:
-- standard `sqlite3` for MVP
-- SQLAlchemy if a migration/ORM dependency is approved
+选择：
+- MVP 使用标准库 `sqlite3`
+- 如果批准 migration/ORM 依赖，则使用 SQLAlchemy
 
-**Expected:** explicit decision before code changes.
+预期：代码改动前要有明确决定。
 
-### Task 2: Add Storage Package Skeleton
+### 任务 2：添加 storage package 骨架
 
-**Files:**
-- Create: `src/brake_calc/storage/__init__.py`
-- Create: `src/brake_calc/storage/db.py`
-- Create: `src/brake_calc/storage/migrations.py`
-- Test: `tests/unit/storage/test_migrations.py`
+**文件：**
+- 创建：`src/brake_calc/storage/__init__.py`
+- 创建：`src/brake_calc/storage/db.py`
+- 创建：`src/brake_calc/storage/migrations.py`
+- 测试：`tests/unit/storage/test_migrations.py`
 
-**Step 1: Write failing migration test**
+**步骤 1：先写失败的 migration 测试**
 
-Test that a new database can be initialized and contains the expected tables.
+测试新数据库能初始化，并包含预期表。
 
-**Step 2: Implement connection helper**
+**步骤 2：实现 connection helper**
 
-Open SQLite connection and enable foreign keys.
+打开 SQLite connection，并启用 foreign keys。
 
-**Step 3: Implement initial migration**
+**步骤 3：实现初始 migration**
 
-Create `projects`, `input_configs`, `calculation_runs`, `email_deliveries`, and `schema_migrations`.
+创建 `projects`、`input_configs`、`calculation_runs`、`email_deliveries`、`schema_migrations`。
 
-**Step 4: Run tests**
-
-Run:
+**步骤 4：运行测试**
 
 ```bash
 uv run pytest tests/unit/storage/test_migrations.py -v
 ```
 
-**Step 5: Commit**
+**步骤 5：提交**
 
 ```bash
 git commit -m "feat(storage): add sqlite schema migrations"
 ```
 
-### Task 3: Implement Project Repository
+### 任务 3：实现 Project Repository
 
-**Files:**
-- Modify: `src/brake_calc/storage/repositories.py`
-- Test: `tests/unit/storage/test_project_repository.py`
+**文件：**
+- 修改：`src/brake_calc/storage/repositories.py`
+- 测试：`tests/unit/storage/test_project_repository.py`
 
-**Step 1: Write repository tests**
+**步骤 1：写 repository 测试**
 
-Cover:
-- create project
-- get by id
-- get by project_code
-- update metadata
-- soft archive
+覆盖：
+- 创建项目
+- 按 id 获取
+- 按 project_code 获取
+- 更新元数据
+- 软归档
 
-**Step 2: Implement repository methods**
+**步骤 2：实现 repository 方法**
 
-Use parameterized SQL only.
+只使用参数化 SQL。
 
-**Step 3: Run tests**
+**步骤 3：运行测试**
 
 ```bash
 uv run pytest tests/unit/storage/test_project_repository.py -v
 ```
 
-**Step 4: Commit**
+**步骤 4：提交**
 
 ```bash
 git commit -m "feat(storage): persist project metadata"
 ```
 
-### Task 4: Implement Input Config Repository
+### 任务 4：实现 Input Config Repository
 
-**Files:**
-- Modify: `src/brake_calc/storage/repositories.py`
-- Test: `tests/unit/storage/test_input_config_repository.py`
+**文件：**
+- 修改：`src/brake_calc/storage/repositories.py`
+- 测试：`tests/unit/storage/test_input_config_repository.py`
 
-**Step 1: Write repository tests**
+**步骤 1：写 repository 测试**
 
-Cover:
-- insert first version
-- insert next version
-- list configs for project
-- fetch latest config
-- fetch by id
-- store validation errors JSON
+覆盖：
+- 插入第一个版本
+- 插入下一个版本
+- 列出某项目配置
+- 获取最新配置
+- 按 id 获取
+- 保存 validation errors JSON
 
-**Step 2: Implement YAML hash helper**
+**步骤 2：实现 YAML hash helper**
 
-Compute SHA-256 from UTF-8 YAML text.
+对 UTF-8 YAML 文本计算 SHA-256。
 
-**Step 3: Implement version increment**
+**步骤 3：实现版本递增**
 
-Version is `max(version for project_id) + 1`.
+版本号 = 当前项目最大 version + 1。
 
-**Step 4: Run tests**
+**步骤 4：运行测试**
 
 ```bash
 uv run pytest tests/unit/storage/test_input_config_repository.py -v
 ```
 
-**Step 5: Commit**
+**步骤 5：提交**
 
 ```bash
 git commit -m "feat(storage): persist input yaml versions"
 ```
 
-### Task 5: Implement Calculation Run Repository
+### 任务 5：实现 Calculation Run Repository
 
-**Files:**
-- Modify: `src/brake_calc/storage/repositories.py`
-- Test: `tests/unit/storage/test_calculation_run_repository.py`
+**文件：**
+- 修改：`src/brake_calc/storage/repositories.py`
+- 测试：`tests/unit/storage/test_calculation_run_repository.py`
 
-**Step 1: Write repository tests**
+**步骤 1：写 repository 测试**
 
-Cover:
-- create queued run
-- mark running
-- mark succeeded with report JSON
-- mark failed with error JSON
+覆盖：
+- 创建 queued run
+- 标记 running
+- 标记 succeeded 并保存 report JSON
+- 标记 failed 并保存 error JSON
 
-**Step 2: Implement methods**
+**步骤 2：实现方法**
 
-Keep methods small and explicit.
+方法保持小而明确。
 
-**Step 3: Run tests**
+**步骤 3：运行测试**
 
 ```bash
 uv run pytest tests/unit/storage/test_calculation_run_repository.py -v
 ```
 
-**Step 4: Commit**
+**步骤 4：提交**
 
 ```bash
 git commit -m "feat(storage): track calculation runs"
 ```
 
-### Task 6: Implement Email Delivery Repository
+### 任务 6：实现 Email Delivery Repository
 
-**Files:**
-- Modify: `src/brake_calc/storage/repositories.py`
-- Test: `tests/unit/storage/test_email_delivery_repository.py`
+**文件：**
+- 修改：`src/brake_calc/storage/repositories.py`
+- 测试：`tests/unit/storage/test_email_delivery_repository.py`
 
-**Step 1: Write repository tests**
+**步骤 1：写 repository 测试**
 
-Cover:
-- create pending delivery
-- mark sent
-- mark failed
-- list deliveries for run
+覆盖：
+- 创建 pending delivery
+- 标记 sent
+- 标记 failed
+- 列出某 run 的 delivery
 
-**Step 2: Implement methods**
+**步骤 2：实现方法**
 
-Store provider response id and errors as nullable fields.
+保存 provider response id 和错误信息，字段可为空。
 
-**Step 3: Run tests**
+**步骤 3：运行测试**
 
 ```bash
 uv run pytest tests/unit/storage/test_email_delivery_repository.py -v
 ```
 
-**Step 4: Commit**
+**步骤 4：提交**
 
 ```bash
 git commit -m "feat(storage): track report email delivery"
 ```
 
-### Task 7: Add Storage Integration Tests
+### 任务 7：添加 storage 集成测试
 
-**Files:**
-- Test: `tests/integration/test_storage_config_lifecycle.py`
+**文件：**
+- 测试：`tests/integration/test_storage_config_lifecycle.py`
 
-**Step 1: Write lifecycle test**
+**步骤 1：写 lifecycle 测试**
 
-Flow:
-- create project
-- insert config version 1
-- insert config version 2
-- load latest
-- create calculation run
-- create email delivery
+流程：
+- 创建项目
+- 插入配置版本 1
+- 插入配置版本 2
+- 读取最新配置
+- 创建 calculation run
+- 创建 email delivery
 
-**Step 2: Run integration test**
+**步骤 2：运行集成测试**
 
 ```bash
 uv run pytest tests/integration/test_storage_config_lifecycle.py -v
 ```
 
-**Step 3: Commit**
+**步骤 3：提交**
 
 ```bash
 git commit -m "test(storage): cover config lifecycle"
@@ -533,31 +531,31 @@ git commit -m "test(storage): cover config lifecycle"
 
 ---
 
-## Acceptance Criteria
+## 验收标准
 
-- SQLite schema can be initialized on an empty database.
-- Project metadata stores project name, project code/TKQ, email, note, timestamps.
-- Each project supports multiple immutable config versions.
-- YAML text and FormState JSON are stored together.
-- Validation status and errors can be stored and retrieved.
-- Future Hermes calculation runs can be tracked by config id.
-- Future email delivery attempts can be tracked by run id.
-- Tests use temporary database files and do not write to the developer's real database.
+- 空数据库可以初始化出 SQLite schema。
+- 项目元数据可以保存项目名称、项目代号/TKQ、邮箱、备注、时间戳。
+- 每个项目支持多个不可变配置版本。
+- YAML 文本和 FormState JSON 一起保存。
+- 校验状态和错误可以保存和读取。
+- 未来 Hermes calculation run 可以按 config id 跟踪。
+- 未来邮件发送尝试可以按 run id 跟踪。
+- 测试使用临时数据库文件，不写入开发者真实数据库。
 
-## Open Questions Before Implementation
+## 实施前待确认
 
-1. Should the MVP default database path be `out/brake_calc.sqlite3`, or should a new `data/` directory be approved?
-2. Should we use Python standard `sqlite3`, or introduce SQLAlchemy for structured migrations?
-3. Should `project_code` be globally unique, or can two projects share a TKQ under different users later?
-4. Should `email` be required before calculation/report sending, or optional until the user enables email delivery?
-5. Should generated reports be stored as DB text, filesystem artifacts, or both?
+1. MVP 默认数据库路径用 `out/brake_calc.sqlite3`，还是批准新增 `data/` 目录？
+2. 使用 Python 标准库 `sqlite3`，还是引入 SQLAlchemy？
+3. `project_code` 是否全局唯一？未来多用户情况下是否允许不同用户使用同一个 TKQ？
+4. 邮箱是在计算/发送报告前必填，还是用户启用邮件发送时才必填？
+5. 生成的报告存 DB 文本、文件系统 artifact，还是两者都存？
 
-## Suggested Next Plan
+## 下一份计划
 
-After this storage plan is approved, implement or refine:
+持久化计划确认后，继续看：
 
 ```text
 docs/plans/2026-04-23-input-yaml-backend-api.md
 ```
 
-That plan should define web-facing APIs, Hermes-facing tool boundaries, validation, YAML import/export, calculation execution, and report email flow.
+该计划定义 Web API、Hermes tool 边界、校验、YAML 导入导出、计算执行和报告邮件流程。

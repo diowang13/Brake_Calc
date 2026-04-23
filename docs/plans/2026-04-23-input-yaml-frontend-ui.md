@@ -1,87 +1,87 @@
-# Input YAML Frontend UI Implementation Plan
+# input.yaml 前端 UI 实施计划
 
-> **For Claude:** REQUIRED SUB-SKILL: Use superpowers:executing-plans to implement this plan task-by-task.
+> **给执行 agent 的要求：** 按本计划逐项执行时，必须使用 `superpowers:executing-plans` 技能。
 
-**Goal:** Build a Chinese web configuration UI that lets operators generate a valid `input.yaml` for the brake-calc `Inputs` contract without manually editing YAML.
+**目标：** 做一个中文网页配置界面，让操作人员不用手写 YAML，也能生成符合 brake-calc 当前 `Inputs` 契约的 `input.yaml`。
 
-**Architecture:** The UI is a configuration workbench with left-side step navigation, center form panels, and a right-side validation/YAML preview rail. The frontend owns user-friendly form state and serializes it into the backend `Inputs` YAML shape; project metadata such as project name, TKQ/project code, and email stays outside `input.yaml` and is passed to the persistence layer later.
+**架构：** 前端采用“配置工作台”形态：左侧步骤导航，中间表单区，右侧固定显示 S1 校验结果和 YAML 预览。前端维护一套面向用户的 FormState，再序列化成后端 `Inputs` 需要的 YAML 结构。项目名称、TKQ/项目代号、邮箱等元数据不写入 `input.yaml`，后续交给持久化层保存。
 
-**Tech Stack:** Recommended frontend stack is React + TypeScript + Vite, with a typed FormState model, YAML serialization, and backend-assisted validation through the existing S1/`Inputs` validation flow. Exact frontend package location requires explicit approval because the current repository rules discourage adding new top-level directories without confirmation.
+**技术栈：** 推荐 React + TypeScript + Vite。前端需要类型化 FormState、YAML 序列化、以及调用后端 S1/`Inputs` 校验。当前仓库还没有前端目录，且 `AGENTS.md` 不建议擅自新增顶层目录，所以实现前要先确认前端放置位置。
 
 ---
 
-## Scope
+## 范围
 
-This plan covers only the frontend UI and interaction design for generating `input.yaml`.
+本计划只覆盖“生成 `input.yaml` 的前端 UI 和交互设计”。
 
-In scope:
-- Chinese form workflow for all current YAML fields in `src/brake_calc/contracts/inputs.py`.
-- Project metadata form fields for future SQLite persistence.
-- FormState design and YAML serialization rules.
-- Read-only YAML preview.
-- S1 validation result display area.
-- Import existing YAML into the UI.
-- Export YAML filename behavior.
+包含：
+- 当前 `src/brake_calc/contracts/inputs.py` 中所有 YAML 字段的中文表单。
+- 项目元数据字段，为后续 SQLite 持久化做准备。
+- FormState 设计和 YAML 序列化规则。
+- 只读 YAML 预览。
+- S1 校验结果展示区域。
+- 导入已有 YAML。
+- 导出 YAML 文件名规则。
 
-Out of scope for this plan:
-- SQLite schema and persistence implementation.
-- Backend API implementation.
-- Running the brake calculation workflow.
-- Email delivery.
-- Car-control backend support.
-- Parking brake force check.
+不包含：
+- SQLite 表结构和持久化实现。
+- 后端 API 实现。
+- 运行制动计算 workflow。
+- 邮件发送。
+- 车控后端能力。
+- 停放制动力校核。
 
-Those should be handled by separate plans:
+这些内容分别放到后续计划：
 - `docs/plans/2026-04-23-input-yaml-sqlite-storage.md`
 - `docs/plans/2026-04-23-input-yaml-backend-api.md`
 
-## Confirmed Product Decisions
+## 已确认的产品决策
 
-- Use design option C: left navigation + center form + right validation/YAML preview.
-- UI language is Chinese; generated YAML keys remain English.
-- Project name, TKQ/project code, and email are not written into `input.yaml`.
-- The full product target is cloud deployment: an externally accessible web UI generates YAML, stores project/config records in a dedicated SQL database, and lets Hermes call backend brake-calc functions as a skill/tool.
-- The stored email address is used later by cloud automation to send calculation reports after Hermes/backend execution.
-- MVP supports only bogie control in generated YAML.
-- The UI includes a control-section count field. For bogie control, generated bogie count is `control_section_count * 2`.
-- Example: control-section count `3` generates `bogie1` through `bogie6` in the UI and serializes six `vehicle_config.bogies` rows.
-- Future car control is visible as a disabled/reserved mode, but not serialized until backend support exists.
-- Load groups AW0/AW2/AW3 are fixed and all three static weight values are required.
-- Calibration UI is disabled when `pressure_calibration.enabled = false`.
-- AW2 calibration is hidden by default and can be added later through calibration controls.
-- Powered/trailer bogie weight must be shown in the load section, separately for powered bogie and trailer bogie.
-- Static friction coefficient may be shown as a reserved UI field for future parking brake validation, but it must not be written to current YAML.
+- 采用方案 C：左侧步骤导航 + 中间表单 + 右侧校验/YAML 预览。
+- UI 使用中文，生成的 YAML key 仍使用英文。
+- 项目名称、TKQ/项目代号、邮箱不写入 `input.yaml`。
+- 最终产品目标是云端部署：外网可访问的 Web UI 生成 YAML，将项目和配置记录存入专门 SQL 数据库，Hermes 作为 skill/tool 调用后端 brake-calc 计算能力。
+- 邮箱后续用于云端自动发送计算报告。
+- MVP 生成的 YAML 只支持架控。
+- UI 中有“控制网段编组数量”字段。架控时，生成转向架数量 = `控制网段编组数量 * 2`。
+- 例如控制网段编组数量为 `3`，界面生成 `bogie1` 到 `bogie6`，YAML 序列化为 6 条 `vehicle_config.bogies`。
+- 车控作为未来能力在界面上预留/禁用，后端支持前不序列化。
+- AW0/AW2/AW3 固定存在，三种静态称重数据都必须填写。
+- `pressure_calibration.enabled = false` 时，标定界面禁用，不允许填写。
+- AW2 标定默认隐藏，后续可通过标定区域的 `+` 增加。
+- 载荷配置中必须展示动架和拖架各自的转向架自重。
+- 静摩擦系数可作为后续停放制动力校核预留字段展示，但当前不写入 YAML。
 
-## Target Cloud Workflow
+## 目标云端工作流
 
-The frontend should be designed as the operator-facing entry point for a future cloud workflow:
+前端是后续云端流程中面向操作人员的入口：
 
 ```text
-Operator Web UI
-  -> generate and validate input.yaml
-  -> save project metadata + YAML/config version to SQL
-  -> Hermes agent/tool reads saved config or receives config id
-  -> backend imports brake_calc.workflow.runner and runs calculation
-  -> backend stores report/result artifacts
-  -> cloud automation sends report to stored email
+操作人员 Web UI
+  -> 生成并校验 input.yaml
+  -> 将项目元数据 + YAML/配置版本保存到 SQL
+  -> Hermes agent/tool 读取已保存配置，或接收 config id
+  -> 后端 import brake_calc.workflow.runner 并运行计算
+  -> 后端保存报告/结果
+  -> 云端自动化按已保存邮箱发送报告
 ```
 
-Frontend implications:
-- Keep project metadata separate from `input.yaml`.
-- Treat `projectCode` as a durable lookup key and export filename prefix.
-- Keep generated YAML deterministic so Hermes/backend runs are reproducible.
-- Preserve enough UI state to reopen and edit a saved configuration later.
-- Do not make the browser depend on local CLI commands.
+这对前端的要求：
+- 项目元数据和 `input.yaml` 必须分开。
+- `projectCode`/TKQ 是长期检索字段，也是导出文件名前缀。
+- YAML 生成必须稳定、可复现，方便 Hermes/backend 重跑。
+- 保存足够的 UI 状态，后续能重新打开并编辑配置。
+- 浏览器端不能依赖本地 CLI 命令。
 
-## Proposed Frontend File Placement
+## 前端文件位置建议
 
-The repository currently has no frontend app. Because `AGENTS.md` says agents must not casually add new top-level directories, implementation should begin by confirming one of these locations:
+当前仓库还没有前端 app。因为 `AGENTS.md` 说不要擅自新增顶层目录，实施前要确认以下位置之一：
 
-- Preferred, if approved: `frontend/`
-- Alternative inside existing Python package boundary: `src/brake_calc/ui/`
-- Alternative docs/prototype-only location: `docs/ui-prototype/`
+- 推荐，需明确批准：`frontend/`
+- 放在 Python package 内：`src/brake_calc/ui/`
+- 只做文档/静态原型：`docs/ui-prototype/`
 
-Recommended implementation location after approval:
+批准后推荐结构：
 
 ```text
 frontend/
@@ -100,15 +100,15 @@ frontend/
     styles/
 ```
 
-Do not create this structure until the implementation phase and location are approved.
+实施前不要创建这些文件。
 
 ---
 
-## FormState Model
+## FormState 模型
 
-The frontend should not store form data directly as YAML text. It should use a typed FormState and serialize to the backend `Inputs` shape.
+前端不应该直接把表单数据存成 YAML 字符串，而是维护类型化 FormState，再序列化到后端 `Inputs` 结构。
 
-Suggested top-level FormState:
+建议顶层结构：
 
 ```ts
 type InputYamlFormState = {
@@ -122,7 +122,7 @@ type InputYamlFormState = {
 };
 ```
 
-Project metadata, not written to YAML:
+项目元数据，不写入 YAML：
 
 ```ts
 type ProjectMetadataState = {
@@ -133,7 +133,7 @@ type ProjectMetadataState = {
 };
 ```
 
-YAML-producing sections:
+会生成 YAML 的部分示例：
 
 ```ts
 type RunConfigState = {
@@ -155,15 +155,15 @@ type VehicleControllerState = {
 };
 ```
 
-The exact TypeScript should be written during implementation. This plan defines the shape and mapping only.
+具体 TypeScript 类型在实施时写，本计划只固定形状和映射规则。
 
 ---
 
-## UI Layout
+## 页面布局
 
-### Global Workbench Layout
+### 全局工作台
 
-Left rail:
+左侧导航：
 - 项目基础信息
 - 运行基础配置
 - 制动需求配置
@@ -173,138 +173,130 @@ Left rail:
 - 试验标定配置
 - 校验与导出
 
-Center area:
-- Active step form.
-- Section-level headings.
-- Field-level unit labels.
-- Hover tooltips for each field.
+中间区域：
+- 当前步骤表单。
+- 区域标题。
+- 字段单位。
+- 字段 hover 提示词。
 
-Right rail:
+右侧区域：
 - S1 校验结果
 - YAML 预览
-- Import/export actions
+- 导入/导出操作
 
-Right rail behavior:
-- YAML preview is read-only in MVP.
-- S1 validation messages are shown in a dedicated box, matching the user's prototype intent.
-- Clicking an error should focus the related field when mapping is available.
+右侧行为：
+- YAML 预览 MVP 阶段只读。
+- S1 校验错误显示在独立提示框里，对应你的原型设想。
+- 如果错误能映射到字段，点击错误应定位到对应输入项。
 
 ---
 
-## Page 1: 项目基础信息
+## 页面 1：项目基础信息
 
-Purpose: collect future persistence and cloud email metadata.
+用途：收集后续持久化和云端邮件发送需要的元数据。
 
-Fields:
-
-| UI Field | Storage Target | YAML? | Control |
+| UI 字段 | 保存目标 | 写入 YAML | 控件 |
 | --- | --- | --- | --- |
-| 项目名称 | SQLite project metadata | No | Text input |
-| 项目代号 / TKQ | SQLite project metadata, export filename | No | Text input |
-| 邮箱 | SQLite project metadata, future email delivery | No | Email input |
-| 备注 | SQLite project metadata | No | Multi-line text |
+| 项目名称 | SQLite 项目元数据 | 否 | 文本框 |
+| 项目代号 / TKQ | SQLite 项目元数据、导出文件名 | 否 | 文本框 |
+| 邮箱 | SQLite 项目元数据、后续邮件发送 | 否 | 邮箱输入 |
+| 备注 | SQLite 项目元数据 | 否 | 多行文本 |
 
-Validation:
-- 项目名称 required for save.
-- 项目代号 required for save/export filename.
-- 邮箱 optional for MVP, but if provided must match email format.
+校验：
+- 保存时项目名称必填。
+- 保存/导出时项目代号必填。
+- 邮箱 MVP 可选；如果填写，必须符合邮箱格式。
 
-Tooltip examples:
-- 项目代号 / TKQ: “用于检索配置和生成导出文件名，不写入 input.yaml。”
-- 邮箱: “后续云端计算完成后发送报告使用，不写入 input.yaml。”
-
----
-
-## Page 2: 运行基础配置
-
-Purpose: configure top-level run inputs and global strategy.
-
-Fields:
-
-| UI Field | YAML Field | Control |
-| --- | --- | --- |
-| 最高速度 | `v0` | Numeric input, unit `km/h` |
-| 速度向量 | `V_list` | Add/remove numeric chips, unit `km/h` |
-| 载荷组 | `load_groups` | Fixed checked values AW0/AW2/AW3 |
-| 常用制动力分配方式 | `allocation_strategy` | Select: 等磨耗 / 等黏着 |
-| 紧急制动最小压力 | `EB_limit_min` | Numeric input, unit `kPa` |
-
-Rules:
-- `load_groups` is always `["AW0", "AW2", "AW3"]`.
-- UI copy must explain EB always uses equal adhesion regardless of `allocation_strategy`.
-- `V_list` may be empty in the UI; empty serializes as omitted or `null` based on backend preference.
-
-Validation:
-- `v0 > 0`.
-- Each `V_list` item `> 0`.
-- `EB_limit_min >= 0`.
+提示词示例：
+- 项目代号 / TKQ：“用于检索配置和生成导出文件名，不写入 input.yaml。”
+- 邮箱：“后续云端计算完成后发送报告使用，不写入 input.yaml。”
 
 ---
 
-## Page 3: 制动需求配置
+## 页面 2：运行基础配置
 
-Purpose: define FSB/EB and optional ratio-of-FSB brake types.
+用途：配置顶层运行参数和全局分配策略。
 
-Fields:
-
-| UI Field | YAML Field | Control |
+| UI 字段 | YAML 字段 | 控件 |
 | --- | --- | --- |
-| FSB 制动类型 | `brake_types[].name/source` | Locked row |
-| EB 制动类型 | `brake_types[].name/source` | Locked row |
-| 自定义制动类型 | `brake_types[]` | Add/remove rows |
-| 自定义类型名称 | `brake_types[].name` | Text input |
-| FSB 百分比 | `brake_types[].ratio` | Percent numeric input |
-| FSB 技术条件 | `requirement.FSB` | Fixed mode `a_mean`, numeric input `m/s^2` |
-| EB 技术条件 | `requirement.EB` | Radio `a_mean` / `distance`, numeric input |
-| FSB 空走时间 | `response_time.FSB.t1` | Numeric input, unit `s` |
-| FSB 冲击率 | `response_time.FSB.impulse_rate` | Numeric input, unit `m/s^3` |
-| EB 空走时间 | `response_time.EB.t1` | Numeric input, unit `s` |
-| EB 建立时间 | `response_time.EB.t2` | Numeric input, unit `s` |
+| 最高速度 | `v0` | 数字输入，单位 `km/h` |
+| 速度向量 | `V_list` | 可增删数字标签，单位 `km/h` |
+| 载荷组 | `load_groups` | 固定勾选 AW0/AW2/AW3 |
+| 常用制动力分配方式 | `allocation_strategy` | 下拉：等磨耗 / 等黏着 |
+| 紧急制动最小压力 | `EB_limit_min` | 数字输入，单位 `kPa` |
 
-Mapping:
-- UI percent `50` serializes as `ratio: 0.5`.
-- FSB serializes as `{name: "FSB", source: "kinematic"}`.
-- EB serializes as `{name: "EB", source: "kinematic"}`.
-- Custom rows serialize as `{name, source: "ratio_of_FSB", ratio}`.
+规则：
+- `load_groups` 始终为 `["AW0", "AW2", "AW3"]`。
+- 界面要说明：EB 总是强制等黏着，不受 `allocation_strategy` 影响。
+- `V_list` 可以为空；为空时序列化为省略或 `null`，具体以后端偏好为准。
 
-Validation:
-- FSB and EB cannot be deleted.
-- Custom names cannot duplicate FSB, EB, or each other.
-- Custom ratio must be `> 0`.
-- FSB requirement mode is always `a_mean`.
-- Requirement values must be `> 0`.
-- `FSB.t1 >= 0`.
-- `FSB.impulse_rate > 0`.
-- `EB.t1 >= 0`.
-- `EB.t2 > 0`.
+校验：
+- `v0 > 0`
+- `V_list` 每个值 `> 0`
+- `EB_limit_min >= 0`
 
 ---
 
-## Page 4: 车辆与控制器配置
+## 页面 3：制动需求配置
 
-Purpose: generate the controller/bogie mapping for current bogie-control MVP.
+用途：定义 FSB、EB 和可选的 FSB 百分比制动类型。
 
-Fields:
-
-| UI Field | YAML Field | Control |
+| UI 字段 | YAML 字段 | 控件 |
 | --- | --- | --- |
-| 控制方式 | `controller_type` | Segmented control; 架控 enabled, 车控 disabled |
-| 控制网段编组数量 | UI-derived | Integer stepper/input |
-| 每 controller 转向架数 | `n_bogies_by_controller` | Read-only `1` |
-| 每 controller 空簧数 | `n_springs_by_controller` | Read-only `2` |
-| 每 controller 制动缸数 | `n_cylinders_by_controller` | Read-only `4` |
-| 转向架列表 | `vehicle_config.bogies` | Table generated from control-section count |
-| 转向架类型 | `vehicle_config.bogies[].bogie_type` | Select: 动架 / 拖架 |
+| FSB 制动类型 | `brake_types[].name/source` | 锁定行 |
+| EB 制动类型 | `brake_types[].name/source` | 锁定行 |
+| 自定义制动类型 | `brake_types[]` | 可增删行 |
+| 自定义类型名称 | `brake_types[].name` | 文本框 |
+| FSB 百分比 | `brake_types[].ratio` | 百分比数字输入 |
+| FSB 技术条件 | `requirement.FSB` | 固定 `a_mean`，数字输入，单位 `m/s^2` |
+| EB 技术条件 | `requirement.EB` | 单选 `a_mean` / `distance`，数字输入 |
+| FSB 空走时间 | `response_time.FSB.t1` | 数字输入，单位 `s` |
+| FSB 冲击率 | `response_time.FSB.impulse_rate` | 数字输入，单位 `m/s^3` |
+| EB 空走时间 | `response_time.EB.t1` | 数字输入，单位 `s` |
+| EB 建立时间 | `response_time.EB.t2` | 数字输入，单位 `s` |
 
-Bogie generation:
-- If `controlSectionCount = 3`, generate 6 rows.
-- UI row labels may be `bogie1` through `bogie6`.
-- YAML names should use the selected bogie type plus physical position index.
-- Required naming convention: `trailer_bogie_1`, `powered_bogie_2`, etc.
-- The suffix number represents the physical bogie position in the train formation. The prefix represents the selected bogie type.
-- If a user changes bogie 1 from trailer to powered, its YAML name changes from `trailer_bogie_1` to `powered_bogie_1`.
+映射：
+- UI 中 `50%` 序列化为 `ratio: 0.5`。
+- FSB 序列化为 `{name: "FSB", source: "kinematic"}`。
+- EB 序列化为 `{name: "EB", source: "kinematic"}`。
+- 自定义行序列化为 `{name, source: "ratio_of_FSB", ratio}`。
 
-Serialization:
+校验：
+- FSB 和 EB 不能删除。
+- 自定义名称不能与 FSB、EB 或其他自定义名称重复。
+- 自定义 ratio 必须 `> 0`。
+- FSB requirement 固定为 `a_mean`。
+- requirement 值必须 `> 0`。
+- `FSB.t1 >= 0`
+- `FSB.impulse_rate > 0`
+- `EB.t1 >= 0`
+- `EB.t2 > 0`
+
+---
+
+## 页面 4：车辆与控制器配置
+
+用途：为当前架控 MVP 生成 controller/bogie 映射。
+
+| UI 字段 | YAML 字段 | 控件 |
+| --- | --- | --- |
+| 控制方式 | `controller_type` | 分段控件；架控启用，车控禁用/预留 |
+| 控制网段编组数量 | UI 派生字段 | 整数输入/步进器 |
+| 每 controller 转向架数 | `n_bogies_by_controller` | 只读 `1` |
+| 每 controller 空簧数 | `n_springs_by_controller` | 只读 `2` |
+| 每 controller 制动缸数 | `n_cylinders_by_controller` | 只读 `4` |
+| 转向架列表 | `vehicle_config.bogies` | 根据控制网段编组数量生成表格 |
+| 转向架类型 | `vehicle_config.bogies[].bogie_type` | 下拉：动架 / 拖架 |
+
+转向架生成规则：
+- `controlSectionCount = 3` 时生成 6 行。
+- UI 行名可显示为 `bogie1` 到 `bogie6`。
+- YAML 名称使用“转向架类型 + 物理位置编号”。
+- 固定命名方式：`trailer_bogie_1`、`powered_bogie_2` 等。
+- 后缀数字表示列车编组中的物理转向架位置；前缀表示该位置选择的转向架类型。
+- 如果用户把 bogie1 从拖架改为动架，YAML 名称从 `trailer_bogie_1` 变为 `powered_bogie_1`。
+
+序列化示例：
 
 ```yaml
 controller_type: bogie
@@ -317,163 +309,157 @@ vehicle_config:
       bogie_type: trailer_bogie
 ```
 
-Validation:
-- `controlSectionCount` is required and must be a positive integer.
-- Generated bogie count must equal `controlSectionCount * 2`.
-- Each bogie must choose powered/trailer type.
-- YAML bogie names must be unique.
+校验：
+- `controlSectionCount` 必填，且必须是正整数。
+- 生成 bogie 数量必须等于 `controlSectionCount * 2`。
+- 每个 bogie 都必须选择动架/拖架类型。
+- YAML bogie 名称必须唯一。
 
 ---
 
-## Page 5: 载荷与空簧配置
+## 页面 5：载荷与空簧配置
 
-Purpose: configure type-level mass and air spring parameters.
+用途：配置类型级质量参数和空簧参数。
 
-Fields:
+质量表：
 
-Mass table:
-
-| UI Row | YAML Prefix | AW0 | AW2 | AW3 | Bogie Weight |
+| UI 行 | YAML 前缀 | AW0 | AW2 | AW3 | 转向架自重 |
 | --- | --- | --- | --- | --- | --- |
 | 拖架 | `mass_params.trailer_bogie` | `mass_static.AW0` | `mass_static.AW2` | `mass_static.AW3` | `bogie_weight` |
 | 动架 | `mass_params.powered_bogie` | `mass_static.AW0` | `mass_static.AW2` | `mass_static.AW3` | `bogie_weight` |
 
-Additional mass fields:
+其他质量字段：
 
-| UI Field | YAML Field | Control |
+| UI 字段 | YAML 字段 | 控件 |
 | --- | --- | --- |
-| 拖架旋转质量系数 | `mass_params.trailer_bogie.rotational_mass_factor` | Numeric input |
-| 动架旋转质量系数 | `mass_params.powered_bogie.rotational_mass_factor` | Numeric input |
+| 拖架旋转质量系数 | `mass_params.trailer_bogie.rotational_mass_factor` | 数字输入 |
+| 动架旋转质量系数 | `mass_params.powered_bogie.rotational_mass_factor` | 数字输入 |
 
-Air spring fields, repeated for powered/trailer:
+空簧字段，动架/拖架各一组：
 
-| UI Field | YAML Field | Control |
+| UI 字段 | YAML 字段 | 控件 |
 | --- | --- | --- |
-| 空簧输入方式 | `air_spring.*.mode` | Radio: 特征点 / 线性公式 |
-| 特征点列表 | `air_spring.*.points` | Add/remove table |
-| 特征点簧上重量 | `sprung_mass_by_spring_ton` | Numeric input, unit `ton` |
-| 特征点空簧压力 | `pressure_kpa` | Numeric input, unit `kPa` |
-| 线性系数 k | `airspring_k` | Numeric input, unit `kPa/ton` |
-| 线性截距 b | `airspring_b` | Numeric input, unit `kPa` |
+| 空簧输入方式 | `air_spring.*.mode` | 单选：特征点 / 线性公式 |
+| 特征点列表 | `air_spring.*.points` | 可增删表格 |
+| 特征点簧上重量 | `sprung_mass_by_spring_ton` | 数字输入，单位 `ton` |
+| 特征点空簧压力 | `pressure_kpa` | 数字输入，单位 `kPa` |
+| 线性系数 k | `airspring_k` | 数字输入，单位 `kPa/ton` |
+| 线性截距 b | `airspring_b` | 数字输入，单位 `kPa` |
 
-Linear formula display:
+线性公式显示：
 
 ```text
 空簧压力(kPa) = airspring_k × 簧上重量(ton) + airspring_b
 ```
 
-Validation:
-- AW0/AW2/AW3 static mass values are all required.
-- `mass_static > 0`.
-- `bogie_weight > 0`.
-- For each type and load group, `mass_static > bogie_weight`.
-- `rotational_mass_factor >= 0`.
-- Fitted mode requires at least 2 points.
-- Point pressure and sprung mass must be `> 0`.
+校验：
+- AW0/AW2/AW3 静态质量都必填。
+- `mass_static > 0`
+- `bogie_weight > 0`
+- 对每种转向架类型和每个载荷组，`mass_static > bogie_weight`
+- `rotational_mass_factor >= 0`
+- 特征点模式至少 2 个点。
+- 特征点压力和簧上重量都必须 `> 0`。
 
 ---
 
-## Page 6: 基础制动配置
+## 页面 6：基础制动配置
 
-Purpose: configure current tread-cylinder mechanical model and reserve parking-brake inputs.
+用途：配置当前踏面制动缸机械模型，同时预留停放制动相关输入。
 
-Fields:
-
-| UI Field | YAML Field | Control |
+| UI 字段 | YAML 字段 | 控件 |
 | --- | --- | --- |
-| 基础制动形式 | `mech_params.cylinder_type` | Read-only `踏面制动` |
-| 有效面积 | `mech_params.Sc` | Numeric input, unit `m^2` |
-| 动摩擦系数 | `mech_params.xi` | Numeric input |
-| 外部倍率 | `mech_params.Lo` | Numeric input |
-| 内部倍率 | `mech_params.Li` | Numeric input |
-| 制动缸复位力 | `mech_params.Fs1` | Numeric input, unit `kN` |
-| 附加复位力 | `mech_params.Fs2` | Numeric input, unit `kN` |
-| 外部效率 | `mech_params.eta_o` | Numeric input |
-| 内部效率 | `mech_params.eta_i` | Numeric input |
-| 静摩擦系数 | UI reserved | Numeric input, not serialized |
+| 基础制动形式 | `mech_params.cylinder_type` | 只读 `踏面制动` |
+| 有效面积 | `mech_params.Sc` | 数字输入，单位 `m^2` |
+| 动摩擦系数 | `mech_params.xi` | 数字输入 |
+| 外部倍率 | `mech_params.Lo` | 数字输入 |
+| 内部倍率 | `mech_params.Li` | 数字输入 |
+| 制动缸复位力 | `mech_params.Fs1` | 数字输入，单位 `kN` |
+| 附加复位力 | `mech_params.Fs2` | 数字输入，单位 `kN` |
+| 外部效率 | `mech_params.eta_o` | 数字输入 |
+| 内部效率 | `mech_params.eta_i` | 数字输入 |
+| 静摩擦系数 | UI 预留字段 | 数字输入，不写入 YAML |
 
-Serialization:
-- `cylinder_type` always writes `tread_cylinder`.
-- Static friction coefficient is retained only in UI state or future storage, not current YAML.
+序列化：
+- `cylinder_type` 始终写入 `tread_cylinder`。
+- 静摩擦系数只保留在 UI 状态或未来持久化字段中，当前不写入 YAML。
 
-Validation:
-- `Sc > 0`.
-- `xi > 0`.
-- `Li > 0`.
-- `eta_i > 0`.
-- `Lo > 0`.
-- `eta_o > 0`.
-- `Fs1 >= 0`.
-- `Fs2 >= 0`.
+校验：
+- `Sc > 0`
+- `xi > 0`
+- `Li > 0`
+- `eta_i > 0`
+- `Lo > 0`
+- `eta_o > 0`
+- `Fs1 >= 0`
+- `Fs2 >= 0`
 
 ---
 
-## Page 7: 试验标定配置
+## 页面 7：试验标定配置
 
-Purpose: configure optional output-side pressure calibration.
+用途：配置可选的输出侧压力标定。
 
-Fields:
-
-| UI Field | YAML Field | Control |
+| UI 字段 | YAML 字段 | 控件 |
 | --- | --- | --- |
-| 是否启用标定 | `pressure_calibration.enabled` | Toggle |
-| 标定载荷工况 | `pressure_calibration.calibrated` | Cards |
-| 常用制动标定 | `calibrated.*.FSB` | Card |
-| 紧急制动标定 | `calibrated.*.EB` | Card |
-| 初闸压力 | `BCP0` | Numeric input, unit `kPa` |
-| k(f) 分段 | `k_segments` | Table |
-| AW2 fallback | `fallback.AW2` | Select, default AW3 |
+| 是否启用标定 | `pressure_calibration.enabled` | 开关 |
+| 标定载荷工况 | `pressure_calibration.calibrated` | 卡片 |
+| 常用制动标定 | `calibrated.*.FSB` | 卡片 |
+| 紧急制动标定 | `calibrated.*.EB` | 卡片 |
+| 初闸压力 | `BCP0` | 数字输入，单位 `kPa` |
+| k(f) 分段 | `k_segments` | 表格 |
+| AW2 fallback | `fallback.AW2` | 下拉，默认 AW3 |
 
-Behavior:
-- When disabled, the calibration panel is visually disabled and values cannot be edited.
-- Even if disabled, serialization must still satisfy current `Inputs` contract. The frontend can keep default placeholder AW0/AW3 calibration values internally.
-- When enabled, AW0 and AW3 cards are required.
-- AW2 is hidden by default.
-- The `+` control on FSB/EB calibration can add additional load conditions, including AW2.
+行为：
+- 标定关闭时，标定区域置灰且不能编辑。
+- 即使标定关闭，当前 `Inputs` 契约仍要求 `pressure_calibration.calibrated` 有 AW0/AW3，因此前端内部可以保留默认占位值以满足契约。
+- 标定开启时，AW0 和 AW3 卡片必填。
+- AW2 默认隐藏。
+- FSB/EB 标定区域的 `+` 可以增加 AW2 等后端支持的载荷工况。
 
-k segment fields:
+k 分段字段：
 
-| UI Field | YAML Field | Control |
+| UI 字段 | YAML 字段 | 控件 |
 | --- | --- | --- |
-| 最小制动力 | `min_f` | Numeric input, unit `kN` |
-| 最大制动力 | `max_f` | Numeric input, unit `kN` |
-| 类型 | `kind` | Select: 常数 / 线性 |
-| k 值 | `value` | Numeric input for constant |
-| 起始 k | `start_value` | Numeric input for linear |
-| 结束 k | `end_value` | Numeric input for linear |
+| 最小制动力 | `min_f` | 数字输入，单位 `kN` |
+| 最大制动力 | `max_f` | 数字输入，单位 `kN` |
+| 类型 | `kind` | 下拉：常数 / 线性 |
+| k 值 | `value` | 常数模式数字输入 |
+| 起始 k | `start_value` | 线性模式数字输入 |
+| 结束 k | `end_value` | 线性模式数字输入 |
 
-Validation:
-- `BCP0 >= 0`.
-- Each entry has at least one k segment.
-- Constant segment requires `value`.
-- Linear segment requires `start_value` and `end_value`.
-- UI should warn if `min_f >= max_f`, although current backend contract does not yet enforce this.
+校验：
+- `BCP0 >= 0`
+- 每个标定项至少有一个 k 分段。
+- 常数分段必须有 `value`。
+- 线性分段必须有 `start_value` 和 `end_value`。
+- `min_f >= max_f` 时，UI 应给出警告；当前后端契约还未强制校验这个规则。
 
 ---
 
-## Page 8: 校验与导出
+## 页面 8：校验与导出
 
-Purpose: generate YAML, validate with backend S1, and export.
+用途：生成 YAML、调用后端 S1 校验、导出文件。
 
-Controls:
+控件：
 - 导入 YAML
 - 生成 YAML
 - S1 校验
 - 导出 YAML
-- 保存配置, disabled until persistence backend exists
+- 保存配置；持久化后端未完成前禁用
 
-Validation display:
-- Top/right validation box shows backend S1 errors.
-- Field-level errors show next to mapped fields.
-- Unknown or unmapped errors remain in the summary box.
+校验展示：
+- 顶部/右侧校验框显示后端 S1 错误。
+- 能映射到字段的错误，在字段旁同步显示。
+- 不能映射的错误留在汇总框中。
 
-Export filename:
+导出文件名：
 
 ```text
 {projectCode}_input_{YYYYMMDD_HHmm}.yaml
 ```
 
-Example:
+示例：
 
 ```text
 TKQ001_input_20260423_1530.yaml
@@ -481,9 +467,9 @@ TKQ001_input_20260423_1530.yaml
 
 ---
 
-## YAML Serialization Rules
+## YAML 序列化规则
 
-The serializer maps FormState to this YAML order:
+序列化时按以下顺序输出：
 
 ```yaml
 v0: ...
@@ -505,18 +491,18 @@ pressure_calibration: ...
 EB_limit_min: ...
 ```
 
-Do not serialize:
+不要序列化：
 - `projectName`
 - `projectCode`
 - `email`
 - `note`
-- UI step state
-- static friction coefficient
-- future car-control-only fields
+- UI 步骤状态
+- 静摩擦系数
+- 未来车控专用字段
 
-Chinese-to-English enum mapping:
+中文到英文枚举映射：
 
-| UI Label | YAML Value |
+| UI 标签 | YAML 值 |
 | --- | --- |
 | 架控 | `bogie` |
 | 动架 | `powered_bogie` |
@@ -531,15 +517,15 @@ Chinese-to-English enum mapping:
 
 ---
 
-## Tooltip Content Requirements
+## 字段提示词要求
 
-Every input should have a hover tooltip. Tooltip text should answer:
-- What this field means.
-- Unit.
-- Whether it writes to YAML.
-- Any special rule.
+每个输入项都要有 hover 提示词。提示词回答：
+- 字段含义。
+- 单位。
+- 是否写入 YAML。
+- 特殊规则。
 
-Examples:
+示例：
 
 ```text
 最高速度：技术条件定义点速度，单位 km/h，写入 v0。
@@ -550,426 +536,422 @@ AW2 静态称重：必须填写，单位 ton，用于 AW2 载荷组质量计算�
 
 ---
 
-## Frontend Validation Strategy
+## 前端校验策略
 
-Frontend validation should be lightweight and user-friendly.
+前端只做轻量、友好的即时校验。
 
-Frontend validates:
-- Required fields.
-- Numeric parsing.
-- Positive and non-negative obvious constraints.
-- AW0/AW2/AW3 completeness.
-- FSB/EB locked presence.
-- Generated bogie count.
+前端校验：
+- 必填。
+- 数字格式。
+- 明显的正数/非负数约束。
+- AW0/AW2/AW3 是否完整。
+- FSB/EB 是否固定存在。
+- 生成 bogie 数量是否正确。
 
-Backend S1 validates:
-- Full `Inputs` shape.
-- Pydantic model constraints.
-- Contract-specific rules.
-- Any future changes to the backend contract.
+后端 S1 校验：
+- 完整 `Inputs` 结构。
+- pydantic 模型约束。
+- 契约相关业务规则。
+- 后续后端契约变更。
 
-The UI should avoid duplicating all backend validation logic. Treat backend S1 as authoritative.
+前端不要完整复制后端校验逻辑。以后端 S1 为权威。
 
 ---
 
-## Implementation Tasks
+## 实施任务
 
-### Task 1: Confirm Frontend Location
+### 任务 1：确认前端放置位置
 
-**Files:**
-- Read: `AGENTS.md`
-- No code changes yet
+**文件：**
+- 读取：`AGENTS.md`
+- 暂不改代码
 
-**Step 1: Confirm placement**
+**步骤 1：确认位置**
 
-Ask the user to approve one frontend location:
+请用户批准一个位置：
 - `frontend/`
 - `src/brake_calc/ui/`
 - `docs/ui-prototype/`
 
-Expected: explicit approval before adding files.
+预期：新增文件前必须有明确批准。
 
-**Step 2: Record the decision**
+**步骤 2：记录决定**
 
-Update this plan or add a short follow-up note documenting the approved location.
+更新本计划或追加短说明，记录批准的位置。
 
-**Step 3: Commit**
+**步骤 3：提交**
 
-Commit only if the user asks for plan/doc commits.
+只有用户要求提交 plan/doc 时才提交。
 
-### Task 2: Scaffold UI Shell
+### 任务 2：搭建 UI 外壳
 
-**Files:**
-- Create: approved frontend app files
-- Test: frontend smoke test file if the chosen stack supports it
+**文件：**
+- 创建：已批准前端 app 文件
+- 测试：如果所选技术栈支持，创建前端 smoke test
 
-**Step 1: Create the app shell**
+**步骤 1：创建工作台布局**
 
-Build the workbench layout:
-- left step navigation
-- center form content
-- right validation/YAML preview rail
+实现：
+- 左侧步骤导航
+- 中间表单内容
+- 右侧校验/YAML 预览栏
 
-**Step 2: Add static step navigation**
+**步骤 2：添加静态步骤导航**
 
-Add all eight steps listed in this plan.
+添加本计划中的 8 个步骤。
 
-**Step 3: Add smoke test**
+**步骤 3：添加 smoke test**
 
-Verify the workbench title and navigation render.
+验证工作台标题和导航能渲染。
 
-**Step 4: Run frontend tests**
+**步骤 4：运行前端测试**
 
-Run the stack-specific test command.
+运行所选技术栈的测试命令。
 
-**Step 5: Commit**
-
-Use a conventional commit such as:
+**步骤 5：提交**
 
 ```bash
 git commit -m "feat(ui): scaffold input yaml workbench"
 ```
 
-### Task 3: Add FormState Model and Defaults
+### 任务 3：添加 FormState 模型和默认值
 
-**Files:**
-- Create: `features/input-yaml/model/formState.ts`
-- Create: `features/input-yaml/model/defaults.ts`
-- Test: `features/input-yaml/model/formState.test.ts`
+**文件：**
+- 创建：`features/input-yaml/model/formState.ts`
+- 创建：`features/input-yaml/model/defaults.ts`
+- 测试：`features/input-yaml/model/formState.test.ts`
 
-**Step 1: Define FormState types**
+**步骤 1：定义 FormState 类型**
 
-Create TypeScript types for the sections in this plan.
+按本计划定义各 section 类型。
 
-**Step 2: Define defaults**
+**步骤 2：定义默认值**
 
-Defaults should include:
+默认值包括：
 - `loadGroups = ["AW0", "AW2", "AW3"]`
 - `controller_type = bogie`
 - `n_bogies_by_controller = 1`
 - `n_springs_by_controller = 2`
 - `n_cylinders_by_controller = 4`
-- FSB and EB locked brake types
+- FSB 和 EB 固定存在
 - `pressure_calibration.enabled = false`
 
-**Step 3: Test defaults**
+**步骤 3：测试默认值**
 
-Verify defaults include FSB/EB, fixed load groups, and bogie-control fixed values.
+验证默认值包含 FSB/EB、固定载荷组和架控固定参数。
 
-**Step 4: Run tests**
+**步骤 4：运行测试**
 
-Run the frontend test command.
+运行前端测试命令。
 
-**Step 5: Commit**
+**步骤 5：提交**
 
 ```bash
 git commit -m "feat(ui): define input yaml form state"
 ```
 
-### Task 4: Build Project and Run Config Pages
+### 任务 4：实现项目基础信息和运行基础配置页面
 
-**Files:**
-- Create/modify: project metadata components
-- Create/modify: run config components
-- Test: component tests
+**文件：**
+- 创建/修改：项目元数据组件
+- 创建/修改：运行配置组件
+- 测试：组件测试
 
-**Step 1: Build project metadata form**
+**步骤 1：实现项目元数据表单**
 
-Fields:
+字段：
 - 项目名称
 - 项目代号 / TKQ
 - 邮箱
 - 备注
 
-**Step 2: Build run config form**
+**步骤 2：实现运行配置表单**
 
-Fields:
+字段：
 - `v0`
 - `V_list`
-- fixed `load_groups`
+- 固定 `load_groups`
 - `allocation_strategy`
 - `EB_limit_min`
 
-**Step 3: Add tooltips and unit labels**
+**步骤 3：添加提示词和单位标签**
 
-Make units visible next to numeric inputs.
+数值输入旁必须显示单位。
 
-**Step 4: Add tests**
+**步骤 4：添加测试**
 
-Verify values update FormState and project metadata does not appear in YAML serialization.
+验证值能更新 FormState，且项目元数据不会出现在 YAML 序列化结果中。
 
-**Step 5: Commit**
+**步骤 5：提交**
 
 ```bash
 git commit -m "feat(ui): add project and run configuration forms"
 ```
 
-### Task 5: Build Braking Requirement Page
+### 任务 5：实现制动需求页面
 
-**Files:**
-- Create/modify: braking config components
-- Test: braking component tests
+**文件：**
+- 创建/修改：制动需求组件
+- 测试：制动需求组件测试
 
-**Step 1: Add locked FSB/EB rows**
+**步骤 1：添加锁定的 FSB/EB 行**
 
-FSB and EB should be visible and non-removable.
+FSB 和 EB 必须可见且不可删除。
 
-**Step 2: Add custom ratio-of-FSB rows**
+**步骤 2：添加自定义 FSB 百分比制动类型**
 
-Allow add/remove custom rows with Chinese labels and percent inputs.
+允许增删自定义行，使用中文标签和百分比输入。
 
-**Step 3: Add requirement and response-time inputs**
+**步骤 3：添加 requirement 和 response_time 输入**
 
-Implement FSB and EB sections as defined above.
+按上文定义实现 FSB 和 EB 区域。
 
-**Step 4: Test ratio conversion**
+**步骤 4：测试百分比转换**
 
-Verify UI `50%` serializes as `ratio: 0.5`.
+验证 UI `50%` 序列化为 `ratio: 0.5`。
 
-**Step 5: Commit**
+**步骤 5：提交**
 
 ```bash
 git commit -m "feat(ui): add braking requirement form"
 ```
 
-### Task 6: Build Vehicle Controller Page
+### 任务 6：实现车辆与控制器页面
 
-**Files:**
-- Create/modify: vehicle controller components
-- Test: vehicle controller tests
+**文件：**
+- 创建/修改：车辆控制器组件
+- 测试：车辆控制器测试
 
-**Step 1: Add control mode display**
+**步骤 1：添加控制方式展示**
 
-Show 架控 enabled and 车控 reserved/disabled.
+显示“架控”可用，“车控”预留/禁用。
 
-**Step 2: Add control-section count**
+**步骤 2：添加控制网段编组数量**
 
-When count is `N`, generate `N * 2` bogie rows.
+输入 `N` 时生成 `N * 2` 个 bogie 行。
 
-**Step 3: Add bogie type table**
+**步骤 3：添加转向架类型表格**
 
-Each row selects 动架 or 拖架.
+每行选择动架或拖架。
 
-**Step 4: Test generated bogie count**
+**步骤 4：测试 bogie 数量**
 
-Verify `3` generates six bogies and YAML output has six `vehicle_config.bogies` rows.
+验证输入 `3` 生成 6 个 bogie，YAML 中有 6 条 `vehicle_config.bogies`。
 
-**Step 5: Commit**
+**步骤 5：提交**
 
 ```bash
 git commit -m "feat(ui): add bogie controller configuration"
 ```
 
-### Task 7: Build Load and Air Spring Page
+### 任务 7：实现载荷与空簧页面
 
-**Files:**
-- Create/modify: load and air spring components
-- Test: load and air spring tests
+**文件：**
+- 创建/修改：载荷与空簧组件
+- 测试：载荷与空簧测试
 
-**Step 1: Add mass table**
+**步骤 1：添加质量表**
 
-Rows:
+行：
 - 拖架
 - 动架
 
-Columns:
+列：
 - AW0
 - AW2
 - AW3
 - 转向架自重
 
-**Step 2: Add rotational mass factor inputs**
+**步骤 2：添加旋转质量系数输入**
 
-One for powered bogie, one for trailer bogie.
+动架和拖架各一个。
 
-**Step 3: Add air spring mode switch**
+**步骤 3：添加空簧模式切换**
 
-Support feature points and explicit linear formula.
+支持特征点和显式线性公式。
 
-**Step 4: Render linear formula**
-
-Show:
+**步骤 4：显示线性公式**
 
 ```text
 空簧压力(kPa) = airspring_k × 簧上重量(ton) + airspring_b
 ```
 
-**Step 5: Test YAML mapping**
+**步骤 5：测试 YAML 映射**
 
-Verify powered/trailer mass and bogie weight map to `mass_params`.
+验证动架/拖架质量和转向架自重映射到 `mass_params`。
 
-**Step 6: Commit**
+**步骤 6：提交**
 
 ```bash
 git commit -m "feat(ui): add load and air spring configuration"
 ```
 
-### Task 8: Build Base Brake Page
+### 任务 8：实现基础制动页面
 
-**Files:**
-- Create/modify: base brake components
-- Test: base brake tests
+**文件：**
+- 创建/修改：基础制动组件
+- 测试：基础制动测试
 
-**Step 1: Add tread-cylinder form**
+**步骤 1：添加踏面制动缸表单**
 
-Implement all current `mech_params` inputs.
+实现当前所有 `mech_params` 输入。
 
-**Step 2: Add reserved static friction input**
+**步骤 2：添加静摩擦系数预留输入**
 
-Show the field but do not serialize it to YAML.
+展示字段，但不序列化到 YAML。
 
-**Step 3: Add tests**
+**步骤 3：添加测试**
 
-Verify `mech_params` serializes correctly and static friction does not.
+验证 `mech_params` 正确序列化，静摩擦系数不序列化。
 
-**Step 4: Commit**
+**步骤 4：提交**
 
 ```bash
 git commit -m "feat(ui): add base brake configuration form"
 ```
 
-### Task 9: Build Calibration Page
+### 任务 9：实现标定页面
 
-**Files:**
-- Create/modify: calibration components
-- Test: calibration tests
+**文件：**
+- 创建/修改：标定组件
+- 测试：标定测试
 
-**Step 1: Add calibration enabled toggle**
+**步骤 1：添加标定启用开关**
 
-Disable the card UI when false.
+关闭时禁用卡片区域。
 
-**Step 2: Add AW0/AW3 FSB/EB cards**
+**步骤 2：添加 AW0/AW3 的 FSB/EB 卡片**
 
-Each card includes `BCP0` and `k_segments`.
+每张卡片包含 `BCP0` 和 `k_segments`。
 
-**Step 3: Add optional load condition controls**
+**步骤 3：添加可选载荷工况**
 
-Use `+` controls to add AW2 or other supported load conditions, constrained to backend-supported `LoadGroup` values.
+使用 `+` 增加 AW2 或其他后端支持的 `LoadGroup`。
 
-**Step 4: Add k segment table**
+**步骤 4：添加 k 分段表**
 
-Support constant and linear modes.
+支持常数和线性模式。
 
-**Step 5: Test disabled behavior**
+**步骤 5：测试禁用行为**
 
-Verify disabled calibration cannot be edited but YAML can still be generated with contract-compatible placeholder structure.
+验证标定关闭时不能编辑，但仍能生成满足当前契约的 YAML 占位结构。
 
-**Step 6: Commit**
+**步骤 6：提交**
 
 ```bash
 git commit -m "feat(ui): add pressure calibration form"
 ```
 
-### Task 10: Implement YAML Serializer
+### 任务 10：实现 YAML 序列化器
 
-**Files:**
-- Create: `features/input-yaml/serialization/toInputsYaml.ts`
-- Test: `features/input-yaml/serialization/toInputsYaml.test.ts`
+**文件：**
+- 创建：`features/input-yaml/serialization/toInputsYaml.ts`
+- 测试：`features/input-yaml/serialization/toInputsYaml.test.ts`
 
-**Step 1: Serialize FormState to Inputs object**
+**步骤 1：FormState 序列化为 Inputs object**
 
-Map all UI fields into the current backend contract.
+将所有 UI 字段映射到当前后端契约。
 
-**Step 2: Serialize Inputs object to YAML text**
+**步骤 2：Inputs object 序列化为 YAML 文本**
 
-Preserve field order matching `configs/example_input.yaml`.
+字段顺序与 `configs/example_input.yaml` 保持一致。
 
-**Step 3: Add fixture-based test**
+**步骤 3：添加 fixture 测试**
 
-Use values matching `configs/example_input.yaml` and verify output shape.
+使用接近 `configs/example_input.yaml` 的值，验证输出形状。
 
-**Step 4: Verify excluded UI fields**
+**步骤 4：验证排除 UI 字段**
 
-Project metadata and static friction must not appear in generated YAML.
+项目元数据和静摩擦系数不能出现在 YAML 中。
 
-**Step 5: Commit**
+**步骤 5：提交**
 
 ```bash
 git commit -m "feat(ui): serialize form state to input yaml"
 ```
 
-### Task 11: Add YAML Preview and Validation Result UI
+### 任务 11：添加 YAML 预览和校验结果 UI
 
-**Files:**
-- Create/modify: preview rail components
-- Test: preview rail tests
+**文件：**
+- 创建/修改：预览栏组件
+- 测试：预览栏测试
 
-**Step 1: Add read-only YAML preview**
+**步骤 1：添加只读 YAML 预览**
 
-Update preview whenever FormState changes.
+FormState 变化时实时更新。
 
-**Step 2: Add S1 validation result panel**
+**步骤 2：添加 S1 校验结果面板**
 
-Render:
-- no validation run
-- validation passed
-- validation failed
-- backend unavailable
+展示：
+- 尚未校验
+- 校验通过
+- 校验失败
+- 后端不可用
 
-**Step 3: Add field jump support where possible**
+**步骤 3：添加字段跳转**
 
-Clicking known errors focuses the corresponding field.
+已知字段错误点击后聚焦对应字段。
 
-**Step 4: Commit**
+**步骤 4：提交**
 
 ```bash
 git commit -m "feat(ui): add yaml preview and validation panel"
 ```
 
-### Task 12: Add Import and Export UI
+### 任务 12：添加导入和导出 UI
 
-**Files:**
-- Create/modify: import/export components
-- Test: import/export tests
+**文件：**
+- 创建/修改：导入导出组件
+- 测试：导入导出测试
 
-**Step 1: Add import button**
+**步骤 1：添加导入按钮**
 
-Accept `.yaml` / `.yml` files.
+接受 `.yaml` / `.yml` 文件。
 
-**Step 2: Add import state placeholder**
+**步骤 2：添加导入状态占位**
 
-Actual parsing may call backend in the backend plan; for frontend MVP, define the UI states and error display.
+真实解析可能调用后端；前端 MVP 先定义 UI 状态和错误展示。
 
-**Step 3: Add export filename generation**
+**步骤 3：添加导出文件名生成**
 
-Use:
+使用：
 
 ```text
 {projectCode}_input_{YYYYMMDD_HHmm}.yaml
 ```
 
-**Step 4: Test filename generation**
+**步骤 4：测试文件名**
 
-Verify project code and timestamp are included.
+验证包含项目代号和时间戳。
 
-**Step 5: Commit**
+**步骤 5：提交**
 
 ```bash
 git commit -m "feat(ui): add yaml import and export controls"
 ```
 
-### Task 13: End-to-End UI Acceptance
+### 任务 13：端到端 UI 验收
 
-**Files:**
-- Test: browser or component integration tests
+**文件：**
+- 测试：浏览器或组件集成测试
 
-**Step 1: Fill the example input through the UI**
+**步骤 1：通过 UI 填入 example input**
 
-Use values from `configs/example_input.yaml`.
+使用 `configs/example_input.yaml` 的值。
 
-**Step 2: Generate YAML**
+**步骤 2：生成 YAML**
 
-Expected: YAML includes current `Inputs` fields and excludes metadata.
+预期：YAML 包含当前 `Inputs` 字段，不包含项目元数据。
 
-**Step 3: Validate with backend once available**
+**步骤 3：后端可用后调用校验**
 
-Expected: S1 validation passes.
+预期：S1 校验通过。
 
-**Step 4: Check responsive layout**
+**步骤 4：检查响应式布局**
 
-Verify desktop layout first. Mobile can be lower priority for this engineering tool.
+优先检查桌面端。移动端对该工程工具可降级。
 
-**Step 5: Commit**
+**步骤 5：提交**
 
 ```bash
 git commit -m "test(ui): cover input yaml workbench flow"
@@ -977,33 +959,33 @@ git commit -m "test(ui): cover input yaml workbench flow"
 
 ---
 
-## Acceptance Criteria
+## 验收标准
 
-The frontend UI plan is complete when:
+前端 UI 满足以下条件即视为完成：
 
-- Operators can fill all required current `Inputs` fields without writing YAML.
-- The UI clearly separates metadata fields from YAML fields.
-- Control-section count `3` generates six bogie rows in bogie-control mode.
-- Powered/trailer bogie static mass and bogie weight are both visible.
-- AW0/AW2/AW3 static mass fields are always visible and required.
-- FSB and EB are always present.
-- Calibration fields are disabled when calibration is off.
-- The YAML preview matches the current contract shape.
-- Export filename includes project code and timestamp.
-- S1 validation results can be displayed in the UI.
+- 操作人员可以不写 YAML，填写所有当前 `Inputs` 必填字段。
+- UI 明确区分项目元数据和 YAML 字段。
+- 控制网段编组数量为 `3` 时，架控模式生成 6 个 bogie。
+- 动架/拖架静态质量和转向架自重都可见。
+- AW0/AW2/AW3 静态质量始终可见且必填。
+- FSB 和 EB 始终存在。
+- 标定关闭时标定字段禁用。
+- YAML 预览符合当前契约形状。
+- 导出文件名包含项目代号和时间戳。
+- UI 可以显示 S1 校验结果。
 
-## Open Questions Before Implementation
+## 实施前待确认
 
-1. Where should the frontend app live: `frontend/`, `src/brake_calc/ui/`, or another approved location?
-2. Should the first implementation use a production frontend stack, or a static HTML prototype first?
-3. Should disabled calibration serialize example placeholder values from `configs/example_input.yaml`, or should backend contract be relaxed later so disabled calibration can omit entries?
+1. 前端 app 放在哪里：`frontend/`、`src/brake_calc/ui/`，还是其他位置？
+2. 第一版直接使用生产级前端栈，还是先做静态 HTML 原型？
+3. 标定关闭时，是序列化 `configs/example_input.yaml` 中类似的占位标定值，还是后续放宽后端契约，让关闭标定时可省略标定明细？
 
-## Suggested Next Plan
+## 下一份计划
 
-After this frontend UI plan is approved, write:
+前端 UI 计划确认后，继续看：
 
 ```text
 docs/plans/2026-04-23-input-yaml-sqlite-storage.md
 ```
 
-That plan should define SQLite tables, versioning, search fields, config history, import/export records, and how UI-only fields are persisted separately from `input.yaml`.
+该计划定义 SQLite 表结构、版本管理、检索字段、配置历史、导入导出记录，以及 UI-only 字段如何与 `input.yaml` 分开持久化。

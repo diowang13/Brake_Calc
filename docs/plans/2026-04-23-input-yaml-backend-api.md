@@ -1,53 +1,53 @@
-# Input YAML Backend API and Hermes Tool Implementation Plan
+# input.yaml 后端 API 与 Hermes Tool 实施计划
 
-> **For Claude:** REQUIRED SUB-SKILL: Use superpowers:executing-plans to implement this plan task-by-task.
+> **给执行 agent 的要求：** 按本计划逐项执行时，必须使用 `superpowers:executing-plans` 技能。
 
-**Goal:** Provide backend APIs for the web UI and a Hermes-facing skill/tool boundary that can validate saved YAML, run brake-calc, persist results, and later send reports by email.
+**目标：** 为 Web UI 提供后端 API，并提供 Hermes 可调用的 skill/tool 边界，使其能够校验已保存 YAML、运行 brake-calc、持久化结果，并在后续发送报告邮件。
 
-**Architecture:** The backend wraps existing brake-calc contracts and workflow modules instead of duplicating calculation logic. Web endpoints handle UI workflows such as validate/save/import/export; Hermes-facing functions operate on `project_code` or `input_config_id` and call `brake_calc.workflow.runner.run_workflow` with validated `Inputs`.
+**架构：** 后端封装现有 brake-calc contracts 和 workflow，不重复实现计算逻辑。Web endpoint 负责 UI 流程，例如 validate/save/import/export；Hermes-facing 函数通过 `project_code` 或 `input_config_id` 定位配置，并用校验后的 `Inputs` 调用 `brake_calc.workflow.runner.run_workflow`。
 
-**Tech Stack:** Python backend using the existing `brake_calc` package. FastAPI is the recommended web API framework if adding a dependency is approved; otherwise use a minimal standard-library HTTP layer only for prototypes. YAML parsing should reuse existing `brake_calc.io.config` behavior where possible.
+**技术栈：** Python 后端，复用现有 `brake_calc` package。若批准新增依赖，推荐 FastAPI 作为 Web API 框架；否则 MVP 可先只做 service 函数或最小 HTTP 原型。YAML 解析尽量复用现有 `brake_calc.io.config`。
 
 ---
 
-## Scope
+## 范围
 
-In scope:
-- Backend validation service using existing `Inputs`/S1 logic.
-- YAML serialization/parsing service.
-- Web UI APIs for validate, save, load, import, export.
-- Hermes-facing calculation functions.
-- Calculation run persistence hooks.
-- Email delivery interface design.
+包含：
+- 使用现有 `Inputs`/S1 逻辑的后端校验服务。
+- YAML 序列化/解析服务。
+- Web UI API：validate、save、load、import、export。
+- Hermes-facing 计算函数。
+- calculation run 持久化挂钩。
+- 邮件发送接口设计。
 
-Out of scope:
-- Frontend implementation.
-- SQLite schema implementation details.
-- Actual email provider integration in MVP.
-- Authentication and authorization.
-- Production deployment infrastructure.
+不包含：
+- 前端实现。
+- SQLite schema 具体实现。
+- MVP 阶段真实邮件 provider 集成。
+- 认证和权限。
+- 生产部署基础设施。
 
-## Design Principles
+## 设计原则
 
-- Reuse existing code paths:
+- 复用现有代码路径：
   - `src/brake_calc/contracts/inputs.py`
   - `src/brake_calc/modules/s1_validate_inputs.py`
   - `src/brake_calc/workflow/runner.py`
   - `src/brake_calc/io/config.py`
   - `src/brake_calc/io/report.py`
-- Treat S1/`Inputs.model_validate` as authoritative validation.
-- Keep web metadata separate from `Inputs`.
-- Backend must accept both:
-  - direct YAML text
-  - saved `input_config_id`
-- Hermes should not depend on browser-only state.
-- Calculation functions should be importable and callable without a web server.
+- 以 S1/`Inputs.model_validate` 作为权威校验。
+- Web 元数据与 `Inputs` 分离。
+- 后端必须同时支持：
+  - 直接 YAML 文本
+  - 已保存的 `input_config_id`
+- Hermes 不应依赖浏览器端状态。
+- 计算函数必须可 import 并直接调用，不依赖 Web server。
 
 ---
 
-## Backend Package Layout
+## 后端 package 布局
 
-Recommended files:
+建议文件：
 
 ```text
 src/brake_calc/app/
@@ -59,33 +59,33 @@ src/brake_calc/app/
   email.py
 ```
 
-Responsibilities:
+职责：
 
 - `schemas.py`
-  - Request/response pydantic models for API boundary.
+  - API 边界的 request/response pydantic 模型。
 
 - `services.py`
-  - Validation service.
-  - YAML import/export service.
-  - Config save/load orchestration.
-  - Calculation orchestration.
+  - 校验服务。
+  - YAML 导入/导出服务。
+  - 配置保存/读取编排。
+  - 计算编排。
 
 - `api.py`
-  - HTTP routes if FastAPI or similar framework is approved.
+  - 如果批准 FastAPI 或类似框架，这里放 HTTP routes。
 
 - `hermes_tools.py`
-  - Importable functions intended to become Hermes skill/tool entry points.
+  - 准备注册为 Hermes skill/tool 的可 import 函数。
 
 - `email.py`
-  - Email delivery interface and no-op/dev implementation.
+  - 邮件发送接口和 no-op/dev 实现。
 
-Do not put web route logic inside workflow modules.
+不要把 Web route 逻辑写进 workflow modules。
 
 ---
 
-## API Data Contracts
+## API 数据契约
 
-### Shared Metadata Shape
+### 共享项目元数据
 
 ```json
 {
@@ -96,7 +96,7 @@ Do not put web route logic inside workflow modules.
 }
 ```
 
-### Validation Error Shape
+### 校验错误格式
 
 ```json
 {
@@ -106,10 +106,10 @@ Do not put web route logic inside workflow modules.
 }
 ```
 
-Notes:
-- Convert pydantic location tuples into dot paths.
-- Keep original backend error message for traceability.
-- Frontend maps dot paths to fields where possible.
+说明：
+- 将 pydantic 的 location tuple 转成 dot path。
+- 保留原始后端错误信息，便于追溯。
+- 前端尽可能把 dot path 映射到具体字段。
 
 ---
 
@@ -117,9 +117,9 @@ Notes:
 
 ### `POST /api/configs/validate`
 
-Purpose: validate generated YAML or Inputs JSON before save/export.
+用途：保存/导出前校验生成的 YAML 或 Inputs JSON。
 
-Request options:
+请求方式一：
 
 ```json
 {
@@ -127,7 +127,7 @@ Request options:
 }
 ```
 
-or:
+请求方式二：
 
 ```json
 {
@@ -137,7 +137,7 @@ or:
 }
 ```
 
-Response:
+响应：
 
 ```json
 {
@@ -147,16 +147,16 @@ Response:
 }
 ```
 
-Behavior:
-- Parse YAML if `yaml_text` is provided.
-- Validate through `Inputs.model_validate` and/or S1.
-- Return normalized inputs if validation passes.
+行为：
+- 如果提供 `yaml_text`，先解析 YAML。
+- 通过 `Inputs.model_validate` 和/或 S1 校验。
+- 校验通过时返回 normalized inputs。
 
 ### `POST /api/configs`
 
-Purpose: save project metadata plus a generated config version.
+用途：保存项目元数据和生成的配置版本。
 
-Request:
+请求：
 
 ```json
 {
@@ -172,7 +172,7 @@ Request:
 }
 ```
 
-Response:
+响应：
 
 ```json
 {
@@ -184,21 +184,21 @@ Response:
 }
 ```
 
-Behavior:
-- Upsert or create project by `project_code`.
-- Validate YAML.
-- Insert immutable config version.
+行为：
+- 按 `project_code` upsert 或创建项目。
+- 校验 YAML。
+- 插入不可变配置版本。
 
 ### `GET /api/projects`
 
-Purpose: search project metadata.
+用途：搜索项目元数据。
 
-Query params:
+查询参数：
 - `q`
 - `project_code`
 - `email`
 
-Response:
+响应：
 
 ```json
 {
@@ -216,9 +216,9 @@ Response:
 
 ### `GET /api/projects/{project_id}/configs`
 
-Purpose: list saved config versions.
+用途：列出某项目保存的配置版本。
 
-Response:
+响应：
 
 ```json
 {
@@ -236,9 +236,9 @@ Response:
 
 ### `GET /api/configs/{input_config_id}`
 
-Purpose: load one saved config for editing.
+用途：读取一个已保存配置，用于重新编辑。
 
-Response:
+响应：
 
 ```json
 {
@@ -252,9 +252,9 @@ Response:
 
 ### `POST /api/configs/import-yaml`
 
-Purpose: import existing YAML and convert it into UI state.
+用途：导入已有 YAML，并转换为 UI 状态。
 
-Request:
+请求：
 
 ```json
 {
@@ -262,7 +262,7 @@ Request:
 }
 ```
 
-Response:
+响应：
 
 ```json
 {
@@ -273,19 +273,19 @@ Response:
 }
 ```
 
-Behavior:
-- Parse YAML.
-- Validate.
-- Best-effort derive FormState.
-- If project metadata is absent, leave project fields blank.
+行为：
+- 解析 YAML。
+- 校验。
+- 尽可能派生 FormState。
+- YAML 中没有项目元数据时，项目字段留空。
 
 ### `GET /api/configs/{input_config_id}/download`
 
-Purpose: download YAML with deterministic filename.
+用途：用确定性文件名下载 YAML。
 
-Response:
-- Content-Type: YAML/text.
-- Content-Disposition filename:
+响应：
+- Content-Type: YAML/text。
+- Content-Disposition 文件名：
 
 ```text
 {project_code}_input_{YYYYMMDD_HHmm}.yaml
@@ -293,9 +293,9 @@ Response:
 
 ### `POST /api/configs/{input_config_id}/run`
 
-Purpose: run brake calculation from saved config.
+用途：使用已保存配置运行制动计算。
 
-Response:
+响应：
 
 ```json
 {
@@ -306,371 +306,371 @@ Response:
 }
 ```
 
-MVP can make this synchronous. Cloud deployment may later make it queued/asynchronous.
+MVP 可以同步执行。云端部署后可以改成排队/异步执行。
 
 ### `POST /api/runs/{calculation_run_id}/send-email`
 
-Purpose: send report email to project email.
+用途：将报告发送到项目邮箱。
 
-MVP behavior:
-- May use no-op/dev email sender.
-- Should create an `email_deliveries` record.
+MVP 行为：
+- 可以使用 no-op/dev 邮件发送器。
+- 应创建 `email_deliveries` 记录。
 
 ---
 
-## Hermes Tool Boundary
+## Hermes Tool 边界
 
-Hermes should call importable Python functions, not scrape HTTP unless deployment requires HTTP.
+Hermes 最好调用可 import 的 Python 函数，而不是必须走 HTTP；除非部署方式要求 HTTP。
 
-Recommended functions in `src/brake_calc/app/hermes_tools.py`:
+建议在 `src/brake_calc/app/hermes_tools.py` 中提供：
 
 ```python
 def validate_saved_config(input_config_id: str) -> dict[str, object]:
-    """Validate a saved input configuration and return validation results."""
+    """校验已保存输入配置并返回校验结果。"""
 
 def run_saved_config(input_config_id: str) -> dict[str, object]:
-    """Run brake-calc for a saved input configuration and persist the run result."""
+    """使用已保存输入配置运行 brake-calc，并持久化运行结果。"""
 
 def run_latest_project_config(project_code: str) -> dict[str, object]:
-    """Run brake-calc for the latest valid config of a project."""
+    """运行某项目最新有效配置。"""
 
 def send_latest_report(project_code: str) -> dict[str, object]:
-    """Send the latest successful report to the project's stored email."""
+    """将某项目最新成功报告发送到已保存邮箱。"""
 ```
 
-Tool behavior:
-- Load YAML from storage.
-- Validate via `Inputs`.
-- Call `run_workflow(inputs)`.
-- Persist `calculation_runs`.
-- Optionally generate Markdown through existing report output utilities.
-- Return compact machine-readable summaries to Hermes.
+工具行为：
+- 从 storage 加载 YAML。
+- 通过 `Inputs` 校验。
+- 调用 `run_workflow(inputs)`。
+- 持久化 `calculation_runs`。
+- 可选：通过现有 report 输出工具生成 Markdown。
+- 返回适合 Hermes 使用的紧凑、可 JSON 序列化摘要。
 
-Hermes input should prefer:
-- `input_config_id` for exact reproducibility.
-- `project_code` only when the user wants latest config.
+Hermes 输入优先级：
+- 需要精确复现时，用 `input_config_id`。
+- 用户只说项目时，用 `project_code` 获取最新配置。
 
 ---
 
-## Service Layer
+## Service 层
 
 ### `ValidationService`
 
-Responsibilities:
-- Parse YAML text.
-- Validate data against `Inputs`.
-- Optionally run S1.
-- Return normalized errors.
+职责：
+- 解析 YAML 文本。
+- 用 `Inputs` 校验数据。
+- 可选运行 S1。
+- 返回规范化错误。
 
-Important implementation note:
-- If S1 wraps `Inputs.model_validate`, use S1 for consistency.
-- If S1 expects a Context object, expose a lighter validation function that shares the same validation path rather than duplicating rules.
+重要说明：
+- 如果 S1 本身封装了 `Inputs.model_validate`，优先用 S1 保持一致。
+- 如果 S1 需要 Context 对象，则暴露一个更轻的 validation 函数，但必须复用同一校验路径，不重复造规则。
 
 ### `ConfigService`
 
-Responsibilities:
-- Save metadata and config version.
-- Load config version.
-- Import YAML into normalized input data.
-- Generate export filename.
+职责：
+- 保存项目元数据和配置版本。
+- 读取配置版本。
+- 导入 YAML 并转成规范化输入。
+- 生成导出文件名。
 
 ### `CalculationService`
 
-Responsibilities:
-- Load saved config.
-- Validate before run.
-- Convert validated inputs to `Inputs`.
-- Call `brake_calc.workflow.runner.run_workflow`.
-- Store result/error in `calculation_runs`.
+职责：
+- 加载已保存配置。
+- 运行前校验。
+- 将校验后的输入转成 `Inputs`。
+- 调用 `brake_calc.workflow.runner.run_workflow`。
+- 将成功或失败结果保存到 `calculation_runs`。
 
 ### `EmailService`
 
-Responsibilities:
-- Check project email exists.
-- Find report artifact or report JSON.
-- Send email through configured provider later.
-- MVP can implement a no-op sender that records `skipped` or `sent_dev`.
+职责：
+- 检查项目邮箱是否存在。
+- 查找报告 artifact 或 report JSON。
+- 后续通过配置的 provider 发送邮件。
+- MVP 可以实现 no-op sender，记录为 `skipped` 或 dev 成功。
 
 ---
 
-## Implementation Tasks
+## 实施任务
 
-### Task 1: Confirm Web Framework and Dependency Policy
+### 任务 1：确认 Web 框架和依赖策略
 
-**Files:**
-- Read: `pyproject.toml`
-- Read: `AGENTS.md`
-- No code changes yet
+**文件：**
+- 读取：`pyproject.toml`
+- 读取：`AGENTS.md`
+- 暂不改代码
 
-**Step 1: Decide framework**
+**步骤 1：决定框架**
 
-Options:
-- FastAPI, recommended for real cloud API.
-- Flask, acceptable but less typed.
-- No HTTP server yet, service functions only.
+选项：
+- FastAPI：推荐用于真实云端 API。
+- Flask：可用，但类型边界弱一些。
+- 暂不做 HTTP server，只做 service 函数。
 
-**Step 2: If adding a dependency, update spec/approval path**
+**步骤 2：如果新增依赖，走确认流程**
 
-AGENTS says new third-party dependencies require human confirmation.
+`AGENTS.md` 规定新增第三方依赖需要人工确认。
 
-**Expected:** explicit user approval before adding web dependencies.
+预期：新增 Web 依赖前必须得到明确批准。
 
-### Task 2: Add Backend App Package Skeleton
+### 任务 2：添加 backend app package 骨架
 
-**Files:**
-- Create: `src/brake_calc/app/__init__.py`
-- Create: `src/brake_calc/app/schemas.py`
-- Create: `src/brake_calc/app/services.py`
-- Test: `tests/unit/app/test_validation_service.py`
+**文件：**
+- 创建：`src/brake_calc/app/__init__.py`
+- 创建：`src/brake_calc/app/schemas.py`
+- 创建：`src/brake_calc/app/services.py`
+- 测试：`tests/unit/app/test_validation_service.py`
 
-**Step 1: Write failing validation service test**
+**步骤 1：写失败的 validation service 测试**
 
-Use `configs/example_input.yaml` text and expect validation success.
+使用 `configs/example_input.yaml` 文本，期望校验通过。
 
-**Step 2: Implement minimal `ValidationService`**
+**步骤 2：实现最小 `ValidationService`**
 
-Parse YAML and validate with `Inputs.model_validate`.
+解析 YAML，并用 `Inputs.model_validate` 校验。
 
-**Step 3: Run test**
+**步骤 3：运行测试**
 
 ```bash
 uv run pytest tests/unit/app/test_validation_service.py -v
 ```
 
-**Step 4: Commit**
+**步骤 4：提交**
 
 ```bash
 git commit -m "feat(app): add input validation service"
 ```
 
-### Task 3: Normalize Validation Errors
+### 任务 3：规范化校验错误
 
-**Files:**
-- Modify: `src/brake_calc/app/services.py`
-- Test: `tests/unit/app/test_validation_service.py`
+**文件：**
+- 修改：`src/brake_calc/app/services.py`
+- 测试：`tests/unit/app/test_validation_service.py`
 
-**Step 1: Add invalid YAML tests**
+**步骤 1：添加非法 YAML 测试**
 
-Cover:
-- missing EB
-- invalid mass
-- invalid controller type
+覆盖：
+- 缺少 EB
+- 质量非法
+- controller type 非法
 
-**Step 2: Implement error normalization**
+**步骤 2：实现错误规范化**
 
-Return dot paths and messages.
+返回 dot path 和 message。
 
-**Step 3: Run tests**
+**步骤 3：运行测试**
 
 ```bash
 uv run pytest tests/unit/app/test_validation_service.py -v
 ```
 
-**Step 4: Commit**
+**步骤 4：提交**
 
 ```bash
 git commit -m "feat(app): normalize input validation errors"
 ```
 
-### Task 4: Add Config Service
+### 任务 4：添加 Config Service
 
-**Files:**
-- Modify: `src/brake_calc/app/services.py`
-- Test: `tests/unit/app/test_config_service.py`
+**文件：**
+- 修改：`src/brake_calc/app/services.py`
+- 测试：`tests/unit/app/test_config_service.py`
 
-**Step 1: Write tests with fake repositories**
+**步骤 1：用 fake repositories 写测试**
 
-Cover:
-- save valid config
-- save invalid config records validation errors
-- generate export filename
+覆盖：
+- 保存有效配置
+- 保存无效配置并记录校验错误
+- 生成导出文件名
 
-**Step 2: Implement `ConfigService`**
+**步骤 2：实现 `ConfigService`**
 
-Coordinate validation and storage repositories.
+协调 validation 和 storage repositories。
 
-**Step 3: Run tests**
+**步骤 3：运行测试**
 
 ```bash
 uv run pytest tests/unit/app/test_config_service.py -v
 ```
 
-**Step 4: Commit**
+**步骤 4：提交**
 
 ```bash
 git commit -m "feat(app): save and load input configs"
 ```
 
-### Task 5: Add YAML Import Conversion Service
+### 任务 5：添加 YAML 导入转换服务
 
-**Files:**
-- Modify: `src/brake_calc/app/services.py`
-- Test: `tests/unit/app/test_yaml_import_service.py`
+**文件：**
+- 修改：`src/brake_calc/app/services.py`
+- 测试：`tests/unit/app/test_yaml_import_service.py`
 
-**Step 1: Write import tests**
+**步骤 1：写导入测试**
 
-Use `configs/example_input.yaml` and verify:
-- valid result
-- project metadata blank
-- FormState contains six bogies for example config
-- bogie names preserve `trailer_bogie_1` style
+使用 `configs/example_input.yaml`，验证：
+- 结果有效
+- 项目元数据为空
+- FormState 包含 example config 的 6 个 bogie
+- bogie 名称保留 `trailer_bogie_1` 风格
 
-**Step 2: Implement best-effort FormState conversion**
+**步骤 2：实现 FormState 反向转换**
 
-Convert backend Inputs into UI FormState shape.
+将后端 Inputs 尽可能转换成 UI FormState。
 
-**Step 3: Run tests**
+**步骤 3：运行测试**
 
 ```bash
 uv run pytest tests/unit/app/test_yaml_import_service.py -v
 ```
 
-**Step 4: Commit**
+**步骤 4：提交**
 
 ```bash
 git commit -m "feat(app): import yaml into ui form state"
 ```
 
-### Task 6: Add Calculation Service
+### 任务 6：添加 Calculation Service
 
-**Files:**
-- Modify: `src/brake_calc/app/services.py`
-- Test: `tests/unit/app/test_calculation_service.py`
+**文件：**
+- 修改：`src/brake_calc/app/services.py`
+- 测试：`tests/unit/app/test_calculation_service.py`
 
-**Step 1: Write tests using example input**
+**步骤 1：用 example input 写测试**
 
-Mock or use temporary storage repository.
+可以 mock 或使用临时 storage repository。
 
-**Step 2: Implement saved config run**
+**步骤 2：实现已保存配置运行**
 
-Load YAML, validate, call `run_workflow`.
+加载 YAML、校验、调用 `run_workflow`。
 
-**Step 3: Persist run status**
+**步骤 3：持久化运行状态**
 
-Store success and failure states.
+保存成功和失败状态。
 
-**Step 4: Run tests**
+**步骤 4：运行测试**
 
 ```bash
 uv run pytest tests/unit/app/test_calculation_service.py -v
 ```
 
-**Step 5: Commit**
+**步骤 5：提交**
 
 ```bash
 git commit -m "feat(app): run saved brake calculation configs"
 ```
 
-### Task 7: Add Hermes Tool Functions
+### 任务 7：添加 Hermes Tool 函数
 
-**Files:**
-- Create: `src/brake_calc/app/hermes_tools.py`
-- Test: `tests/unit/app/test_hermes_tools.py`
+**文件：**
+- 创建：`src/brake_calc/app/hermes_tools.py`
+- 测试：`tests/unit/app/test_hermes_tools.py`
 
-**Step 1: Write tests with fake services**
+**步骤 1：用 fake services 写测试**
 
-Cover:
-- validate saved config
-- run by input_config_id
-- run latest by project_code
-- missing email for report send
+覆盖：
+- 校验已保存配置
+- 按 `input_config_id` 运行
+- 按 `project_code` 运行最新配置
+- 发送报告时缺少邮箱
 
-**Step 2: Implement tool wrappers**
+**步骤 2：实现 tool wrappers**
 
-Keep each function small and return JSON-serializable dicts.
+每个函数保持小而明确，返回 JSON-serializable dict。
 
-**Step 3: Run tests**
+**步骤 3：运行测试**
 
 ```bash
 uv run pytest tests/unit/app/test_hermes_tools.py -v
 ```
 
-**Step 4: Commit**
+**步骤 4：提交**
 
 ```bash
 git commit -m "feat(app): expose hermes calculation tools"
 ```
 
-### Task 8: Add HTTP API Routes
+### 任务 8：添加 HTTP API Routes
 
-**Files:**
-- Create/modify: `src/brake_calc/app/api.py`
-- Test: `tests/unit/app/test_api.py`
+**文件：**
+- 创建/修改：`src/brake_calc/app/api.py`
+- 测试：`tests/unit/app/test_api.py`
 
-**Step 1: Write API tests**
+**步骤 1：写 API 测试**
 
-Use the selected framework's test client.
+使用所选框架的 test client。
 
-**Step 2: Implement validate/save/load/import/download routes**
+**步骤 2：实现 validate/save/load/import/download routes**
 
-Wire routes to service layer only.
+routes 只调用 service 层。
 
-**Step 3: Implement run route**
+**步骤 3：实现 run route**
 
-MVP may be synchronous.
+MVP 可同步执行。
 
-**Step 4: Run tests**
+**步骤 4：运行测试**
 
 ```bash
 uv run pytest tests/unit/app/test_api.py -v
 ```
 
-**Step 5: Commit**
+**步骤 5：提交**
 
 ```bash
 git commit -m "feat(app): add web api for input configs"
 ```
 
-### Task 9: Add Email Service Interface
+### 任务 9：添加 Email Service 接口
 
-**Files:**
-- Create: `src/brake_calc/app/email.py`
-- Test: `tests/unit/app/test_email_service.py`
+**文件：**
+- 创建：`src/brake_calc/app/email.py`
+- 测试：`tests/unit/app/test_email_service.py`
 
-**Step 1: Write no-op sender tests**
+**步骤 1：写 no-op sender 测试**
 
-Cover:
-- missing email
-- pending delivery created
-- no-op success/skipped behavior
+覆盖：
+- 缺少邮箱
+- 创建 pending delivery
+- no-op 成功/跳过行为
 
-**Step 2: Implement interface**
+**步骤 2：实现接口**
 
-Define an email sender protocol and no-op implementation.
+定义 email sender protocol 和 no-op 实现。
 
-**Step 3: Run tests**
+**步骤 3：运行测试**
 
 ```bash
 uv run pytest tests/unit/app/test_email_service.py -v
 ```
 
-**Step 4: Commit**
+**步骤 4：提交**
 
 ```bash
 git commit -m "feat(app): add report email service interface"
 ```
 
-### Task 10: End-to-End Backend Test
+### 任务 10：后端端到端测试
 
-**Files:**
-- Test: `tests/integration/test_app_config_to_report_flow.py`
+**文件：**
+- 测试：`tests/integration/test_app_config_to_report_flow.py`
 
-**Step 1: Write integration test**
+**步骤 1：写集成测试**
 
-Flow:
-- save project metadata and example YAML
-- validate config
-- run calculation
-- store report
-- create email delivery record with no-op sender
+流程：
+- 保存项目元数据和 example YAML
+- 校验配置
+- 运行计算
+- 保存报告
+- 用 no-op sender 创建 email delivery 记录
 
-**Step 2: Run integration test**
+**步骤 2：运行集成测试**
 
 ```bash
 uv run pytest tests/integration/test_app_config_to_report_flow.py -v
 ```
 
-**Step 3: Run relevant full checks**
+**步骤 3：运行相关完整检查**
 
 ```bash
 uv run ruff check src tests
@@ -678,7 +678,7 @@ uv run mypy src
 uv run pytest
 ```
 
-**Step 4: Commit**
+**步骤 4：提交**
 
 ```bash
 git commit -m "test(app): cover config to report backend flow"
@@ -686,33 +686,33 @@ git commit -m "test(app): cover config to report backend flow"
 
 ---
 
-## Acceptance Criteria
+## 验收标准
 
-- Backend validates generated YAML through existing `Inputs`/S1 logic.
-- API can save project metadata and config YAML without writing metadata into YAML.
-- API can load saved configs for UI editing.
-- API can import existing YAML and return a UI-compatible FormState.
-- API can export YAML with `{project_code}_input_{YYYYMMDD_HHmm}.yaml`.
-- Hermes-facing functions can run saved configs by `input_config_id` or latest config by `project_code`.
-- Calculation runs are persisted with success/failure status.
-- Email sending has a clear interface and MVP no-op behavior.
-- Tests cover validation, save/load, import/export, Hermes tool functions, and config-to-report flow.
+- 后端通过现有 `Inputs`/S1 逻辑校验生成的 YAML。
+- API 可以保存项目元数据和配置 YAML，且不把元数据写入 YAML。
+- API 可以读取已保存配置，用于 UI 重新编辑。
+- API 可以导入已有 YAML，并返回 UI-compatible FormState。
+- API 可以用 `{project_code}_input_{YYYYMMDD_HHmm}.yaml` 导出 YAML。
+- Hermes-facing 函数可以按 `input_config_id` 或 `project_code` 最新配置运行。
+- calculation run 成功/失败状态能持久化。
+- 邮件发送有清晰接口，MVP 有 no-op 行为。
+- 测试覆盖校验、保存/读取、导入/导出、Hermes tool 函数、配置到报告流程。
 
-## Open Questions Before Implementation
+## 实施前待确认
 
-1. Is FastAPI approved as a new dependency for the cloud backend?
-2. Should Hermes call Python functions directly, HTTP endpoints, or both?
-3. Should config runs be synchronous in MVP, or should the backend create queued jobs immediately?
-4. Where should Markdown reports be stored in cloud deployment: database, filesystem volume, object storage, or all three?
-5. Which email provider should be used later, and does the server environment allow SMTP?
-6. Should API responses expose full report JSON to the web UI, or only summary plus download links?
+1. 是否批准 FastAPI 作为云端后端新依赖？
+2. Hermes 最终调用 Python 函数、HTTP endpoint，还是两者都支持？
+3. MVP 计算是同步执行，还是一开始就做 queued job？
+4. 云端部署时 Markdown 报告存在哪里：数据库、文件系统卷、对象存储，还是都存？
+5. 后续使用哪个邮件 provider？服务器环境是否允许 SMTP？
+6. API 返回给 Web UI 的是完整 report JSON，还是摘要 + 下载链接？
 
-## Suggested Execution Order
+## 建议执行顺序
 
-Recommended order across all three plans:
+三份计划的整体执行顺序：
 
-1. Finish frontend UI plan enough to define FormState.
-2. Implement SQLite storage plan.
-3. Implement backend service/API plan.
-4. Connect frontend to backend validation/save/import/export.
-5. Add Hermes tool registration/deployment packaging.
+1. 先完成前端 UI 计划中的 FormState 定义。
+2. 实施 SQLite 持久化计划。
+3. 实施后端 service/API 计划。
+4. 将前端接入后端 validation/save/import/export。
+5. 添加 Hermes tool 注册和部署包装。
