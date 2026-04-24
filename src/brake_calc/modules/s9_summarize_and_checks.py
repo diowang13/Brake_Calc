@@ -6,6 +6,7 @@ import logging
 
 from brake_calc.contracts.context import Context
 from brake_calc.contracts.report import Report
+from brake_calc.domain.parking_brake import evaluate_parking_brake_check
 from brake_calc.domain.reporting import (
     derive_dynamic_mass_formula,
     round_bcp0_for_code,
@@ -14,6 +15,7 @@ from brake_calc.domain.reporting import (
     round_k_for_code,
     round_kpa,
     round_mass_ton,
+    summarize_electric_brake,
     theoretical_speed_check,
 )
 from brake_calc.errors import InputValidationError
@@ -78,28 +80,38 @@ def run(ctx: Context) -> Context:
     if "FSB" in inputs.requirement:
         theoretical_speed_checks["FSB"] = {}
         for speed in speed_values:
-            theoretical_speed_checks["FSB"][str(speed)] = theoretical_speed_check(
-                speed_kmh=speed,
-                beta_target=ctx.Beta_list["FSB"],
-                brake_type="FSB",
-                t1=inputs.response_time.FSB.t1,
-                impulse_rate=inputs.response_time.FSB.impulse_rate,
-            )
             theoretical_speed_checks["FSB"][str(speed)] = _round_speed_check(
-                theoretical_speed_checks["FSB"][str(speed)]
+                theoretical_speed_check(
+                    speed_kmh=speed,
+                    beta_target=ctx.Beta_list["FSB"],
+                    brake_type="FSB",
+                    t1=inputs.response_time.FSB.t1,
+                    impulse_rate=inputs.response_time.FSB.impulse_rate,
+                )
             )
     if "EB" in inputs.requirement:
         theoretical_speed_checks["EB"] = {}
         for speed in speed_values:
-            theoretical_speed_checks["EB"][str(speed)] = theoretical_speed_check(
-                speed_kmh=speed,
-                beta_target=ctx.Beta_list["EB"],
-                brake_type="EB",
-                t1=inputs.response_time.EB.t1,
-                t2=inputs.response_time.EB.t2,
-            )
             theoretical_speed_checks["EB"][str(speed)] = _round_speed_check(
-                theoretical_speed_checks["EB"][str(speed)]
+                theoretical_speed_check(
+                    speed_kmh=speed,
+                    beta_target=ctx.Beta_list["EB"],
+                    brake_type="EB",
+                    t1=inputs.response_time.EB.t1,
+                    t2=inputs.response_time.EB.t2,
+                )
+            )
+    if "FB" in ctx.Beta_list and inputs.response_time.FB is not None:
+        theoretical_speed_checks["FB"] = {}
+        for speed in speed_values:
+            theoretical_speed_checks["FB"][str(speed)] = _round_speed_check(
+                theoretical_speed_check(
+                    speed_kmh=speed,
+                    beta_target=ctx.Beta_list["FB"],
+                    brake_type="FB",
+                    t1=inputs.response_time.FB.t1,
+                    impulse_rate=inputs.response_time.FB.impulse_rate,
+                )
             )
 
     dynamic_mass_formula: dict[str, dict[str, float | str]] = {}
@@ -129,6 +141,23 @@ def run(ctx: Context) -> Context:
                     "BCP0_used_for_code": round_bcp0_for_code(bcp0_value),
                 }
 
+    parking_brake_check_result = None
+    if inputs.parking_brake_check.enabled:
+        first_load_group = inputs.load_groups[0]
+        parking_brake_check_result = evaluate_parking_brake_check(
+            controller_type=inputs.controller_type,
+            load_group=first_load_group,
+            controller_masses=ctx.Mass_by_controller[first_load_group],
+            parking_config=inputs.parking_brake_check,
+        )
+
+    electric_brake_summary = summarize_electric_brake(
+        enabled=inputs.electric_brake.enabled,
+        force_scope=inputs.electric_brake.force_scope,
+        characteristic_points=inputs.electric_brake.characteristic_points,
+    )
+    auto_adjustments = getattr(ctx, "auto_adjustments", [])
+
     rounded_pressure_standards = _round_pressure_matrix(ctx.BCP_calibrated_by_controller)
     report = Report(
         pressure_standards=rounded_pressure_standards,
@@ -141,6 +170,9 @@ def run(ctx: Context) -> Context:
             "dynamic_mass_formula": dynamic_mass_formula,
             "pressure_conversion": pressure_conversion,
         },
+        parking_brake_check_result=parking_brake_check_result,
+        electric_brake_summary=electric_brake_summary,
+        auto_adjustments=auto_adjustments,
         warnings=ctx.warnings,
         clamp_events=ctx.clamp_events,
         trace=ctx.trace,

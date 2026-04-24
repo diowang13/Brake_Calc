@@ -7,14 +7,25 @@ from brake_calc.modules.s3_response_compensation import run as run_s3
 from brake_calc.modules.s4_calc_dynamic_load_and_mass import run as run_s4
 from brake_calc.modules.s5_calc_required_brake_force import run as run_s5
 from brake_calc.modules.s6_allocate_brake_force import run
-from tests.unit.contracts.test_inputs import make_valid_payload
+from tests.unit.contracts.test_inputs import make_valid_bogie_payload
 
 
 def test_s6_keeps_force_tensor_shape_without_extra_warnings() -> None:
-    ctx = Context(validated_inputs=Inputs.model_validate(make_valid_payload()))
+    ctx = Context(validated_inputs=Inputs.model_validate(make_valid_bogie_payload()))
     ctx = run_s5(run_s4(run_s3(run_s2(ctx))))
 
     out = run(ctx)
 
     assert "FSB" in out.F_by_controller
     assert out.warnings == []
+
+
+def test_s6_records_auto_adjustment_when_equal_wear_switches_to_equal_adhesion() -> None:
+    payload = make_valid_bogie_payload()
+    payload["adhesion"]["mu_limit"] = 0.01
+    ctx = Context(validated_inputs=Inputs.model_validate(payload))
+    ctx = run_s5(run_s4(run_s3(run_s2(ctx))))
+
+    out = run(ctx)
+
+    assert out.warnings, "expected an automatic-switch warning or adjustment record"

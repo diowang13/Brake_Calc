@@ -2,12 +2,16 @@ from __future__ import annotations
 
 import pytest
 
+from brake_calc.contracts.inputs import Inputs
+from brake_calc.domain.parking_brake import evaluate_parking_brake_check
 from brake_calc.domain.reporting import (
     derive_dynamic_mass_formula,
     round_bcp0_for_code,
     round_k_for_code,
+    summarize_electric_brake,
     theoretical_speed_check,
 )
+from tests.unit.contracts.test_inputs import make_valid_car_payload
 
 
 def test_theoretical_speed_check_uses_existing_fsb_target_beta() -> None:
@@ -88,3 +92,52 @@ def test_dynamic_mass_formula_inverts_air_spring_pressure_to_controller_mass() -
 def test_pressure_code_rounding_uses_controller_units() -> None:
     assert round_k_for_code(10.757) == 1076
     assert round_bcp0_for_code(21.0) == 25
+
+
+def test_evaluate_parking_brake_check_returns_per_car_and_whole_train_summary() -> None:
+    result = evaluate_parking_brake_check(
+        controller_type="car",
+        load_group="AW0",
+        controller_masses={
+            "powered_car_1": {"mass_dynamic": 22.0},
+            "trailer_car_1": {"mass_dynamic": 20.0},
+        },
+        parking_config=Inputs.model_validate(make_valid_car_payload()).parking_brake_check,
+    )
+
+    assert sorted(result.per_car) == ["powered_car_1", "trailer_car_1"]
+    assert result.per_car["powered_car_1"].F_N_PB == pytest.approx(15.096)
+    assert result.per_car["powered_car_1"].F_PB == pytest.approx(5.284, abs=1e-3)
+    assert result.per_car["powered_car_1"].incline_force == pytest.approx(8.633, abs=1e-3)
+    assert result.whole_train.F_PB == pytest.approx(10.567, abs=1e-3)
+    assert result.whole_train.incline_force == pytest.approx(16.482, abs=1e-3)
+    assert result.pass_ is False
+
+
+def test_summarize_electric_brake_keeps_head_and_tail_preview() -> None:
+    summary = summarize_electric_brake(
+        enabled=True,
+        force_scope="train_total",
+        characteristic_points=[
+            {"speed_kmh": 0.0, "force_kN": 0.0},
+            {"speed_kmh": 10.0, "force_kN": 20.0},
+            {"speed_kmh": 20.0, "force_kN": 40.0},
+            {"speed_kmh": 30.0, "force_kN": 55.0},
+            {"speed_kmh": 40.0, "force_kN": 70.0},
+            {"speed_kmh": 50.0, "force_kN": 80.0},
+            {"speed_kmh": 60.0, "force_kN": 90.0},
+        ],
+    )
+
+    assert summary.enabled is True
+    assert summary.force_scope == "train_total"
+    assert summary.preview_head == [
+        {"speed_kmh": 0.0, "force_kN": 0.0},
+        {"speed_kmh": 10.0, "force_kN": 20.0},
+        {"speed_kmh": 20.0, "force_kN": 40.0},
+    ]
+    assert summary.preview_tail == [
+        {"speed_kmh": 40.0, "force_kN": 70.0},
+        {"speed_kmh": 50.0, "force_kN": 80.0},
+        {"speed_kmh": 60.0, "force_kN": 90.0},
+    ]

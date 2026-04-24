@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from typing import Any
+
 from pydantic import BaseModel, ConfigDict, Field
 
 
@@ -34,6 +36,75 @@ class TraceEntry(BaseModel):
     elapsed_ms: float = Field(..., description="单位: ms")
 
 
+class AutoAdjustmentEntry(BaseModel):
+    """自动调整记录。"""
+
+    model_config = ConfigDict(extra="forbid")
+
+    code: str = Field(..., description="单位: -")
+    message: str = Field(..., description="单位: -")
+    original: dict[str, Any] = Field(default_factory=dict, description="单位: -")
+    applied: dict[str, Any] = Field(default_factory=dict, description="单位: -")
+    context: dict[str, Any] = Field(default_factory=dict, description="单位: -")
+
+
+class ParkingBrakePerCarResult(BaseModel):
+    """每车停放制动力校核结果。"""
+
+    model_config = ConfigDict(extra="forbid")
+
+    F_N_PB: float = Field(..., description="单位: kN")
+    F_PB: float = Field(..., description="单位: kN")
+    incline_force: float = Field(..., description="单位: kN")
+    safety_margin: float = Field(..., description="单位: -")
+
+
+class ParkingBrakeWholeTrainResult(BaseModel):
+    """整列停放制动力校核结果。"""
+
+    model_config = ConfigDict(extra="forbid")
+
+    F_PB: float = Field(..., description="单位: kN")
+    incline_force: float = Field(..., description="单位: kN")
+    safety_margin: float = Field(..., description="单位: -")
+
+
+class ParkingBrakeCheckResult(BaseModel):
+    """停放制动力校核汇总。"""
+
+    model_config = ConfigDict(populate_by_name=True)
+
+    per_car: dict[str, ParkingBrakePerCarResult] = Field(
+        default_factory=dict,
+        description="单位: -",
+    )
+    whole_train: ParkingBrakeWholeTrainResult = Field(
+        default_factory=lambda: ParkingBrakeWholeTrainResult(
+            F_PB=0.0,
+            incline_force=0.0,
+            safety_margin=0.0,
+        ),
+        description="单位: -",
+    )
+    pass_: bool = Field(
+        default=False,
+        alias="pass",
+        serialization_alias="pass",
+        description="单位: -",
+    )
+
+
+class ElectricBrakeSummary(BaseModel):
+    """电制动摘要。"""
+
+    model_config = ConfigDict(extra="forbid")
+
+    enabled: bool = Field(..., description="单位: -")
+    force_scope: str = Field(..., description="单位: -")
+    preview_head: list[dict[str, Any]] = Field(default_factory=list, description="单位: -")
+    preview_tail: list[dict[str, Any]] = Field(default_factory=list, description="单位: -")
+
+
 PressureMatrix = dict[str, dict[str, dict[str, float]]]
 MetricMatrix = dict[str, dict[str, dict[str, float]]]
 BrakeSummary = dict[str, dict[str, float]]
@@ -62,6 +133,15 @@ class Report(BaseModel):
         default_factory=dict,
         description="单位: -",
     )
+    parking_brake_check_result: ParkingBrakeCheckResult | None = Field(
+        default=None,
+        description="单位: -",
+    )
+    electric_brake_summary: ElectricBrakeSummary | None = Field(
+        default=None,
+        description="单位: -",
+    )
+    auto_adjustments: list[AutoAdjustmentEntry] = Field(default_factory=list, description="单位: -")
     warnings: list[WarningEntry] = Field(default_factory=list, description="单位: -")
     clamp_events: list[ClampEvent] = Field(default_factory=list, description="单位: -")
     trace: list[TraceEntry] = Field(default_factory=list, description="单位: -")

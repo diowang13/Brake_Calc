@@ -13,7 +13,11 @@ def dump_report_yaml(report: Report) -> str:
     """将 report 序列化为 YAML。"""
     return cast(
         str,
-        yaml.safe_dump(report.model_dump(mode="json"), sort_keys=False, allow_unicode=True),
+        yaml.safe_dump(
+            report.model_dump(mode="json", by_alias=True),
+            sort_keys=False,
+            allow_unicode=True,
+        ),
     )
 
 
@@ -96,6 +100,29 @@ def dump_report_markdown(report: Report) -> str:
                         f"{float(values['BCP0_used']):.6g} | "
                         f"{int(values['BCP0_used_for_code'])} |"
                     )
+        lines.append("")
+
+    if report.parking_brake_check_result is not None:
+        lines.extend(["## Parking Brake Check", ""])
+        lines.append("| car | F_N_PB | F_PB | incline_force | safety_margin |")
+        lines.append("| --- | ---: | ---: | ---: | ---: |")
+        for car, per_car_result in report.parking_brake_check_result.per_car.items():
+            lines.append(
+                f"| {car} | {per_car_result.F_N_PB:.6g} | {per_car_result.F_PB:.6g} | "
+                f"{per_car_result.incline_force:.6g} | {per_car_result.safety_margin:.6g} |"
+            )
+        lines.append("")
+
+    if report.electric_brake_summary is not None:
+        lines.extend(["## Electric Brake Summary", ""])
+        lines.append(f"- enabled: {report.electric_brake_summary.enabled}")
+        lines.append(f"- force_scope: {report.electric_brake_summary.force_scope}")
+        lines.append("")
+
+    if report.auto_adjustments:
+        lines.extend(["## Auto Adjustments", ""])
+        for item in report.auto_adjustments:
+            lines.append(f"- `{item.code}`: {item.message}")
         lines.append("")
 
     if report.warnings:

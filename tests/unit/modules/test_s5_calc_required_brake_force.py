@@ -8,11 +8,11 @@ from brake_calc.modules.s2_derive_requirement import run as run_s2
 from brake_calc.modules.s3_response_compensation import run as run_s3
 from brake_calc.modules.s4_calc_dynamic_load_and_mass import run as run_s4
 from brake_calc.modules.s5_calc_required_brake_force import run
-from tests.unit.contracts.test_inputs import make_valid_payload
+from tests.unit.contracts.test_inputs import make_valid_bogie_payload
 
 
-def test_s5_applies_equal_wear_for_fsb_and_equal_adhesion_for_eb() -> None:
-    ctx = Context(validated_inputs=Inputs.model_validate(make_valid_payload()))
+def test_s5_applies_equal_wear_for_fsb_and_equal_adhesion_for_eb_and_fb() -> None:
+    ctx = Context(validated_inputs=Inputs.model_validate(make_valid_bogie_payload()))
     ctx = run_s4(run_s3(run_s2(ctx)))
 
     out = run(ctx)
@@ -23,10 +23,13 @@ def test_s5_applies_equal_wear_for_fsb_and_equal_adhesion_for_eb() -> None:
     assert out.F_by_controller["EB"]["AW0"]["powered_bogie_1"] != pytest.approx(
         out.F_by_controller["EB"]["AW0"]["trailer_bogie_1"]
     )
+    assert out.F_by_controller["FB"]["AW0"]["powered_bogie_1"] != pytest.approx(
+        out.F_by_controller["FB"]["AW0"]["trailer_bogie_1"]
+    )
 
 
 def test_s5_uses_dynamic_mass_ratio_for_eb_equal_adhesion_distribution() -> None:
-    ctx = Context(validated_inputs=Inputs.model_validate(make_valid_payload()))
+    ctx = Context(validated_inputs=Inputs.model_validate(make_valid_bogie_payload()))
     ctx = run_s4(run_s3(run_s2(ctx)))
 
     out = run(ctx)
@@ -43,9 +46,9 @@ def test_s5_uses_dynamic_mass_ratio_for_eb_equal_adhesion_distribution() -> None
     )
 
 
-def test_s5_uses_dynamic_mass_ratio_for_configured_equal_adhesion_distribution() -> None:
-    payload = make_valid_payload()
-    payload["allocation_strategy"] = "equal_adhesion"
+def test_s5_switches_to_equal_adhesion_when_equal_wear_exceeds_mu_limit() -> None:
+    payload = make_valid_bogie_payload()
+    payload["adhesion"]["mu_limit"] = 0.01
     ctx = Context(validated_inputs=Inputs.model_validate(payload))
     ctx = run_s4(run_s3(run_s2(ctx)))
 

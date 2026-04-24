@@ -3,31 +3,29 @@
 from __future__ import annotations
 
 import logging
+from typing import cast
 
 from brake_calc.contracts.context import Context
-from brake_calc.contracts.inputs import LoadGroup, PressureCalibrationEntry
+from brake_calc.contracts.inputs import Inputs, LoadGroup, PressureCalibrationCase
 from brake_calc.contracts.report import ClampEvent, WarningEntry
-from brake_calc.domain.calibration import evaluate_k_curve, resolve_brake_mode
+from brake_calc.domain.calibration import (
+    build_point_pair_curve,
+    evaluate_point_pair_curve,
+    resolve_calibration_case_name,
+)
 from brake_calc.domain.pressure import clamp_value, force_to_pressure_kpa
 from brake_calc.errors import InputValidationError
 
 logger = logging.getLogger(__name__)
 
 
-def _resolve_curve_group(
-    load_group: LoadGroup,
-    brake_mode: str,
-    calibrated: dict[LoadGroup, dict[str, PressureCalibrationEntry]],
-    fallback: dict[LoadGroup, LoadGroup],
-) -> tuple[LoadGroup, bool]:
-    if load_group in calibrated and brake_mode in calibrated[load_group]:
-        return load_group, False
-    fallback_group = fallback.get(load_group, load_group)
-    return fallback_group, fallback_group != load_group
+def _resolve_case(inputs: Inputs, case_name: str) -> PressureCalibrationCase:
+    """按名称读取标定组。"""
+    return cast(PressureCalibrationCase, getattr(inputs.pressure_calibration, case_name))
 
 
 def run(ctx: Context) -> Context:
-    """按 load_group、brake mode 与控制器制动力应用压力标定。"""
+    """按试验点驱动的 k(f) 曲线应用压力标定。"""
     inputs = ctx.validated_inputs
     if inputs is None:
         raise InputValidationError("validated_inputs is required before s8")
@@ -36,65 +34,31 @@ def run(ctx: Context) -> Context:
     warnings = list(ctx.warnings)
     k_used: dict[str, dict[str, dict[str, float]]] = {}
     bcp0_used: dict[str, dict[str, dict[str, float]]] = {}
-    raw_pressures: dict[LoadGroup, dict[str, dict[str, float]]] = {
+    raw_pressures: dict[str, dict[str, dict[str, float]]] = {
         group: {} for group in inputs.load_groups
     }
 
     for brake_type, per_group in ctx.F_by_controller.items():
         brake_type_def = brake_type_definitions[brake_type]
-        brake_mode = resolve_brake_mode(brake_type_def.name, brake_type_def.source)
+        case_name = resolve_calibration_case_name(brake_type_def.name, brake_type_def.source)
+        entry = _resolve_case(inputs, case_name) if inputs.pressure_calibration.enabled else None
+        curve_points = (
+            build_point_pair_curve(entry, ctx.F_by_controller) if entry is not None else None
+        )
+
         k_used[brake_type] = {}
         bcp0_used[brake_type] = {}
         for load_group in inputs.load_groups:
-            per_controller = per_group[load_group]
-            entry: PressureCalibrationEntry | None = None
-            if inputs.pressure_calibration.enabled:
-                curve_group, used_fallback = _resolve_curve_group(
-                    load_group,
-                    brake_mode,
-                    inputs.pressure_calibration.calibrated,
-                    inputs.pressure_calibration.fallback,
-                )
-                if used_fallback:
-                    warnings.append(
-                        WarningEntry(
-                            code="pressure_calibration_fallback",
-                            message="Pressure calibration fallback applied.",
-                            context={
-                                "load_group": load_group,
-                                "fallback_group": curve_group,
-                                "brake_mode": brake_mode,
-                            },
-                        )
-                    )
-                entry = inputs.pressure_calibration.calibrated[curve_group][brake_mode]
-
             k_used[brake_type][load_group] = {}
             bcp0_used[brake_type][load_group] = {}
             raw_pressures[load_group].setdefault(brake_type, {})
-            for controller, force in per_controller.items():
-                if entry is None:
+            for controller, force in per_group[load_group].items():
+                if entry is None or curve_points is None:
                     k_value = ctx.k_initial
                     bcp0_value = ctx.BCP0_initial
                 else:
-                    evaluated_k, out_of_range = evaluate_k_curve(entry, force)
+                    k_value = evaluate_point_pair_curve(force, curve_points[0], curve_points[1])
                     bcp0_value = entry.BCP0
-                    if evaluated_k is None:
-                        k_value = ctx.k_initial
-                    else:
-                        k_value = evaluated_k
-                    if out_of_range:
-                        warnings.append(
-                            WarningEntry(
-                                code="pressure_calibration_out_of_range",
-                                message="Target force is outside calibrated k(f) range.",
-                                context={
-                                    "brake_type": brake_type,
-                                    "load_group": load_group,
-                                    "controller": controller,
-                                },
-                            )
-                        )
 
                 k_used[brake_type][load_group][controller] = k_value
                 bcp0_used[brake_type][load_group][controller] = bcp0_value
@@ -104,14 +68,36 @@ def run(ctx: Context) -> Context:
                     bcp0_value,
                 )
 
+    if "FB" in raw_pressures.get("AW0", {}):
+        for load_group in inputs.load_groups:
+            eb_pressures = raw_pressures[load_group].get("EB", {})
+            fb_pressures = raw_pressures[load_group].get("FB", {})
+            for controller, fb_pressure in fb_pressures.items():
+                eb_pressure = eb_pressures.get(controller)
+                if eb_pressure is None or fb_pressure <= eb_pressure:
+                    continue
+                delta_pressure = fb_pressure - eb_pressure
+                raw_pressures[load_group]["EB"][controller] = eb_pressure + delta_pressure
+                bcp0_used["EB"][load_group][controller] += delta_pressure
+                warnings.append(
+                    WarningEntry(
+                        code="fb_pressure_exceeded_eb",
+                        message="FB pressure exceeded EB pressure and BCP0_EB was increased.",
+                        context={
+                            "load_group": load_group,
+                            "controller": controller,
+                            "delta_pressure": delta_pressure,
+                        },
+                    )
+                )
+
     clamp_events = list(ctx.clamp_events)
     calibrated_pressures: dict[str, dict[str, dict[str, float]]] = {
         group: {} for group in inputs.load_groups
     }
 
-    for load_group, per_brake_type in raw_pressures.items():
-        if "EB" not in per_brake_type:
-            continue
+    for raw_load_group, per_brake_type in raw_pressures.items():
+        load_group = cast(LoadGroup, raw_load_group)
         calibrated_pressures[load_group].setdefault("EB", {})
         for controller, pressure in per_brake_type["EB"].items():
             clamped_pressure, was_clamped = clamp_value(pressure, inputs.EB_limit_min, 600.0)
@@ -128,23 +114,15 @@ def run(ctx: Context) -> Context:
                 )
             calibrated_pressures[load_group]["EB"][controller] = clamped_pressure
 
-    for load_group, per_brake_type in raw_pressures.items():
+    for raw_load_group, per_brake_type in raw_pressures.items():
+        load_group = cast(LoadGroup, raw_load_group)
         for brake_type, per_controller in per_brake_type.items():
             if brake_type == "EB":
                 continue
-            brake_type_def = brake_type_definitions[brake_type]
-            brake_mode = resolve_brake_mode(brake_type_def.name, brake_type_def.source)
             calibrated_pressures[load_group].setdefault(brake_type, {})
             for controller, pressure in per_controller.items():
-                min_kpa = 0.0
-                max_kpa = pressure
-                if brake_mode == "FSB":
-                    max_kpa = calibrated_pressures[load_group].get("EB", {}).get(
-                        controller,
-                        pressure,
-                    )
-
-                clamped_pressure, was_clamped = clamp_value(pressure, min_kpa, max_kpa)
+                max_kpa = calibrated_pressures[load_group]["EB"].get(controller, pressure)
+                clamped_pressure, was_clamped = clamp_value(pressure, 0.0, max_kpa)
                 if was_clamped:
                     clamp_events.append(
                         ClampEvent(

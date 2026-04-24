@@ -10,6 +10,33 @@
 
 ---
 
+## V1 对齐说明
+
+本计划已被 [2026-04-24-v1-contract-and-feature-upgrade.md](/D:/codeX/Brake_Calc_Agent/Brake_Calc/docs/plans/2026-04-24-v1-contract-and-feature-upgrade.md) 补充和约束。V1 冻结后，storage 层至少要额外支持：
+
+- `schema_version`
+- `controller_type = bogie | car`
+- `fast_brake`
+- `parking_brake_check`
+- `adhesion`
+- `electric_brake`
+- 新的试验点驱动标定结构
+- `auto_adjustments`
+- 更完整的 `report_json`
+
+建议在本计划基础上追加以下结构调整：
+
+- `input_configs` 增加 `schema_version`
+- `calculation_runs.report_json` 必须覆盖：
+  - 压力标准结果
+  - 标定摘要
+  - 停放制动力校核
+  - 自动调整记录
+  - 电制动识别摘要
+- 如果要保留电制动原始上传图片/文档，增加附件表，例如 `input_artifacts`
+
+---
+
 ## 范围
 
 包含：

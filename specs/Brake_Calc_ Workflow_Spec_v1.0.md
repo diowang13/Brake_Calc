@@ -19,23 +19,34 @@
 
 ### 2.1 主要输出
 
-- `report`：最终结构化报告对象，包含压力标准、理论速度检查、控制器开发参数、告警、限幅事件与 trace。
+- `report`：最终结构化报告对象，包含压力标准、理论速度检查、控制器开发参数、校核结果、告警、自动调整记录、限幅事件与 trace
 - `BCP_calibrated_by_controller` / `controller_pressure_standards`：每个控制器的目标控制压力/压力标准，单位 `kPa`
     - 输出按**实验条件载荷**（AW0 / AW2 / AW3）× **制动类型向量**（见 Inputs `brake_types`）组织，形成压力标准矩阵
     - 结构示意：`BCP_calibrated_by_controller[load_group][brake_type][controller] = pressure`
-- Markdown 报告：CLI 可通过 `--markdown-output <path>` 导出 Markdown；PDF 暂不作为内置输出，由外部工具从 Markdown 转换。
+- Markdown 报告：CLI 可通过 `--markdown-output <path>` 导出 Markdown；PDF 暂不作为内置输出，由外部工具从 Markdown 转换
+    - V1 Markdown 报告至少包含：
+      - 配置摘要
+      - 计算结果表格
+      - 标定与公式摘要
+      - 停放制动力校核结果
+      - 自动调整记录
+
 
 ### 2.2 必须可追溯的中间量
 
 - `Beta_list`：控制用目标减速度向量
     - 与 Inputs 中的 `brake_types` 一一对应，每个元素为该制动类型下的控制用目标减速度
     - 其中：
-      - **紧急制动（EB）**的控制减速度由运动学方程（结合 `requirement` 与 `response_time.t1/t2`）计算得出;
-      - **最大常用制动（FSB）**的控制减速度由运动学方程（结合 `requirement` 与 `response_time.t1`、`response_time.impulse_rate`联立求解）
+      - **紧急制动（EB）**的控制减速度由运动学方程（结合 `requirement` 与 `response_time.t1/t2`）计算得出
+      - **最大常用制动（FSB）**的控制减速度由运动学方程（结合 `requirement` 与 `response_time.t1`、`response_time.impulse_rate` 联立求解）
+      - **快速制动（FB）**不单独反求控制减速度，直接取 `Beta_FB = Beta_EB`
     - 其余用户自定义类型（如保持制动、跳跃制动）按其配置的 FSB 百分比直接缩放得到：`Beta[type] = ratio * Beta[FSB]`
+
 - `Mass_by_controller`：按控制器聚合的静态质量 / 动态制动质量向量
     - 维度：`[load_group] × [controller]`
-    - 动态质量的计算依赖该控制器对应转向架实例的 `bogie_type`（`powered_bogie` / `trailer_bogie`），两者转动惯量不同
+    - 架控时，动态质量的计算依赖该控制器对应转向架实例的 `bogie_type`（`powered_bogie` / `trailer_bogie`）
+    - 车控时，动态质量的计算依赖该控制器对应车辆实例的 `car_type`（`powered_car` / `trailer_car`），并按一车两转向架聚合质量与转动惯量
+
 - `F_by_controller`：每控制器目标制动力 f（kN）
 - `k_initial`：S7 由机械模型推导的理论基础力-压力转换系数，单位 `kPa/kN`
 - `BCP0_initial`：S7 由机械模型推导的理论初闸压力，单位 `kPa`
@@ -50,6 +61,17 @@
     - 内容：`{k, b, source_mode}`
     - 单位：`kPa/ton`、`kPa`
     - 含义：记录每类转向架采用的空簧线性公式，`source_mode` 取值为 `fitted_from_points` 或 `explicit_linear`
+- `auto_adjustments`
+    - 内容：自动采取的策略调整记录
+    - 示例：等磨耗自动切换为等黏着、`FB` 压力超过 `EB` 后自动提高 `BCP0_EB`
+- `CalibrationSummary`
+    - 内容：标定试验点、生成的 `k_sb(f)` / `k_eb(f)`、`BCP0_sb` / `BCP0_eb`、以及 AW0/AW2/AW3 对应的 `k_for_code`
+- `ParkingBrakeCheckResult`
+    - 内容：停放制动力校核结果
+    - 包括：每车双侧作用力、每车停放制动力、每车倾斜力、每车安全余量、整列停放制动力、整列倾斜力、整列安全余量、是否通过
+- `ElectricBrakeSummary`
+    - 内容：电制动特性输入摘要
+    - 包括：是否启用、力值定义范围、识别出的特性点前若干项和末若干项
 
 ## 3. 关键工程规则（必须满足）
 
@@ -61,34 +83,42 @@
 
 ## 4. Inputs（输入参数，待你后续补齐单位/范围/默认值）
 
+- `schema_version`：输入契约版本号。V1 固定为 `1`，用于后续配置迁移与兼容性控制。
 - `v0`：最高速度（技术条件定义点）
-- `V_list`：可选速度列表，单位 `km/h`，用于 S9 输出 `theoretical_speed_checks`。未配置时仅使用 `v0`；当前只对 FSB/EB 生成理论速度检查，`ratio_of_FSB` 类型不单独生成。
+- `V_list`：可选速度列表，单位 `km/h`，用于 S9 输出 `theoretical_speed_checks`。未配置时仅使用 `v0`；V1 对 `FSB`、`EB`、`FB` 生成理论速度检查，`ratio_of_FSB` 类型不单独生成。
 - `requirement`：基础制动类型的技术条件输入
   - `FSB`：仅接受平均减速度要求 `a_mean`
   - `EB`：可接受平均减速度要求 `a_mean` 或制动距离要求 `distance`
+  - `FB`：不单独配置 `requirement`，其控制目标减速度直接取 `EB`
   - `ratio_of_FSB` 类型不单独配置 `requirement`
+  
 - `brake_types`：制动类型向量，定义本次计算需要输出的所有制动类型
-    - **必含项**：最大常用制动 `FSB`、紧急制动 `EB`（二者的控制减速度由运动学方程计算）
-    - **可选项 — 用户自定义制动类型**，一般以「最大常用制动 FSB 的百分比」形式定义
+    - **必含项**：最大常用制动 `FSB`、紧急制动 `EB`
+    - **可选项 1 — 快速制动 `FB`**
+        - 行业内通常用 `Fast Brake` 指代快速制动
+        - `FB` 的控制目标减速度直接等于 `EB` 的控制目标减速度，即 `Beta_FB = Beta_EB`
+        - `FB` 的制动力分配策略强制为 `equal_adhesion`
+        - `FB` 的响应模型使用常用制动形式（`t1 + impulse_rate`）
+    - **可选项 2 — 用户自定义制动类型**
+        - 一般以「最大常用制动 FSB 的百分比」形式定义
         - 例：保持制动 `holding = 50% FSB`
         - 例：跳跃制动 `jerk = 10% FSB`
     - 建议结构：
+      ```yaml
+      brake_types:
+        - name: FSB
+          source: kinematic
+        - name: EB
+          source: kinematic
+        - name: FB
+          source: fast_brake
+        - name: holding
+          source: ratio_of_FSB
+          ratio: 0.5
+      ```
+
         
-        ```yaml
-        brake_types:
-          - name: FSB
-            source: kinematic     # 由运动学计算
-          - name: EB
-            source: kinematic
-          - name: holding
-            source: ratio_of_FSB
-            ratio: 0.5
-          - name: jerk
-            source: ratio_of_FSB
-            ratio: 0.1
-        ```
-        
-- `response_time`：响应时间，按制动模式（常用/紧急/快速等）分别给出：
+- `response_time`：响应时间，按制动模式分别给出：
   - `FSB`
     - `t1`：空走时间（dead time）
     - `impulse_rate`：减速度上升率，单位 `m/s^3`
@@ -96,20 +126,37 @@
   - `EB`
     - `t1`：空走时间（dead time）
     - `t2`：建立时间（build-up time），从开始产生减速度到减速度达到目标值 90% 的时间
+  - `FB`
+    - `t1`：空走时间（dead time）
+    - `impulse_rate`：减速度上升率，单位 `m/s^3`
+    - `FB` 不单独计算控制减速度，但需要在理论速度检查中使用该响应模型
   - `ratio_of_FSB` 类型不单独配置响应参数，直接沿用 FSB 的派生结果进行缩放
+
 - 在 `response_compensation` 模块中：
   - `EB` 使用距离扣除模型，结合 `t1` 和 `t2` 由 `a_mean_req` 反推控制用目标减速度
   - `FSB` 使用距离扣除模型，结合 `t1` 和 `impulse_rate` 联立反求控制用目标减速度
+  - `FB` 不单独反求控制目标减速度，直接取 `Beta_FB = Beta_EB`；但在 S9 理论速度检查中，仍使用 `FB` 自身的响应模型（`t1 + impulse_rate`）计算不同初速度下的理论制动距离与平均减速度
 
-- `controller_type`：控制器粒度，取值为 `bogie` / `car`。MVP 阶段固定为 `bogie`，即一个 controller 对应一个转向架；未来支持 `car` 时，一个 controller 对应一辆车。
-- `n_bogies_by_controller` ：每个controller对应的bogie数量，关联 `controller_type`。当 `controller_type = bogie` 时为 1；当 `controller_type = car` 时为 2。MVP 阶段固定为 1。
-- `n_springs_by_controller`：每个 controller 对应的空簧数量，关联 `controller_type`。当 `controller_type = bogie` 时为 2；当 `controller_type = car` 时为 4。MVP 阶段固定为 2。
-- `n_cylinders_by_controller`：每个 controller 对应的制动缸数量，关联 `controller_type`。当 `controller_type = bogie` 时为 4；当 `controller_type = car` 时为 8。MVP 阶段固定为 4。
+
+- `controller_type`：控制器粒度，取值为 `bogie` / `car`
+  - 当 `controller_type = bogie` 时，一个 controller 对应一个转向架
+  - 当 `controller_type = car` 时，一个 controller 对应一辆车
+- `n_bogies_by_controller`：每个 controller 对应的 bogie 数量，关联 `controller_type`
+  - `bogie` 时为 1
+  - `car` 时为 2
+- `n_springs_by_controller`：每个 controller 对应的空簧数量，关联 `controller_type`
+  - `bogie` 时为 2
+  - `car` 时为 4
+- `n_cylinders_by_controller`：每个 controller 对应的制动缸数量，关联 `controller_type`
+  - `bogie` 时为 4
+  - `car` 时为 8
+
 - `load_groups`：实验条件载荷组，取值为 AW0 / AW2 / AW3
 - `air_spring`：支持空簧特征点和显式公式两种空簧特性输入。根据特征点拟合时不做分段线性，只收敛为单条直线 `pressure_kpa = k * sprung_mass_by_spring_ton + b`。运行时由 `sprung_mass = mass_static - bogie_weight` 得到控制器簧上质量，再按 `sprung_mass_by_spring_ton = sprung_mass / n_springs_by_controller` 计算单个空簧承担的簧上质量，并代入空簧公式。
   - fitted_from_points：输入若干 `[pressure_kpa, sprung_mass_by_spring_ton]`
   - explicit_linear：输入 airspring_k、airspring_b
 - `mass_params`：转向架类型级质量参数，承载静态质量、转向架自重和旋转质量因子。`mass_static` 与 `bogie_weight` 均使用 `ton`，并在后续计算中保持 `ton`，不再换算为 `kg`。
+  - 车控时，输入中的 `bogie_weight` 仍表示单个 bogie 自重；后台按一车两转向架聚合时乘 2
   - `powered_bogie` / `trailer_bogie` 的旋转质量参数（如 `rotational_mass_factor`）
   - 建议结构：
       ```yaml
@@ -128,58 +175,158 @@
               AW3: ...
             bogie_weight: ...
             rotational_mass_factor: ...
+        ```
+  - 车控下 `powered_car` 对应两套 `powered_bogie` 参数，`trailer_car` 对应两套 `trailer_bogie` 参数
 
 - `allocation_strategy`：制动力分配策略配置，可选一个：
     - `equal_wear`（等磨耗分配）：尽量在所有控制器上平均分配目标制动力
     - `equal_adhesion`（等黏着分配）：按各控制器控制范围内的载荷（`mass_dynamic`）比例分配
     - **适用规则**：
-        - 紧急制动（EB）**必须**采用 `equal_adhesion`，不受本配置影响
-        - 最大常用制动（FSB）及以 FSB 百分比定义的自定义类型（保持、跳跃等）按 `allocation_strategy` 配置执行
-- `vehicle_config`：逐控制器实例配置。MVP 阶段 `controller_type = bogie`，因此配置形态为逐转向架实例配置
-    - 当 `controller_type = bogie` 时，每个转向架实例对应一个控制器
-    - 每个转向架实例需显式给出：
-        - `name`
-        - `bogie_type`：`powered_bogie` / `trailer_bogie`
-    - 静态质量不在实例层配置；实例的 `bogie_type` 用于到 `mass_params` 中读取该类型的 `mass_static`、`bogie_weight` 和 `rotational_mass_factor`
-    - `bogie_type` 用于选择该类转向架的共性参数，例如旋转质量因子
+        - 紧急制动（EB）**必须**采用 `equal_adhesion`
+        - 快速制动（FB）**必须**采用 `equal_adhesion`
+        - 最大常用制动（FSB）及以 FSB 百分比定义的自定义类型按 `allocation_strategy` 配置执行
+        - 若用户配置 `equal_wear` 但在当前载荷关系下超过全局黏着限制 `adhesion.mu_limit`，软件应自动切换为 `equal_adhesion`，并记录告警与自动调整信息
+
+- `vehicle_config`：逐控制器实例配置，配置形态由 `controller_type` 决定
+  - 当 `controller_type = bogie` 时，每个转向架实例对应一个控制器：
+    - `name`
+    - `bogie_type`：`powered_bogie` / `trailer_bogie`
     - 建议结构：
-        ```yaml
-          vehicle_config:
-            bogies:
-              - name: trailer_bogie_1
-                bogie_type: trailer_bogie
-              - name: powered_bogie_3
-                bogie_type: powered_bogie
-        ```
-    - trailer_bogie_1 表示编号为 1 的拖车转向架实例
-      powered_bogie_3 表示编号为 3 的动力转向架实例
+      ```yaml
+      vehicle_config:
+        bogies:
+          - name: trailer_bogie_1
+            bogie_type: trailer_bogie
+          - name: powered_bogie_3
+            bogie_type: powered_bogie
+      ```
+    - `trailer_bogie_1` 表示编号为 1 的拖车转向架实例
+    - `powered_bogie_3` 表示编号为 3 的动力转向架实例
+  - 当 `controller_type = car` 时，每辆车对应一个控制器：
+    - `name`
+    - `car_type`：`powered_car` / `trailer_car`
+    - 建议结构：
+      ```yaml
+      vehicle_config:
+        cars:
+          - name: trailer_car_1
+            car_type: trailer_car
+          - name: powered_car_2
+            car_type: powered_car
+      ```
+    - `powered_car` 表示该控制器控制一辆由两个动力转向架组成的车辆
+    - `trailer_car` 表示该控制器控制一辆由两个拖车转向架组成的车辆
+    - 若一辆车存在动架与拖架混合，则业务上不采用车控 BCU，而改用架控
+- 静态质量不在实例层配置；实例的 `bogie_type` 或 `car_type` 用于到 `mass_params` 中读取对应类型参数
+
 - `mass_static` = `sprung_mass` + `bogie_weight`
 - `sprung_mass` = `mass_static` - `bogie_weight`    
-- `mech_params`：制动缸机械模型参数，全列共享一套，用于在 S7 中由 `F_by_controller` 反算基础制动缸压力 `BCP_base_by_controller`，并内部推导基础力-压力转换系数 `k_initial`。MVP 阶段仅支持 `cylinder_type: tread_cylinder`（踏面制动缸），不支持 `caliper_cylinder`；`caliper_cylinder` 后续扩展。制动缸数量不在 `mech_params` 中重复配置，统一使用顶层 `n_cylinders_by_controller`。
-  - MVP tread_cylinder 配置字段：
+- `mech_params`：制动缸机械模型参数，全列共享一套，用于在 S7 中由 `F_by_controller` 反算基础制动缸压力 `BCP_base_by_controller`，并内部推导基础力-压力转换系数 `k_initial`。V1 支持：
+  - `cylinder_type: tread_cylinder`
+  - `cylinder_type: caliper_cylinder`
+  - 制动缸数量不在 `mech_params` 中重复配置，统一使用顶层 `n_cylinders_by_controller`
+  - 通用字段建议结构：
     ```yaml
     mech_params:
-      cylinder_type: tread_cylinder
+      cylinder_type: tread_cylinder   # or caliper_cylinder
       Sc: 0.0248     # 单位: m^2，活塞有效面积
-      xi: 0.29       # 单位: -，动摩擦系数
+      xi: 0.29       # 单位: -，摩擦系数
       Li: 3.4        # 单位: -，单元内部倍率
       eta_i: 0.95    # 单位: -，单元内部效率
       Lo: 1.0        # 单位: -，外部倍率
       eta_o: 1.0     # 单位: -，外部效率
       Fs1: 1.0       # 单位: kN，单元复位力 1
       Fs2: 0.25      # 单位: kN，单元复位力 2
+      Dw: ...        # 单位: m，仅 caliper_cylinder 需要
+      Rf: ...        # 单位: m，仅 caliper_cylinder 需要
     ```
-  - `Fw` 暂不作为 YAML 接口暴露，MVP 按 `Fw = 0` 处理。
-  - 对 `tread_cylinder`，踏面摩擦半径等效为车轮滚动半径，标准公式中的 `Dw / (2 * Rf)` 按 1 处理；因此 MVP 不配置 `Dw` 和 `Rf`。
+  - `Fw` 暂不作为 YAML 接口暴露，V1 按 `Fw = 0` 处理
+  - 对 `tread_cylinder`，标准公式中的 `Dw / (2 * Rf)` 按 1 处理，因此网页端不需要输入 `Dw` 和 `Rf`
+  - 对 `caliper_cylinder`，必须显式配置 `Dw` 和 `Rf`
 
-- `pressure_calibration`：可选压力标定配置，用于 S8 输出侧标定；包含 `enabled`、按载荷组与制动模式组织的 `k(f)` 曲线、固定 `BCP0` 标定值以及 fallback 规则。不包含 S7 的基础机械模型默认参数。
-- `EB_limit_min`：紧急制动输出最小压力值
+- `pressure_calibration`：可选压力标定配置，用于 S8 输出侧标定。V1 采用**试验点驱动**方式输入，不要求用户直接维护完整 `k_segments`。标定分为两组：
+  - `service_brake`：生成常用/快速制动共用的 `k_sb(f)` 与 `BCP0_sb`
+  - `emergency_brake`：生成紧急制动独立的 `k_eb(f)` 与 `BCP0_eb`
+  - 两组都支持两种点组合方式：
+    - `aw3_aw0`
+    - `aw3_aw2`
+  - 试验点输入建议结构：
+    ```yaml
+    pressure_calibration:
+      enabled: true
+      service_brake:
+        BCP0: 25.0
+        point_pair_mode: aw3_aw0
+        points:
+          - load_group: AW0
+            brake_type: FB
+            k_for_code: 1050
+          - load_group: AW3
+            brake_type: FSB
+            k_for_code: 1200
+      emergency_brake:
+        BCP0: 30.0
+        point_pair_mode: aw3_aw0
+        points:
+          - load_group: AW0
+            brake_type: EB
+            k_for_code: 1100
+          - load_group: AW3
+            brake_type: EB
+            k_for_code: 1250
+    ```
+
+- `parking_brake_check`：停放制动力校核输入，仅用于校核，不参与常用/紧急/快速制动压力标准计算。建议结构：
+  ```yaml
+  parking_brake_check:
+    enabled: true
+    required_safety_margin: 1.2
+    static_friction_coefficient: 0.35
+    n_parking_cylinders_by_car: 1
+    cylinder:
+      Fp: 8.75
+      Fs1: 1.2
+      Fs2: 0.15
+      Lpi: 2.04
+      eta_pi: 1.0
+      Lo: 1.0
+      eta_o: 1.0
+    environment:
+      wind_speed_max: 34.0
+      wind_resistance_coefficient: 0.0037
+      grade_by_load_group:
+        AW0: 40
+        AW3: 40
+    ```
+
+- `adhesion`：全局黏着限制输入，供黏着校核与自动分配策略切换使用。建议结构：
+  ```yaml
+  adhesion:
+    mu_limit: 0.16
+  ```
+
+- `electric_brake`：电制动特性输入预留，当前 V1 不参与主制动计算，仅保存识别后的结构化特性点。建议结构：
+  ```yaml
+  electric_brake:
+    enabled: false
+    force_scope: train_total
+    characteristic_points: []
+  ```
+
+- force_scope 允许取值：
+  - train_total
+  - per_car
+  - per_bogie
+  - per_axle
+
+- EB_limit_min：紧急制动输出最小压力值
+
 - 压力限制规则：
-    - `EB max = 600`
-    - `EB min = EB_limit_min`
-    - `FSB max = 当前载荷组下 EB 压力`
-    - `FSB min = 无`
-
+  - EB max = 600
+  - EB min = EB_limit_min
+  - FSB/ratio_of_FSB/FB max = 当前载荷组下 EB 压力
+  - FSB/ratio_of_FSB min = 无
+  - FB 的最终压力不得超过 EB；若标定后 FB > EB，需自动提高 BCP0_EB 并重新计算 EB 压力标准
 
 ## 5. 模块间数据契约（Context 模型）
 
@@ -192,6 +339,8 @@
 - 每个字段 key 在全局范围内唯一；一旦产出，下游只读引用
 - 未消费的上游字段应**透传**到下游，以保证端到端可追溯
 - 所有数值字段必须带**单位**（见下表），工程量纲不一致时需在 `validate_inputs` 中统一化
+- 若计算过程中发生自动策略调整，必须保留原始输入语义，并把“实际使用配置”以独立字段（如 `auto_adjustments`）追加写入 context，不得覆盖上游输入
+
 
 ### 5.2 Context 字段清单
 
@@ -199,9 +348,9 @@
 | --- | --- | --- | --- | --- |
 | `validated_inputs` | 嵌套对象 | — | s1 | s2–s9 |
 | `a_mean_req` | `[brake_type]`（仅 kinematic 类型） | m/s² | s2 | s3 |
-| `Beta_list` | `[brake_type]` | m/s² | s3 | s4, s5 |
-| `Mass_by_controller` | `[load_group, controller]` → `{mass_static, mass_dynamic}` | ton | s4 | s5, s6 |
-| `F_by_controller` | `[brake_type, load_group, controller]` | kN | s5 (+ s6 规范化) | s7, s8 |
+| `Beta_list` | `[brake_type]` | m/s² | s3 | s4, s5, s9 |
+| `Mass_by_controller` | `[load_group, controller]` → `{mass_static, mass_dynamic}` | ton | s4 | s5, s6, s9 |
+| `F_by_controller` | `[brake_type, load_group, controller]` | kN | s5 (+ s6 规范化) | s7, s8, s9 |
 | `k_initial` | 标量 | kPa/kN | s7 | s8, s9 |
 | `BCP0_initial` | 标量 | kPa | s7 | s8, s9 |
 | `BCP_base_by_controller` | `[brake_type, load_group, controller]` | kPa | s7 | s8 |
@@ -210,14 +359,19 @@
 | `BCP_calibrated_by_controller` | `[load_group, brake_type, controller]` | kPa | s8 | s9（最终输出） |
 | `clamp_events` | `List[{brake_type, load_group, controller, kind, value_before, value_after}]` | — | s8 | s9 |
 | `warnings` | `List[{code, message, context}]` | — | 任意模块 | s9 |
+| `auto_adjustments` | `List[{code, message, original, applied, context}]` | — | s6, s8 | s9 |
 | `trace` | `List[{step_id, module, inputs_hash, outputs_keys, elapsed_ms}]` | — | runner | s9 |
 | `AirSpringPressure_by_controller` | `[load_group, controller]` | kPa | s4 | s9 |
-| `AirSpringFit_by_bogie_type` | `[bogie_type]` -> `{k, b, source_mode}` | kPa/ton, kPa | s4 | s9 |
+| `AirSpringFit_by_bogie_type` | `[bogie_type] -> {k, b, source_mode}` | kPa/ton, kPa | s4 | s9 |
 | `brake_summary` | `[brake_type] -> {beta}` | m/s² | s9 | report |
 | `load_summary` | `[load_group, controller] -> {mass_dynamic, spring_pressure}` | ton, kPa | s9 | report |
 | `controller_pressure_standards` | `[load_group, brake_type, controller]` | kPa | s9 | report / Markdown |
 | `theoretical_speed_checks` | `[brake_type, speed_kmh] -> {requirement_a_mean, theoretical_distance_m, beta_used}` | m/s², m | s9 | report / Markdown |
 | `controller_code_params` | `{dynamic_mass_formula, pressure_conversion}` | mixed | s9 | report / Markdown |
+| `calibration_summary` | `{service_brake, emergency_brake, k_for_code_by_case}` | mixed | s9 | report / Markdown |
+| `parking_brake_check_result` | `{per_car, whole_train, pass}` | mixed | s9 | report / Markdown |
+| `electric_brake_summary` | `{enabled, force_scope, preview_head, preview_tail}` | mixed | s9 | report / Markdown |
+
 
 ### 5.3 关键张量形状（约定）
 
@@ -235,10 +389,18 @@ BCP_calibrated_by_controller:
   dtype: float
   unit: kPa
 ```
+补充约定：
+- `Mass_by_controller` 在架控下对应单 bogie，在车控下对应整车聚合质量
+- `AirSpringPressure_by_controller` 在架控和车控下都表示**单个空簧压力标准**
+- `theoretical_speed_checks` 在 V1 中覆盖 `FSB`、`EB`、`FB`
+
 
 ### 5.4 错误 / 告警 / 追溯通道
 
-- `warnings`：非致命情形写入，如 k 超标定范围、AW2 使用 fallback、限幅触发等；每条含稳定的 `code` 便于机器判定
+- `warnings`：非致命情形写入，如 k 超标定范围、AW2 使用 fallback、限幅触发、超黏着后强制改用等黏着、`FB` 压力超过 `EB` 后自动上调 `BCP0_EB` 等；每条含稳定的 `code` 便于机器判定
+- `auto_adjustments`：记录软件自动采取的策略调整，需保留原始用户输入与最终实际使用配置之间的差异，例如：
+  - `equal_wear -> equal_adhesion`
+  - `BCP0_EB` 自动提高
 - `clamp_events`：阀件限幅的事件流，记录限幅前/后值，供 `summarize_and_checks` 统计
 - `trace`：由 runner（本地调试或 Hermes）写入，每个 step 的输入 hash / 输出 key / 耗时，用于复跑比对
 - **致命错误**（例如输入校验失败）应直接抛异常中止 workflow，不走 `warnings`
@@ -251,19 +413,29 @@ flowchart TD
   S1 -->|validated_inputs| S2[s2 derive_requirement]
   S2 -->|a_mean_req| S3[s3 response_compensation]
   S1 -->|brake_types, response_time| S3
+
   S3 -->|Beta_list| S4[s4 calc_dynamic_load_and_mass]
   S1 -->|vehicle_config, mass_params, air_spring| S4
+
   S4 -->|Mass_by_controller| S5[s5 calc_required_brake_force]
   S3 -->|Beta_list| S5
   S1 -->|allocation_strategy| S5
+
   S5 -->|F_by_controller| S6[s6 allocate_brake_force]
-  S1 -->|allocation_strategy, vehicle_config| S6
+  S1 -->|allocation_strategy, vehicle_config, adhesion| S6
+
   S6 -->|F_by_controller| S7[s7 force_to_pressure_base]
   S1 -->|mech_params, n_cylinders_by_controller| S7
+
   S7 -->|BCP_base_by_controller, k_initial, BCP0_initial| S8[s8 apply_pressure_calibration]
   S1 -->|pressure_calibration, EB_limit_min| S8
+  S5 -->|F_by_controller| S8
+
   S8 -->|BCP_calibrated_by_controller, k_used_by_controller, BCP0_used_by_controller| S9[s9 summarize_and_checks]
-  S8 -.clamp_events, warnings.-> S9
+  S8 -.clamp_events, warnings, auto_adjustments.-> S9
+  S1 -->|parking_brake_check, electric_brake| S9
+  S4 -->|AirSpringPressure_by_controller, AirSpringFit_by_bogie_type| S9
+
   S9 --> OUT[report + BCP_calibrated_by_controller]
 ```
 
@@ -276,48 +448,83 @@ flowchart TD
 
 - in: inputs
 - out: validated_inputs
-- 作用：对输入参数做结构/类型/单位校验与归一化，填默认值，产出后续模块可信赖的 `validated_inputs`；质量字段在输入、Context 和计算中统一使用 `ton`。
+- 作用：对输入参数做结构/类型/单位校验与归一化，填默认值，产出后续模块可信赖的 `validated_inputs`；质量字段在输入、Context 和计算中统一使用 `ton`。V1 需覆盖 `controller_type = bogie | car`、`fast_brake`、`caliper_cylinder`、`parking_brake_check`、`adhesion`、`electric_brake` 以及新的试验点驱动标定结构。
 
 2) `derive_requirement`
 
 - in: validated_inputs
 - out: a_mean_req
-- 作用：将技术条件 `requirement`（平均减速度 **或** 制动距离）统一换算成 `a_mean_req` — 即各「运动学类」制动类型（FSB、EB）对应的**平均减速度需求值**；若输入为制动距离，在此处由 v0 和距离反算出等效平均减速度
+- 作用：将技术条件 `requirement`（平均减速度 **或** 制动距离）统一换算成 `a_mean_req` —— 即各“运动学类”制动类型（当前为 `FSB`、`EB`）对应的平均减速度需求值；若输入为制动距离，在此处由 `v0` 和距离反算出等效平均减速度。`FB` 不单独进入 `a_mean_req`，而是在 S3 中直接继承 `Beta_EB`
 
 3) `response_compensation`
 
 - in: validated_inputs（含 `brake_types`、`response_time`） + a_mean_req
 - out: `Beta_list`（与 `brake_types` 顺序对应的控制用目标减速度向量）
 - note:
-    - 对 `source: kinematic` 的制动类型 EB，先由 `a_mean_req` 反算标准制动距离 `S = v^2 / (2 * a_mean_req)`，再按距离扣除模型补偿响应损失：`Beta_EB = v^2 / (2 * (S - v * (t1_EB + t2_EB / 2)))`。
-    - 对 `source: kinematic` 的制动类型 FSB，先由 `a_mean_req` 反算标准制动距离 `S = v^2 / (2 * a_mean_req)`；建立时间由冲击率决定，`t2_FSB = Beta_FSB / impulse_rate`，并与距离扣除模型 `Beta_FSB = v^2 / (2 * (S - v * (t1_FSB + t2_FSB / 2)))` 联立求解控制减速度。
-    - 若响应损失距离不小于标准制动距离，则该输入无物理可行解，应报错。
-    - 对 `source: ratio_of_FSB` 的用户自定义类型，直接按 `ratio * Beta[FSB]` 得到，不再单独做运动学补偿。
+    - 对 `source: kinematic` 的 `EB`：
+      - 先由 `a_mean_req` 反算标准制动距离 `S = v^2 / (2 * a_mean_req)`
+      - 再按距离扣除模型补偿响应损失：
+        `Beta_EB = v^2 / (2 * (S - v * (t1_EB + t2_EB / 2)))`
+    - 对 `source: kinematic` 的 `FSB`：
+      - 先由 `a_mean_req` 反算标准制动距离 `S = v^2 / (2 * a_mean_req)`
+      - 建立时间由冲击率决定，`t2_FSB = Beta_FSB / impulse_rate`
+      - 与距离扣除模型联立求解控制减速度
+    - 对 `source: fast_brake` 的 `FB`：
+      - 不单独反求控制目标减速度
+      - 直接取 `Beta_FB = Beta_EB`
+      - 但后续在 S9 理论速度检查中，仍使用 `FB` 自身的响应模型（`t1 + impulse_rate`）
+    - 若响应损失距离不小于标准制动距离，则该输入无物理可行解，应报错
+    - 对 `source: ratio_of_FSB` 的用户自定义类型，直接按 `ratio * Beta[FSB]` 得到，不再单独做运动学补偿
 
 4) `calc_dynamic_load_and_mass`
 
-- in: validated_inputs（由实例的 bogie_type 去 mass_params 中读取该类型的 `mass_static `和 `rotational_mass_factor`、`mass_params`、`air_spring`、`bogie_weight`）
-- out: `Mass_by_controller`（按 `load_group × controller` 的质量向量）、`AirSpringPressure_by_controller`、`AirSpringFit_by_bogie_type`;
-- note: 不同 `bogie_type`（`powered_bogie` / `trailer_bogie`）的旋转质量参数不同，需按转向架类型分别计算;先算 `sprung_mass` = `mass_static` - `bogie_weight`,再按线性公式计算空簧压力标准，最后计算质量向量、空簧压力标准与空簧拟合公式；动态制动质量按 `mass_dynamic = mass_static[load_group] + mass_static[AW0] * rotational_mass_factor` 计算，即旋转质量增量以同一转向架类型的 AW0 静态质量为基准。
+- in: validated_inputs（由 `bogie_type` 或 `car_type` 去 `mass_params` 中读取质量参数、`air_spring`、`bogie_weight`）
+- out: `Mass_by_controller`、`AirSpringPressure_by_controller`、`AirSpringFit_by_bogie_type`
+- note:
+    - 架控时，一个 controller 对应一个 bogie
+    - 车控时，一个 controller 对应一辆车，按两个同类型 bogie 聚合：
+      - `powered_car` = 两个 `powered_bogie`
+      - `trailer_car` = 两个 `trailer_bogie`
+    - 车控下：
+      - `mass_static` 为整车级质量
+      - `bogie_weight` 聚合时乘 2
+      - `mass_dynamic` 为整车级动态制动质量
+      - `n_springs_by_controller = 4`
+    - 空簧压力公式始终输出**单个空簧压力标准**
+    - 先算 `sprung_mass = mass_static - bogie_weight`
+    - 再按 `sprung_mass_by_spring_ton = sprung_mass / n_springs_by_controller` 计算单个空簧承担的簧上质量
+    - 动态制动质量按 `mass_dynamic = mass_static[load_group] + mass_static[AW0] * rotational_mass_factor` 计算，即旋转质量增量以同类型 AW0 静态质量为基准
+
 
 5) `calc_required_brake_force`
 
 - in: `Beta_list` + `Mass_by_controller`
-- out: F_by_controller（kN），按 `brake_type × load_group × controller` 组织
-- note: 各控制器目标制动力的计算需结合 `allocation_strategy` 与适用规则：
-    - 各制动类型的总目标制动力均按 `F_kN = mass_dynamic_ton * Beta` 计算。
+- out: `F_by_controller`（kN），按 `brake_type × load_group × controller` 组织
+- note:
+    - 各制动类型的总目标制动力均按 `F_kN = mass_dynamic_ton * Beta` 计算
     - `EB` 强制采用 `equal_adhesion`
+    - `FB` 强制采用 `equal_adhesion`
     - `FSB` 及 `ratio_of_FSB` 类型：
         - 若 `allocation_strategy = equal_wear`，则各控制器平均分配
         - 若 `allocation_strategy = equal_adhesion`，则按各 controller 的 `mass_dynamic` 比例分配
-        - 质量单位采用 `ton`，制动力单位采用 `kN`；此处参与目标制动力计算与等黏着分配的质量均为 `mass_dynamic`。
+    - 质量单位采用 `ton`，制动力单位采用 `kN`
+    - 此处参与目标制动力计算与等黏着分配的质量均为 `mass_dynamic`
 
 
 6) `allocate_brake_force`
 
-- in: F_by_controller + allocation_strategy + vehicle_config
-- out: F_by_controller（确认粒度与分配后的结构；如步骤 5 已按策略给出最终值，此步仅做验证与粒度规范化）
-- 作用：校验「按策略分配后的控制器制动力」是否满足设计约束（如各控制器黏着上限、各车辆比例），并统一输出粒度；若检测到约束越限写入 `warnings`
+- in: `F_by_controller` + allocation_strategy + vehicle_config + adhesion
+- out: F_by_controller（确认粒度与分配后的结构；如步骤 5 已按策略给出最终值，此步负责验证、约束修正与粒度规范化）
+- 作用：校验分配结果是否满足设计约束，并统一输出粒度。
+- note:
+    - 对 `EB` 与 `FB`，必须使用 `equal_adhesion`
+    - 对 `FSB` 与 `ratio_of_FSB`：
+      - 若用户配置 `equal_wear`，先按等磨耗分配
+      - 若校验发现超过全局黏着限制 `adhesion.mu_limit`
+      - 则自动切换为 `equal_adhesion`
+      - 写入 `warnings` 与 `auto_adjustments`
+    - 输出中应保留原始配置与实际使用策略的差异信息，供 S9 汇总
+
 
 7) `force_to_pressure_base`
 
@@ -325,30 +532,27 @@ flowchart TD
 - out: `k_initial` + `BCP0_initial` + `BCP_base_by_controller`
 - 作用：按制动缸机械模型推导理论基础力-压力转换参数，并将每 controller 目标制动力 `F_by_controller`（kN）反算为未标定的基础制动缸压力 `BCP_base_by_controller`（kPa）。
 - note:
-    - `k_initial` 与 `BCP0_initial` 不作为输入显式配置，由 `mech_params` 与 `n_cylinders_by_controller` 内部推导。
-    - MVP 阶段仅支持 `cylinder_type = tread_cylinder`。
-    - 标准公式中由总目标制动力反算制动缸压力。MVP 中 `Fw = 0`，且踏面制动 `Dw / (2 * Rf) = 1`，因此使用：
-      ```text
-      BCP_base =
-      (
-        (
-          F_by_controller
-          / (n_cylinders_by_controller * Lo * eta_o * xi)
-          + Fs1
-        )
-        / (Li * eta_i)
-        + Fs2
-      )
-      / Sc
-      ```
-    - 单位约定：`F_by_controller`、`Fs1`、`Fs2` 使用 kN，`Sc` 使用 m²，因此 `kN / m² = kPa`，输出 `BCP_base` 为 kPa。
-    - 该公式可整理为线性形式：
+    - `k_initial` 与 `BCP0_initial` 不作为输入显式配置，由 `mech_params` 与 `n_cylinders_by_controller` 内部推导
+    - 支持两种基础制动形式：
+      - `tread_cylinder`
+      - `caliper_cylinder`
+    - `Fw` 在 V1 中按 `0` 处理，不作为 YAML 输入
+    - 对 `tread_cylinder`：
+      - `Dw / (2 * Rf)` 按 1 处理
+      - 网页端不需要输入 `Dw` 和 `Rf`
+    - 对 `caliper_cylinder`：
+      - 必须显式输入 `Dw` 和 `Rf`
+      - 计算公式中保留 `Dw / (2 * Rf)` 项
+    - 统一线性形式仍为：
       ```text
       BCP_base = k_initial * F_by_controller + BCP0_initial
-      k_initial = 1 / (n_cylinders_by_controller * Lo * eta_o * xi * Li * eta_i * Sc)
-      BCP0_initial = (Fs1 / (Li * eta_i) + Fs2) / Sc
       ```
-    - `k_initial` 与 `BCP0_initial` 必须由当前 `mech_params` 与 `n_cylinders_by_controller` 按上述公式实时计算，不设置、不读取、不校准为固定示例值。
+    - 单位约定：
+      - `F_by_controller`、`Fs1`、`Fs2` 使用 kN
+      - `Sc` 使用 m²
+      - 输出 `BCP_base` 为 kPa
+    - `k_initial` 与 `BCP0_initial` 必须由当前 `mech_params` 与 `n_cylinders_by_controller` 实时计算，不设置、不读取、不校准为固定示例值
+
 
 8) `apply_pressure_calibration`
 
@@ -356,15 +560,37 @@ flowchart TD
 - out: `k_used_by_controller` + `BCP0_used_by_controller` + `BCP_calibrated_by_controller`
 - 作用：可选应用调试标定参数，决定最终用于每个 controller 的 `k_used` 与 `BCP0_used`，计算最终压力标准并执行阀件限幅。
 - note:
-    - 若未启用标定，`k_used = k_initial`，`BCP0_used = BCP0_initial`。
-    - 若启用标定，按 `load_group + brake_mode + F_by_controller` 查询 `k(f)`，按 `load_group + brake_mode` 选择固定 `BCP0`。
+    - 若未启用标定，`k_used = k_initial`，`BCP0_used = BCP0_initial`
+    - 若启用标定：
+      - 常用/快速制动 (`FSB`、`FB`、`ratio_of_FSB`) 使用 `service_brake` 试验点生成的 `k_sb(f)` 与 `BCP0_sb`
+      - 紧急制动 (`EB`) 使用 `emergency_brake` 试验点生成的 `k_eb(f)` 与 `BCP0_eb`
+    - 试验点生成规则：
+      - AW0 取该工况下各 controller 制动力最大值作为力坐标
+      - AW3 取该工况下各 controller 制动力最小值作为力坐标
+      - AW2 取该工况下各 controller 制动力平均值作为力坐标
+    - 支持两种点组合：
+      - `aw3_aw0`
+      - `aw3_aw2`
+    - 对 `aw3_aw2`：
+      - 常用/快速制动需要外推到 AW0 参考力点
+      - 若项目启用 `FB`，则 AW0 参考力取 `AW0 + FB` 工况下各 controller force 的最大值
+      - 若项目未启用 `FB`，则 AW0 参考力取 `AW0 + FSB` 工况下各 controller force 的最大值
+      - 紧急制动的 AW0 参考力取 `AW0 + EB` 工况下各 controller force 的最大值
+    - 生成的 `k_sb(f)` 与 `k_eb(f)` 必须是覆盖完整有效力区间的分段曲线：
+      - 低力段常数
+      - 中间段线性
+      - 高力段常数
+      - 不允许出现某个有效力值下无可用 k 的情况
     - 最终压力统一按：
       ```text
       BCP_calibrated = k_used * F_by_controller + BCP0_used
       ```
-    - `BCP_calibrated_by_controller` 以 `[load_group ∈ {AW0, AW2, AW3}] × [brake_type ∈ brake_types] × [controller]` 的三维结构输出。
-    - 如需观察标定幅度，可在 `summarize_and_checks` 的 report 中临时计算 `BCP_calibrated - BCP_base`，不作为持久化字段。
-
+    - `FB` 的最终压力不得超过 `EB`
+      - 若同一 `load_group × controller` 下出现 `BCP_FB > BCP_EB`
+      - 则自动提高 `BCP0_EB`
+      - 并重新计算 `EB` 的最终压力标准
+      - 同时记录 warning 和 auto_adjustment
+    - `BCP_calibrated_by_controller` 以 `[load_group × brake_type × controller]` 的三维结构输出
 
 9) `summarize_and_checks`
 
@@ -375,12 +601,34 @@ flowchart TD
   - `brake_summary`：各 `brake_type` 的 `beta`
   - `load_summary`：各 `load_group × controller` 的 `mass_dynamic` 与 `spring_pressure`
   - `controller_pressure_standards` / `BCP_calibrated_by_controller`：各 `load_group × brake_type × controller` 的 BC 压力标准
-  - `theoretical_speed_checks`：按 `V_list` 或默认 `v0` 输出 FSB/EB 的理论速度检查值；固定使用 S3 在 `v0` 下得到的 `Beta_list[brake_type]` 前向计算各初速度的理论制动距离与平均减速度，不在每个速度点重新反求控制减速度，也不使用 BCP 反推性能。
-  - 报告显示精度：距离与 kPa 四舍五入到整数，载重 ton 四舍五入到小数点后 2 位，减速度四舍五入到小数点后 3 位。
+  - `theoretical_speed_checks`：按 `V_list` 或默认 `v0` 输出 `FSB`、`EB`、`FB` 的理论速度检查值
+    - `FSB`：使用其自身响应模型
+    - `EB`：使用其自身响应模型
+    - `FB`：控制目标减速度取 `Beta_EB`，但理论速度检查时使用 `FB` 自身的响应模型（`t1 + impulse_rate`）
+    - `ratio_of_FSB` 类型不单独生成理论速度检查
   - `controller_code_params`：控制器开发用动态载荷公式和压力转换圆整参数
+  - `calibration_summary`：标定试验点、生成的 `k_sb(f)` / `k_eb(f)`、`BCP0_sb` / `BCP0_eb`、以及 AW0/AW2/AW3 对应的 `k_for_code`
+  - `parking_brake_check_result`：停放制动力校核结果，包括：
+    - 每车双侧停放作用力 `F_N_PB`
+    - 每车停放制动力 `F_PB`
+    - 每车倾斜力
+    - 每车防滚安全余量
+    - 整列停放制动力
+    - 整列倾斜力
+    - 整列防滚安全余量
+    - 是否通过
+  - `electric_brake_summary`：电制动特性输入摘要，仅展示识别后的特性点前若干项和末若干项，当前不参与主制动计算
+  - `auto_adjustments`：自动调整记录，包括但不限于：
+    - 超黏着后由 `equal_wear` 自动切换为 `equal_adhesion`
+    - `FB` 压力超过 `EB` 后自动上调 `BCP0_EB`
   - `delta_BCP`、`warnings`、`clamp_events`、`trace`
+- 报告显示精度：
+  - 距离与 kPa 四舍五入到整数
+  - 载重 ton 四舍五入到小数点后 2 位
+  - 减速度四舍五入到小数点后 3 位
 
-## 7. pressure_calibration（压力标定曲线 + fallback）
+
+## 7. pressure_calibration（试验点驱动的压力标定）
 
 ### 7.1 默认基础换算
 
@@ -389,42 +637,168 @@ flowchart TD
   ```text
   BCP_base = k_initial * F_by_controller + BCP0_initial
   ```
-- `pressure_calibration` 仅描述输出侧调试标定参数，不覆盖 S7 的机械模型本体。
+- `pressure_calibration` 仅描述输出侧调试标定参数，不覆盖 S7 的机械模型本体；V1 中标定输入采用“试验点驱动”结构，而不是直接配置完整分段曲线
 
 ### 7.2 标定开关
 
 - `pressure_calibration.enabled = false` 时，S8 不做调试标定：
-  - k_used = k_initial
-  - BCP0_used = BCP0_initial
-  - BCP_calibrated = k_used * F_by_controller + BCP0_used
-- `pressure_calibration.enabled = true` 时，S8 使用标定配置：
-  ```text
-  k_used = k_of_f(load_group, brake_mode, F_by_controller)
-  BCP0_used = BCP0_calibrated(load_group, brake_mode)
-  BCP_calibrated = k_used * F_by_controller + BCP0_used
-  ```
+  - `k_used = k_initial`
+  - `BCP0_used = BCP0_initial`
+  - `BCP_calibrated = k_used * F_by_controller + BCP0_used`
+- `pressure_calibration.enabled = true` 时，S8 使用试验点驱动标定配置：
+  - 常用/快速制动：由 `service_brake` 生成 `k_sb(f)` 与 `BCP0_sb`
+  - 紧急制动：由 `emergency_brake` 生成 `k_eb(f)` 与 `BCP0_eb`
+  - 最终压力统一按：
+    ```text
+    BCP_calibrated = k_used * F_by_controller + BCP0_used
+    ```
 
 ### 7.3 标定参数的作用域
 
-- k_initial、BCP0_initial 由 S7 机械模型推导，作为未调试状态的理论基础值。
-- 调试后的 k(f) 表示实际使用的力-压力转换系数，单位为 kPa/kN，不是无量纲倍率。
-- 调试后的 BCP0 表示实际使用的初闸压力，单位为 kPa；MVP 中 BCP0 按 load_group + brake_mode 取固定值，不随 f 插值。
-- k(f) 与 BCP0 的作用域为全列共享；每个 controller 使用自身的 F_by_controller 查询同一套曲线。
-- 常用制动与紧急制动允许使用不同标定参数：FSB 及 ratio_of_FSB 类型使用 FSB 对应标定，EB 使用 EB 对应标定。
+- `k_initial`、`BCP0_initial` 由 S7 机械模型推导，作为未调试状态的理论基础值
+- 调试后的系数分为两套：
+  - `k_sb(f)` / `BCP0_sb`：常用/快速制动体系
+  - `k_eb(f)` / `BCP0_eb`：紧急制动体系
+- `k_sb(f)` 与 `k_eb(f)` 表示实际使用的力-压力转换系数，单位均为 `kPa/kN`
+- `BCP0_sb` 与 `BCP0_eb` 表示实际使用的初闸压力，单位均为 `kPa`
+- 两套标定参数都为全列共享；每个 controller 使用自身 `F_by_controller` 查询同一套曲线
+- `FSB`、`FB` 和 `ratio_of_FSB` 共用 `service_brake` 标定结果
+- `EB` 独立使用 `emergency_brake` 标定结果
 
-### 7.4 标定曲线配置
+### 7.4 标定输入配置（V1）
 
-- 必须提供：AW0、AW3。
-- 可选提供：AW2。
-- 当 AW2 缺失时，默认建议：fallback.AW2 = AW3。
-- k(f) 支持分段常数与分段线性；分段曲线自变量始终为单 controller 的 F_by_controller（kN），不使用全列总力。
-- YAML 中保存物理量原值：k 使用 kPa/kN，BCP0 使用 kPa。S9 输出控制器代码参数时执行向上圆整：`k_used_for_code = ceil(k_used * 100)`，`BCP0_used_for_code = ceil(BCP0_used / 5) * 5`。
+V1 中，`pressure_calibration` 不再要求用户直接维护完整的 `k_segments`。  
+用户输入的是**标定试验点**与固定 `BCP0`，由 S8 根据试验点自动生成分段 `k(f)` 曲线。
+
+`pressure_calibration` 分为两组：
+
+- `service_brake`
+  - 生成常用/快速制动共用的 `k_sb(f)` 与 `BCP0_sb`
+  - 适用于：
+    - `FSB`
+    - `FB`
+    - `ratio_of_FSB`
+- `emergency_brake`
+  - 生成紧急制动独立的 `k_eb(f)` 与 `BCP0_eb`
+  - 适用于：
+    - `EB`
+
+建议结构：
+
+```yaml
+pressure_calibration:
+  enabled: true
+  service_brake:
+    BCP0: 25.0
+    point_pair_mode: aw3_aw0
+    points:
+      - load_group: AW0
+        brake_type: FB
+        k_for_code: 1050
+      - load_group: AW3
+        brake_type: FSB
+        k_for_code: 1200
+  emergency_brake:
+    BCP0: 30.0
+    point_pair_mode: aw3_aw0
+    points:
+      - load_group: AW0
+        brake_type: EB
+        k_for_code: 1100
+      - load_group: AW3
+        brake_type: EB
+        k_for_code: 1250
+```
+- 字段约束：
+  - `enabled` = false 时，S8 不应用调试标定
+  - `enabled` = true 时：
+    - service_brake 和 emergency_brake 两组都必须配置
+  - 每组必须恰好提供两个试验点
+  - `point_pair_mode` 仅允许：
+    - aw3_aw0
+    - aw3_aw2
+  - `service_brake.points[].brake_type` 允许：
+    - FSB
+    - FB
+  - `emergency_brake.points[].brake_type` 固定为：
+    - EB
   
 ### 7.5 标定曲线生成规则
-- 调试人员可在 AW0 空载试验中确定某制动模式的 k_aw0 与 BCP0_aw0，在 AW3 重载试验中确定同一制动模式的 k_aw3 与 BCP0_aw3。
-- 生成 k(f) 曲线时，使用 AW0 工况下该制动模式的 controller 最大 F_by_controller 对应 k_aw0，使用 AW3 工况下该制动模式的 controller 最小 F_by_controller 对应 k_aw3，由两点形成线性段，并按需要扩展为分段曲线。
-- EB 与 FSB 分别按各自试验结果生成曲线。ratio_of_FSB 类型沿用 FSB 标定曲线。
-- BCP0 不做线性插值；按 load_group + brake_mode 选择固定标定值。若某载荷组缺失，按 fallback 规则选择。
+
+#### 7.5.1 力坐标选取规则
+
+- 每个标定试验点都要先映射到一个 controller force 坐标。
+- 对给定 load_group + brake_type 工况，先计算该工况下所有 controller 的 F_by_controller，再按以下规则选取力坐标：
+  - AW0：取各 controller force 的最大值
+  - AW3：取各 controller force 的最小值
+  - AW2：取各 controller force 的平均值
+
+#### 7.5.2 支持的点组合
+
+- V1 支持两种标定点组合：
+  - aw3_aw0
+  - aw3_aw2
+  
+#### 7.5.3 aw3_aw0 生成规则
+
+- 当使用 aw3_aw0 时：
+  - 由 AW0 点与 AW3 点形成主线性段
+  - 在 AW0 力坐标以下，使用 AW0 点对应的常数 k
+  - 在 AW0 与 AW3 力坐标之间，使用线性段
+  - 在 AW3 力坐标以上，使用 AW3 点对应的常数 k
+  - 因此最终生成的 k(f) 一定是：
+    - 低力段常数
+    - 中间线性
+    - 高力段常数
+
+#### 7.5.4 aw3_aw2 生成规则
+
+- 当使用 aw3_aw2 时：
+  - 先用 AW2 点与 AW3 点拟合主线性段
+  - 但低力侧不能留空，因此必须外推到一个 AW0 参考力点
+  - 外推得到 AW0 参考力点对应的 k 值后：
+    - 在该参考力以下，使用外推点常数
+    - 在参考力与 AW3 点之间，使用线性段
+    - 在 AW3 点以上，使用 AW3 点常数
+
+#### 7.5.5 aw3_aw2 的 AW0 参考力规则
+
+- 对 service_brake：
+  - 若项目启用 FB，则 AW0 参考力取 AW0 + FB 工况下各 controller force 的最大值
+  - 若项目未启用 FB，则 AW0 参考力取 AW0 + FSB 工况下各 controller force 的最大值
+- 对 emergency_brake：
+  - AW0 参考力取 AW0 + EB 工况下各 controller force 的最大值
+
+#### 7.5.6 作用域规则
+
+- k_sb(f) 与 BCP0_sb 的作用域为全列共享
+- k_eb(f) 与 BCP0_eb 的作用域为全列共享
+- 每个 controller 使用自身的 F_by_controller 查询同一套曲线
+- FSB、FB 和 ratio_of_FSB 类型共用 service_brake 生成的曲线
+- EB 使用 emergency_brake 生成的曲线
+
+#### 7.5.7 k_for_code 说明
+
+- YAML 中输入的 k_for_code 为控制器开发口径数值。
+- 在物理计算中，实际使用系数换算为：
+  k = `k_for_code` / 100
+- S9 仍需输出各载荷工况下的 k_for_code 值，供控制器开发使用
+
+#### 7.5.8 FB 与 EB 的干涉处理
+
+- 快速制动 FB 使用常用制动体系的 k_sb(f) 与 BCP0_sb。
+- 若标定后出现同一 load_group × controller 下：
+  BCP_FB > BCP_EB
+  则：
+  - 必须自动提高 BCP0_EB
+  - 并重新计算 EB 的最终压力标准
+  - 同时写入 warning 与 auto_adjustment
+  - 网页交互与报告中需明确提示：
+    “快速制动压力超过紧急制动压力，已自动上调紧急制动初闸压力 BCP0_EB 并重新计算紧急制动压力标准。”
+
+#### 7.5.9 覆盖性要求
+- V1 生成的 k_sb(f) 与 k_eb(f) 必须覆盖完整有效力区间。
+- 不允许出现某个有效 controller force 落在曲线空档中、无法取得有效 k 值的情况
 
 ## 8. Workflow（确定执行顺序）
 

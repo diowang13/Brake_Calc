@@ -21,6 +21,27 @@ def derive_tread_pressure_parameters(
     return k_initial, bcp0_initial
 
 
+def derive_pressure_parameters(
+    *,
+    n_cylinders: int,
+    sc: float,
+    xi: float,
+    li: float,
+    eta_i: float,
+    lo: float,
+    eta_o: float,
+    fs1: float,
+    fs2: float,
+    lever_ratio: float = 1.0,
+) -> tuple[float, float]:
+    """按机械倍率推导基础 k_initial 与 BCP0_initial。"""
+    if lever_ratio <= 0:
+        raise ValueError("lever_ratio must be > 0")
+    k_initial = 1.0 / (n_cylinders * lo * eta_o * xi * li * eta_i * sc * lever_ratio)
+    bcp0_initial = (fs1 / (li * eta_i) + fs2) / (sc * lever_ratio)
+    return k_initial, bcp0_initial
+
+
 def force_to_pressure_kpa(force_kn: float, k_value: float, bcp0_kpa: float) -> float:
     """按线性力-压力关系换算制动缸压力。"""
     return k_value * force_kn + bcp0_kpa

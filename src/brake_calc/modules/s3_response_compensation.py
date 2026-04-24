@@ -33,6 +33,8 @@ def run(ctx: Context) -> Context:
         inputs.response_time.EB.t1,
         inputs.response_time.EB.t2,
     )
+    if any(brake_type.name == "FB" for brake_type in inputs.brake_types):
+        beta_list["FB"] = beta_list["EB"]
 
     for brake_type in inputs.brake_types:
         if brake_type.source != "ratio_of_FSB":

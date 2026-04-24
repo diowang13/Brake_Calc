@@ -9,6 +9,6 @@ def test_workflow_end_to_end_matches_reference_shape() -> None:
     report = run_workflow(Inputs.model_validate(make_valid_payload()))
 
     assert set(report.BCP_calibrated_by_controller) == {"AW0", "AW2", "AW3"}
-    assert set(report.BCP_calibrated_by_controller["AW0"]) == {"FSB", "EB", "holding"}
+    assert set(report.BCP_calibrated_by_controller["AW0"]) == {"FSB", "EB", "FB", "holding"}
     assert report.BCP_calibrated_by_controller["AW0"]["FSB"]["powered_bogie_1"] > 0.0
     assert len(report.trace) == 9

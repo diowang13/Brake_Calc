@@ -5,7 +5,7 @@ from __future__ import annotations
 import logging
 
 from brake_calc.contracts.context import Context
-from brake_calc.domain.pressure import derive_tread_pressure_parameters, force_to_pressure_kpa
+from brake_calc.domain.pressure import derive_pressure_parameters, force_to_pressure_kpa
 from brake_calc.errors import InputValidationError
 
 logger = logging.getLogger(__name__)
@@ -18,7 +18,13 @@ def run(ctx: Context) -> Context:
         raise InputValidationError("validated_inputs is required before s7")
 
     mech_params = inputs.mech_params
-    k_initial, bcp0_initial = derive_tread_pressure_parameters(
+    lever_ratio = 1.0
+    if mech_params.cylinder_type == "caliper_cylinder":
+        assert mech_params.Dw is not None
+        assert mech_params.Rf is not None
+        lever_ratio = mech_params.Dw / (2 * mech_params.Rf)
+
+    k_initial, bcp0_initial = derive_pressure_parameters(
         n_cylinders=inputs.n_cylinders_by_controller,
         sc=mech_params.Sc,
         xi=mech_params.xi,
@@ -28,6 +34,7 @@ def run(ctx: Context) -> Context:
         eta_o=mech_params.eta_o,
         fs1=mech_params.Fs1,
         fs2=mech_params.Fs2,
+        lever_ratio=lever_ratio,
     )
 
     base_pressures: dict[str, dict[str, dict[str, float]]] = {}

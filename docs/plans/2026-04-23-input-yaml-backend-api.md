@@ -10,6 +10,29 @@
 
 ---
 
+## V1 对齐说明
+
+本计划已被 [2026-04-24-v1-contract-and-feature-upgrade.md](/D:/codeX/Brake_Calc_Agent/Brake_Calc/docs/plans/2026-04-24-v1-contract-and-feature-upgrade.md) 补充和约束。V1 API/Hermes 层必须支持：
+
+- `schema_version`
+- `controller_type = bogie | car`
+- `fast_brake`
+- `parking_brake_check`
+- `adhesion`
+- `electric_brake`
+- 新的试验点驱动标定结构
+- 自动调整记录 `auto_adjustments`
+
+建议在本计划基础上追加：
+
+- `validate/import/export` 支持 V1 新字段
+- `run` 返回新的结构化 report
+- 增加电制动识别接口占位：
+  - `POST /api/electric-brake/recognize`
+- `ConfigService` / `CalculationService` 要记录自动调整
+
+---
+
 ## 范围
 
 包含：

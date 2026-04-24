@@ -1,6 +1,23 @@
 {
   "$defs": {
+    "AdhesionConfig": {
+      "additionalProperties": false,
+      "description": "\u9ecf\u7740\u9650\u5236\u914d\u7f6e\u3002",
+      "properties": {
+        "mu_limit": {
+          "description": "\u5355\u4f4d: -",
+          "title": "Mu Limit",
+          "type": "number"
+        }
+      },
+      "required": [
+        "mu_limit"
+      ],
+      "title": "AdhesionConfig",
+      "type": "object"
+    },
     "AirSpringParams": {
+      "additionalProperties": false,
       "description": "\u7a7a\u7c27\u914d\u7f6e\u3002",
       "properties": {
         "powered_bogie": {
@@ -48,6 +65,7 @@
       "type": "object"
     },
     "AirSpringPoint": {
+      "additionalProperties": false,
       "description": "\u7a7a\u7c27\u7279\u5f81\u70b9\u3002",
       "properties": {
         "pressure_kpa": {
@@ -68,7 +86,48 @@
       "title": "AirSpringPoint",
       "type": "object"
     },
+    "AutoAdjustmentEntry": {
+      "additionalProperties": false,
+      "description": "\u81ea\u52a8\u8c03\u6574\u8bb0\u5f55\u3002",
+      "properties": {
+        "applied": {
+          "additionalProperties": true,
+          "description": "\u5355\u4f4d: -",
+          "title": "Applied",
+          "type": "object"
+        },
+        "code": {
+          "description": "\u5355\u4f4d: -",
+          "title": "Code",
+          "type": "string"
+        },
+        "context": {
+          "additionalProperties": true,
+          "description": "\u5355\u4f4d: -",
+          "title": "Context",
+          "type": "object"
+        },
+        "message": {
+          "description": "\u5355\u4f4d: -",
+          "title": "Message",
+          "type": "string"
+        },
+        "original": {
+          "additionalProperties": true,
+          "description": "\u5355\u4f4d: -",
+          "title": "Original",
+          "type": "object"
+        }
+      },
+      "required": [
+        "code",
+        "message"
+      ],
+      "title": "AutoAdjustmentEntry",
+      "type": "object"
+    },
     "BogieConfig": {
+      "additionalProperties": false,
       "description": "\u8f6c\u5411\u67b6\u5b9e\u4f8b\u914d\u7f6e\u3002",
       "properties": {
         "bogie_type": {
@@ -94,6 +153,7 @@
       "type": "object"
     },
     "BogieTypeMassParams": {
+      "additionalProperties": false,
       "description": "\u8f6c\u5411\u67b6\u7c7b\u578b\u8d28\u91cf\u53c2\u6570\u3002",
       "properties": {
         "bogie_weight": {
@@ -131,6 +191,7 @@
       "type": "object"
     },
     "BrakeTypeDefinition": {
+      "additionalProperties": false,
       "description": "\u5236\u52a8\u7c7b\u578b\u5b9a\u4e49\u3002",
       "properties": {
         "name": {
@@ -155,6 +216,7 @@
           "description": "\u5355\u4f4d: -",
           "enum": [
             "kinematic",
+            "fast_brake",
             "ratio_of_FSB"
           ],
           "title": "Source",
@@ -166,6 +228,32 @@
         "source"
       ],
       "title": "BrakeTypeDefinition",
+      "type": "object"
+    },
+    "CarConfig": {
+      "additionalProperties": false,
+      "description": "\u8f66\u8f86\u5b9e\u4f8b\u914d\u7f6e\u3002",
+      "properties": {
+        "car_type": {
+          "description": "\u5355\u4f4d: -",
+          "enum": [
+            "powered_car",
+            "trailer_car"
+          ],
+          "title": "Car Type",
+          "type": "string"
+        },
+        "name": {
+          "description": "\u5355\u4f4d: -",
+          "title": "Name",
+          "type": "string"
+        }
+      },
+      "required": [
+        "name",
+        "car_type"
+      ],
+      "title": "CarConfig",
       "type": "object"
     },
     "ClampEvent": {
@@ -214,6 +302,7 @@
       "type": "object"
     },
     "EBResponseTime": {
+      "additionalProperties": false,
       "description": "EB \u54cd\u5e94\u53c2\u6570\u3002",
       "properties": {
         "t1": {
@@ -234,7 +323,86 @@
       "title": "EBResponseTime",
       "type": "object"
     },
+    "ElectricBrakeConfig": {
+      "additionalProperties": false,
+      "description": "\u7535\u5236\u52a8\u8f93\u5165\u9884\u7559\u3002",
+      "properties": {
+        "characteristic_points": {
+          "description": "\u5355\u4f4d: -",
+          "items": {
+            "additionalProperties": true,
+            "type": "object"
+          },
+          "title": "Characteristic Points",
+          "type": "array"
+        },
+        "enabled": {
+          "description": "\u5355\u4f4d: -",
+          "title": "Enabled",
+          "type": "boolean"
+        },
+        "force_scope": {
+          "description": "\u5355\u4f4d: -",
+          "enum": [
+            "train_total",
+            "per_car",
+            "per_bogie",
+            "per_axle"
+          ],
+          "title": "Force Scope",
+          "type": "string"
+        }
+      },
+      "required": [
+        "enabled",
+        "force_scope",
+        "characteristic_points"
+      ],
+      "title": "ElectricBrakeConfig",
+      "type": "object"
+    },
+    "ElectricBrakeSummary": {
+      "additionalProperties": false,
+      "description": "\u7535\u5236\u52a8\u6458\u8981\u3002",
+      "properties": {
+        "enabled": {
+          "description": "\u5355\u4f4d: -",
+          "title": "Enabled",
+          "type": "boolean"
+        },
+        "force_scope": {
+          "description": "\u5355\u4f4d: -",
+          "title": "Force Scope",
+          "type": "string"
+        },
+        "preview_head": {
+          "description": "\u5355\u4f4d: -",
+          "items": {
+            "additionalProperties": true,
+            "type": "object"
+          },
+          "title": "Preview Head",
+          "type": "array"
+        },
+        "preview_tail": {
+          "description": "\u5355\u4f4d: -",
+          "items": {
+            "additionalProperties": true,
+            "type": "object"
+          },
+          "title": "Preview Tail",
+          "type": "array"
+        }
+      },
+      "required": [
+        "enabled",
+        "force_scope"
+      ],
+      "title": "ElectricBrakeSummary",
+      "type": "object"
+    },
     "ExplicitLinearAirSpringConfig": {
+      "additionalProperties": false,
       "description": "\u663e\u5f0f\u7ebf\u6027\u7a7a\u7c27\u914d\u7f6e\u3002",
       "properties": {
         "airspring_b": {
@@ -262,7 +430,30 @@
       "title": "ExplicitLinearAirSpringConfig",
       "type": "object"
     },
+    "FBResponseTime": {
+      "additionalProperties": false,
+      "description": "FB \u54cd\u5e94\u53c2\u6570\u3002",
+      "properties": {
+        "impulse_rate": {
+          "description": "\u5355\u4f4d: m/s^3",
+          "title": "Impulse Rate",
+          "type": "number"
+        },
+        "t1": {
+          "description": "\u5355\u4f4d: s",
+          "title": "T1",
+          "type": "number"
+        }
+      },
+      "required": [
+        "t1",
+        "impulse_rate"
+      ],
+      "title": "FBResponseTime",
+      "type": "object"
+    },
     "FSBResponseTime": {
+      "additionalProperties": false,
       "description": "FSB \u54cd\u5e94\u53c2\u6570\u3002",
       "properties": {
         "impulse_rate": {
@@ -284,6 +475,7 @@
       "type": "object"
     },
     "FittedAirSpringConfig": {
+      "additionalProperties": false,
       "description": "\u57fa\u4e8e\u7279\u5f81\u70b9\u62df\u5408\u7684\u7a7a\u7c27\u914d\u7f6e\u3002",
       "properties": {
         "mode": {
@@ -309,6 +501,7 @@
       "type": "object"
     },
     "Inputs": {
+      "additionalProperties": false,
       "description": "Workflow \u8f93\u5165\u6839\u6a21\u578b\u3002",
       "properties": {
         "EB_limit_min": {
@@ -331,6 +524,10 @@
           "default": null,
           "description": "\u5355\u4f4d: km/h",
           "title": "V List"
+        },
+        "adhesion": {
+          "$ref": "#/$defs/AdhesionConfig",
+          "description": "\u5355\u4f4d: -"
         },
         "air_spring": {
           "$ref": "#/$defs/AirSpringParams",
@@ -361,6 +558,10 @@
           ],
           "title": "Controller Type",
           "type": "string"
+        },
+        "electric_brake": {
+          "$ref": "#/$defs/ElectricBrakeConfig",
+          "description": "\u5355\u4f4d: -"
         },
         "load_groups": {
           "description": "\u5355\u4f4d: -",
@@ -397,6 +598,10 @@
           "description": "\u5355\u4f4d: -",
           "title": "N Springs By Controller",
           "type": "integer"
+        },
+        "parking_brake_check": {
+          "$ref": "#/$defs/ParkingBrakeCheckConfig",
+          "description": "\u5355\u4f4d: -"
         },
         "pressure_calibration": {
           "$ref": "#/$defs/PressureCalibrationConfig",
@@ -440,82 +645,16 @@
         "vehicle_config",
         "mech_params",
         "pressure_calibration",
+        "parking_brake_check",
+        "adhesion",
+        "electric_brake",
         "EB_limit_min"
       ],
       "title": "Inputs",
       "type": "object"
     },
-    "KSegment": {
-      "description": "k(f) \u5206\u6bb5\u5b9a\u4e49\u3002",
-      "properties": {
-        "end_value": {
-          "anyOf": [
-            {
-              "type": "number"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": null,
-          "description": "\u5355\u4f4d: -",
-          "title": "End Value"
-        },
-        "kind": {
-          "description": "\u5355\u4f4d: -",
-          "enum": [
-            "constant",
-            "linear"
-          ],
-          "title": "Kind",
-          "type": "string"
-        },
-        "max_f": {
-          "description": "\u5355\u4f4d: kN",
-          "title": "Max F",
-          "type": "number"
-        },
-        "min_f": {
-          "description": "\u5355\u4f4d: kN",
-          "title": "Min F",
-          "type": "number"
-        },
-        "start_value": {
-          "anyOf": [
-            {
-              "type": "number"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": null,
-          "description": "\u5355\u4f4d: -",
-          "title": "Start Value"
-        },
-        "value": {
-          "anyOf": [
-            {
-              "type": "number"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": null,
-          "description": "\u5355\u4f4d: -",
-          "title": "Value"
-        }
-      },
-      "required": [
-        "min_f",
-        "max_f",
-        "kind"
-      ],
-      "title": "KSegment",
-      "type": "object"
-    },
     "MassParams": {
+      "additionalProperties": false,
       "description": "\u8d28\u91cf\u53c2\u6570\u96c6\u5408\u3002",
       "properties": {
         "powered_bogie": {
@@ -538,6 +677,19 @@
       "additionalProperties": false,
       "description": "\u673a\u68b0\u6a21\u578b\u53c2\u6570\u3002",
       "properties": {
+        "Dw": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "\u5355\u4f4d: m",
+          "title": "Dw"
+        },
         "Fs1": {
           "description": "\u5355\u4f4d: kN",
           "title": "Fs1",
@@ -558,14 +710,30 @@
           "title": "Lo",
           "type": "number"
         },
+        "Rf": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "\u5355\u4f4d: m",
+          "title": "Rf"
+        },
         "Sc": {
           "description": "\u5355\u4f4d: m^2",
           "title": "Sc",
           "type": "number"
         },
         "cylinder_type": {
-          "const": "tread_cylinder",
           "description": "\u5355\u4f4d: -",
+          "enum": [
+            "tread_cylinder",
+            "caliper_cylinder"
+          ],
           "title": "Cylinder Type",
           "type": "string"
         },
@@ -599,17 +767,136 @@
       "title": "MechanicalParams",
       "type": "object"
     },
-    "PressureCalibrationConfig": {
-      "description": "\u538b\u529b\u6807\u5b9a\u914d\u7f6e\u3002",
+    "ParkingBrakeCheckConfig": {
+      "additionalProperties": false,
+      "description": "\u505c\u653e\u5236\u52a8\u529b\u6821\u6838\u914d\u7f6e\u3002",
       "properties": {
-        "calibrated": {
+        "cylinder": {
+          "$ref": "#/$defs/ParkingBrakeCylinderConfig",
+          "description": "\u5355\u4f4d: -"
+        },
+        "enabled": {
+          "description": "\u5355\u4f4d: -",
+          "title": "Enabled",
+          "type": "boolean"
+        },
+        "environment": {
+          "$ref": "#/$defs/ParkingBrakeEnvironmentConfig",
+          "description": "\u5355\u4f4d: -"
+        },
+        "n_parking_cylinders_by_car": {
+          "description": "\u5355\u4f4d: -",
+          "title": "N Parking Cylinders By Car",
+          "type": "integer"
+        },
+        "required_safety_margin": {
+          "description": "\u5355\u4f4d: -",
+          "title": "Required Safety Margin",
+          "type": "number"
+        },
+        "static_friction_coefficient": {
+          "description": "\u5355\u4f4d: -",
+          "title": "Static Friction Coefficient",
+          "type": "number"
+        }
+      },
+      "required": [
+        "enabled",
+        "required_safety_margin",
+        "static_friction_coefficient",
+        "n_parking_cylinders_by_car",
+        "cylinder",
+        "environment"
+      ],
+      "title": "ParkingBrakeCheckConfig",
+      "type": "object"
+    },
+    "ParkingBrakeCheckResult": {
+      "description": "\u505c\u653e\u5236\u52a8\u529b\u6821\u6838\u6c47\u603b\u3002",
+      "properties": {
+        "pass": {
+          "default": false,
+          "description": "\u5355\u4f4d: -",
+          "title": "Pass",
+          "type": "boolean"
+        },
+        "per_car": {
           "additionalProperties": {
-            "additionalProperties": {
-              "$ref": "#/$defs/PressureCalibrationEntry"
-            },
-            "type": "object"
+            "$ref": "#/$defs/ParkingBrakePerCarResult"
           },
           "description": "\u5355\u4f4d: -",
+          "title": "Per Car",
+          "type": "object"
+        },
+        "whole_train": {
+          "$ref": "#/$defs/ParkingBrakeWholeTrainResult",
+          "description": "\u5355\u4f4d: -"
+        }
+      },
+      "title": "ParkingBrakeCheckResult",
+      "type": "object"
+    },
+    "ParkingBrakeCylinderConfig": {
+      "additionalProperties": false,
+      "description": "\u505c\u653e\u5236\u52a8\u7f38\u53c2\u6570\u3002",
+      "properties": {
+        "Fp": {
+          "description": "\u5355\u4f4d: kN",
+          "title": "Fp",
+          "type": "number"
+        },
+        "Fs1": {
+          "description": "\u5355\u4f4d: kN",
+          "title": "Fs1",
+          "type": "number"
+        },
+        "Fs2": {
+          "description": "\u5355\u4f4d: kN",
+          "title": "Fs2",
+          "type": "number"
+        },
+        "Lo": {
+          "description": "\u5355\u4f4d: -",
+          "title": "Lo",
+          "type": "number"
+        },
+        "Lpi": {
+          "description": "\u5355\u4f4d: -",
+          "title": "Lpi",
+          "type": "number"
+        },
+        "eta_o": {
+          "description": "\u5355\u4f4d: -",
+          "title": "Eta O",
+          "type": "number"
+        },
+        "eta_pi": {
+          "description": "\u5355\u4f4d: -",
+          "title": "Eta Pi",
+          "type": "number"
+        }
+      },
+      "required": [
+        "Fp",
+        "Fs1",
+        "Fs2",
+        "Lpi",
+        "eta_pi",
+        "Lo",
+        "eta_o"
+      ],
+      "title": "ParkingBrakeCylinderConfig",
+      "type": "object"
+    },
+    "ParkingBrakeEnvironmentConfig": {
+      "additionalProperties": false,
+      "description": "\u505c\u653e\u5236\u52a8\u73af\u5883\u53c2\u6570\u3002",
+      "properties": {
+        "grade_by_load_group": {
+          "additionalProperties": {
+            "type": "number"
+          },
+          "description": "\u5355\u4f4d: \u2030",
           "propertyNames": {
             "enum": [
               "AW0",
@@ -617,8 +904,132 @@
               "AW3"
             ]
           },
-          "title": "Calibrated",
+          "title": "Grade By Load Group",
           "type": "object"
+        },
+        "wind_resistance_coefficient": {
+          "description": "\u5355\u4f4d: -",
+          "title": "Wind Resistance Coefficient",
+          "type": "number"
+        },
+        "wind_speed_max": {
+          "description": "\u5355\u4f4d: m/s",
+          "title": "Wind Speed Max",
+          "type": "number"
+        }
+      },
+      "required": [
+        "wind_speed_max",
+        "wind_resistance_coefficient",
+        "grade_by_load_group"
+      ],
+      "title": "ParkingBrakeEnvironmentConfig",
+      "type": "object"
+    },
+    "ParkingBrakePerCarResult": {
+      "additionalProperties": false,
+      "description": "\u6bcf\u8f66\u505c\u653e\u5236\u52a8\u529b\u6821\u6838\u7ed3\u679c\u3002",
+      "properties": {
+        "F_N_PB": {
+          "description": "\u5355\u4f4d: kN",
+          "title": "F N Pb",
+          "type": "number"
+        },
+        "F_PB": {
+          "description": "\u5355\u4f4d: kN",
+          "title": "F Pb",
+          "type": "number"
+        },
+        "incline_force": {
+          "description": "\u5355\u4f4d: kN",
+          "title": "Incline Force",
+          "type": "number"
+        },
+        "safety_margin": {
+          "description": "\u5355\u4f4d: -",
+          "title": "Safety Margin",
+          "type": "number"
+        }
+      },
+      "required": [
+        "F_N_PB",
+        "F_PB",
+        "incline_force",
+        "safety_margin"
+      ],
+      "title": "ParkingBrakePerCarResult",
+      "type": "object"
+    },
+    "ParkingBrakeWholeTrainResult": {
+      "additionalProperties": false,
+      "description": "\u6574\u5217\u505c\u653e\u5236\u52a8\u529b\u6821\u6838\u7ed3\u679c\u3002",
+      "properties": {
+        "F_PB": {
+          "description": "\u5355\u4f4d: kN",
+          "title": "F Pb",
+          "type": "number"
+        },
+        "incline_force": {
+          "description": "\u5355\u4f4d: kN",
+          "title": "Incline Force",
+          "type": "number"
+        },
+        "safety_margin": {
+          "description": "\u5355\u4f4d: -",
+          "title": "Safety Margin",
+          "type": "number"
+        }
+      },
+      "required": [
+        "F_PB",
+        "incline_force",
+        "safety_margin"
+      ],
+      "title": "ParkingBrakeWholeTrainResult",
+      "type": "object"
+    },
+    "PressureCalibrationCase": {
+      "additionalProperties": false,
+      "description": "\u4e00\u7ec4\u5236\u52a8\u6a21\u5f0f\u6807\u5b9a\u914d\u7f6e\u3002",
+      "properties": {
+        "BCP0": {
+          "description": "\u5355\u4f4d: kPa",
+          "title": "Bcp0",
+          "type": "number"
+        },
+        "point_pair_mode": {
+          "description": "\u5355\u4f4d: -",
+          "enum": [
+            "aw3_aw0",
+            "aw3_aw2"
+          ],
+          "title": "Point Pair Mode",
+          "type": "string"
+        },
+        "points": {
+          "description": "\u5355\u4f4d: -",
+          "items": {
+            "$ref": "#/$defs/PressureCalibrationPoint"
+          },
+          "title": "Points",
+          "type": "array"
+        }
+      },
+      "required": [
+        "BCP0",
+        "point_pair_mode",
+        "points"
+      ],
+      "title": "PressureCalibrationCase",
+      "type": "object"
+    },
+    "PressureCalibrationConfig": {
+      "additionalProperties": false,
+      "description": "\u538b\u529b\u6807\u5b9a\u914d\u7f6e\u3002",
+      "properties": {
+        "emergency_brake": {
+          "$ref": "#/$defs/PressureCalibrationCase",
+          "description": "\u5355\u4f4d: -"
         },
         "enabled": {
           "default": true,
@@ -626,55 +1037,49 @@
           "title": "Enabled",
           "type": "boolean"
         },
-        "fallback": {
-          "additionalProperties": {
-            "enum": [
-              "AW0",
-              "AW2",
-              "AW3"
-            ],
-            "type": "string"
-          },
-          "description": "\u5355\u4f4d: -",
-          "propertyNames": {
-            "enum": [
-              "AW0",
-              "AW2",
-              "AW3"
-            ]
-          },
-          "title": "Fallback",
-          "type": "object"
+        "service_brake": {
+          "$ref": "#/$defs/PressureCalibrationCase",
+          "description": "\u5355\u4f4d: -"
         }
       },
       "required": [
-        "calibrated"
+        "service_brake",
+        "emergency_brake"
       ],
       "title": "PressureCalibrationConfig",
       "type": "object"
     },
-    "PressureCalibrationEntry": {
-      "description": "\u5355\u4e2a\u8f7d\u8377\u7ec4\u548c\u5236\u52a8\u6a21\u5f0f\u7684\u538b\u529b\u6807\u5b9a\u53c2\u6570\u3002",
+    "PressureCalibrationPoint": {
+      "additionalProperties": false,
+      "description": "\u5355\u4e2a\u6807\u5b9a\u8bd5\u9a8c\u70b9\u3002",
       "properties": {
-        "BCP0": {
-          "description": "\u5355\u4f4d: kPa",
-          "title": "Bcp0",
+        "brake_type": {
+          "description": "\u5355\u4f4d: -",
+          "title": "Brake Type",
+          "type": "string"
+        },
+        "k_for_code": {
+          "description": "\u5355\u4f4d: kPa/kN",
+          "title": "K For Code",
           "type": "number"
         },
-        "k_segments": {
+        "load_group": {
           "description": "\u5355\u4f4d: -",
-          "items": {
-            "$ref": "#/$defs/KSegment"
-          },
-          "title": "K Segments",
-          "type": "array"
+          "enum": [
+            "AW0",
+            "AW2",
+            "AW3"
+          ],
+          "title": "Load Group",
+          "type": "string"
         }
       },
       "required": [
-        "BCP0",
-        "k_segments"
+        "load_group",
+        "brake_type",
+        "k_for_code"
       ],
-      "title": "PressureCalibrationEntry",
+      "title": "PressureCalibrationPoint",
       "type": "object"
     },
     "Report": {
@@ -693,6 +1098,14 @@
           "description": "\u5355\u4f4d: kPa",
           "title": "Bcp Calibrated By Controller",
           "type": "object"
+        },
+        "auto_adjustments": {
+          "description": "\u5355\u4f4d: -",
+          "items": {
+            "$ref": "#/$defs/AutoAdjustmentEntry"
+          },
+          "title": "Auto Adjustments",
+          "type": "array"
         },
         "brake_summary": {
           "additionalProperties": {
@@ -747,6 +1160,18 @@
           "title": "Delta Bcp",
           "type": "object"
         },
+        "electric_brake_summary": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ElectricBrakeSummary"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "\u5355\u4f4d: -"
+        },
         "load_summary": {
           "additionalProperties": {
             "additionalProperties": {
@@ -760,6 +1185,18 @@
           "description": "\u5355\u4f4d: ton, kPa",
           "title": "Load Summary",
           "type": "object"
+        },
+        "parking_brake_check_result": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ParkingBrakeCheckResult"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "\u5355\u4f4d: -"
         },
         "pressure_standards": {
           "additionalProperties": {
@@ -814,6 +1251,7 @@
       "type": "object"
     },
     "RequirementValue": {
+      "additionalProperties": false,
       "description": "\u6280\u672f\u6761\u4ef6\u8f93\u5165\u3002",
       "properties": {
         "mode": {
@@ -844,6 +1282,18 @@
       "properties": {
         "EB": {
           "$ref": "#/$defs/EBResponseTime",
+          "description": "\u5355\u4f4d: -"
+        },
+        "FB": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/FBResponseTime"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
           "description": "\u5355\u4f4d: -"
         },
         "FSB": {
@@ -901,20 +1351,42 @@
       "type": "object"
     },
     "VehicleConfig": {
-      "description": "\u9010\u8f6c\u5411\u67b6\u5b9e\u4f8b\u914d\u7f6e\u3002",
+      "additionalProperties": false,
+      "description": "\u63a7\u5236\u5668\u5b9e\u4f8b\u914d\u7f6e\u3002",
       "properties": {
         "bogies": {
+          "anyOf": [
+            {
+              "items": {
+                "$ref": "#/$defs/BogieConfig"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
           "description": "\u5355\u4f4d: -",
-          "items": {
-            "$ref": "#/$defs/BogieConfig"
-          },
-          "title": "Bogies",
-          "type": "array"
+          "title": "Bogies"
+        },
+        "cars": {
+          "anyOf": [
+            {
+              "items": {
+                "$ref": "#/$defs/CarConfig"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "\u5355\u4f4d: -",
+          "title": "Cars"
         }
       },
-      "required": [
-        "bogies"
-      ],
       "title": "VehicleConfig",
       "type": "object"
     },

@@ -4,8 +4,9 @@ from __future__ import annotations
 
 import math
 from decimal import ROUND_HALF_UP, Decimal
-from typing import Literal
+from typing import Any, Literal
 
+from brake_calc.contracts.report import ElectricBrakeSummary
 from brake_calc.domain.kinematics import kmh_to_mps
 
 
@@ -53,7 +54,7 @@ def theoretical_speed_check(
     *,
     speed_kmh: float,
     beta_target: float,
-    brake_type: Literal["FSB", "EB"],
+    brake_type: Literal["FSB", "EB", "FB"],
     t1: float,
     impulse_rate: float | None = None,
     t2: float | None = None,
@@ -67,9 +68,9 @@ def theoretical_speed_check(
         raise ValueError("t1 must be >= 0")
 
     speed_mps = kmh_to_mps(speed_kmh)
-    if brake_type == "FSB":
+    if brake_type in {"FSB", "FB"}:
         if impulse_rate is None:
-            raise ValueError("FSB speed check requires impulse_rate")
+            raise ValueError(f"{brake_type} speed check requires impulse_rate")
         if impulse_rate <= 0:
             raise ValueError("impulse_rate must be > 0")
         theoretical_distance_m = (
@@ -87,7 +88,6 @@ def theoretical_speed_check(
         )
 
     requirement_a_mean = speed_mps**2 / (2.0 * theoretical_distance_m)
-
     return {
         "requirement_a_mean": requirement_a_mean,
         "theoretical_distance_m": theoretical_distance_m,
@@ -121,6 +121,28 @@ def derive_dynamic_mass_formula(
             f"+ {b_ton:.12g}"
         ),
     }
+
+
+def summarize_electric_brake(
+    *,
+    enabled: bool,
+    force_scope: str,
+    characteristic_points: list[dict[str, Any]],
+) -> ElectricBrakeSummary:
+    """提取电制动特性点摘要。"""
+    preview_count = 3
+    if len(characteristic_points) <= preview_count:
+        preview_head = characteristic_points
+        preview_tail = characteristic_points
+    else:
+        preview_head = characteristic_points[:preview_count]
+        preview_tail = characteristic_points[-preview_count:]
+    return ElectricBrakeSummary(
+        enabled=enabled,
+        force_scope=force_scope,
+        preview_head=preview_head,
+        preview_tail=preview_tail,
+    )
 
 
 def round_k_for_code(k_value: float) -> int:

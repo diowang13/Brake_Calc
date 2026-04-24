@@ -20,6 +20,21 @@ from brake_calc.errors import InputValidationError
 logger = logging.getLogger(__name__)
 
 
+def _iter_controllers(inputs: Inputs) -> list[tuple[str, str]]:
+    """返回控制器名称和对应的转向架类型。"""
+    if inputs.controller_type == "bogie":
+        assert inputs.vehicle_config.bogies is not None
+        return [(bogie.name, bogie.bogie_type) for bogie in inputs.vehicle_config.bogies]
+    assert inputs.vehicle_config.cars is not None
+    return [
+        (
+            car.name,
+            "powered_bogie" if car.car_type == "powered_car" else "trailer_bogie",
+        )
+        for car in inputs.vehicle_config.cars
+    ]
+
+
 def _resolve_air_spring_fit(inputs: Inputs) -> dict[str, dict[str, float | str]]:
     """解析每类转向架的空簧线性公式。"""
     air_spring_fit_by_bogie_type: dict[str, dict[str, float | str]] = {}
@@ -52,22 +67,22 @@ def run(ctx: Context) -> Context:
     for load_group in inputs.load_groups:
         per_controller: dict[str, dict[str, float]] = {}
         pressure_per_controller: dict[str, float] = {}
-        for bogie in inputs.vehicle_config.bogies:
-            params = getattr(inputs.mass_params, bogie.bogie_type)
-            static_mass = params.mass_static[load_group]
-            sprung_mass_ton = static_mass - params.bogie_weight
-            fit = air_spring_fit_by_bogie_type[bogie.bogie_type]
-            pressure_per_controller[bogie.name] = calc_air_spring_pressure(
+        for controller_name, bogie_type in _iter_controllers(inputs):
+            params = getattr(inputs.mass_params, bogie_type)
+            static_mass = params.mass_static[load_group] * inputs.n_bogies_by_controller
+            sprung_mass_ton = static_mass - (params.bogie_weight * inputs.n_bogies_by_controller)
+            fit = air_spring_fit_by_bogie_type[bogie_type]
+            pressure_per_controller[controller_name] = calc_air_spring_pressure(
                 sprung_mass_ton=sprung_mass_ton,
                 n_springs_by_controller=inputs.n_springs_by_controller,
                 k=float(fit["k"]),
                 b=float(fit["b"]),
             )
-            per_controller[bogie.name] = {
+            per_controller[controller_name] = {
                 "mass_static": static_mass,
                 "mass_dynamic": calc_dynamic_mass(
                     static_mass=static_mass,
-                    aw0_static_mass=params.mass_static["AW0"],
+                    aw0_static_mass=params.mass_static["AW0"] * inputs.n_bogies_by_controller,
                     rotational_mass_factor=params.rotational_mass_factor,
                 ),
             }

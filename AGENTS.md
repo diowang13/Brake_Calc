@@ -1,22 +1,24 @@
-# AGENTS.md（brake-calc 仓库模板）
-
-<aside>
-📎
-
-这是给 `brake-calc` 仓库用的 `AGENTS.md` 初稿。把它放到仓库根目录后，Codex / Claude Code 等 agent 会自动加载。需要修改的占位符已用 `...` 标出。
-
-</aside>
+# AGENTS.md
 
 # [AGENTS.md](http://AGENTS.md) — brake-calc
 
 ## 1. 项目定位
 
-本仓库实现城轨列车**制动压力标准计算**的确定性工作流：给定列车参数与制动需求，输出按 `load_group × brake_type × controller` 组织的压力标准矩阵，并在 S9 汇总理论速度检查、动态载荷/空簧压力、控制器开发参数和 Markdown 报告。
+本仓库实现城轨列车**制动压力标准计算**的确定性工作流：给定列车参数与制动需求，输出按 `load_group × brake_type × controller` 组织的压力标准矩阵，并在 S9 汇总理论速度检查、动态载荷/空簧压力、控制器开发参数、停放制动力校核、自动调整记录和 Markdown 报告。
 
 - **业务真相源**：[城轨制动计算 Workflow Spec（v1.0 草案）](https://www.notion.so/Workflow-Spec-v1-0-495ad4a24779422ca99d9830f40b68e1?pvs=21)（也镜像在 `specs/Brake_Calc_ Workflow_Spec_v1.0.md`）。代码实现必须与 spec 一致，发现歧义先澄清 spec 再改代码。
 - **运行形态**：
     - 本地：通过 CLI / `python -m brake_calc` 跑调试
     - 云端：Hermes 直接 `import brake_calc.workflow.runner` 调用
+- **V1 功能范围**：
+    - 支持架控与车控两类控制器
+    - 支持 `FSB`、`EB`、`FB`、`ratio_of_FSB`
+    - 支持踏面制动与制动夹钳两类基础制动模型
+    - 支持试验点驱动的压力标定
+    - 支持停放制动力校核
+    - 支持全局黏着限制与自动策略调整
+    - 支持电制动特性输入预留（当前不参与主制动计算）
+- **V1 契约原则**：`input.yaml` 在 V1 冻结后，不允许随意改字段名、字段形状、单位和枚举值；如需调整，必须先更新 spec，并经过人工确认。
 
 ## 2. 目录结构（只读约定）
 
@@ -24,13 +26,16 @@
 src/brake_calc/
   contracts/   # pydantic 数据契约（Inputs / Context / Report），对应 spec §4、§5
   modules/     # s1..s9 工作流模块，一个文件一个模块，入口函数固定 run(ctx) -> ctx
-  domain/      # 纯计算函数（运动学、质量模型、分配、机械模型、k(f) 校准、报告派生量）
+  domain/      # 纯计算函数（运动学、质量模型、分配、机械模型、k(f) 校准、停放制动力校核、报告派生量）
   workflow/    # runner + workflow.yaml（执行顺序，对应 spec §8）
   io/          # 配置加载、YAML/Markdown 报表输出
+  app/         # 后续 Web API / Hermes tool 服务层
+  storage/     # 后续 SQLite/SQL 持久化层
   cli.py       # 本地命令行入口
 configs/       # 示例输入、pressure_calibration 标定配置、项目配置
 tests/         # unit + integration + fixtures
 specs/         # 业务 spec（唯一真相源）
+docs/plans/    # 设计、V1 契约冻结和实施计划
 ```
 
 **Agent 不得擅自**：新增顶层目录、把 `domain/` 里的纯函数依赖改成有副作用、绕过 `contracts/` 直接用 dict 传 context。
@@ -43,6 +48,8 @@ specs/         # 业务 spec（唯一真相源）
 - 数值计算：**numpy**（仅在 `domain/` 用；`contracts/` 保持纯 pydantic）
 - 单位处理：字段注释里写明单位，统一在 `validate_inputs` 归一化（不引入 `pint` 以保持轻量）
 - 配置文件：**YAML**（`ruamel.yaml` 或 `pyyaml`）
+- Web / API：后续云端服务可增加 Web 前端和 Hermes skill/tool 调用层，但必须建立在已冻结的输入契约之上
+- 持久化：后续配置存储采用 SQLite/SQL，项目元数据与 `input.yaml` 分开保存
 - 测试：**pytest** + **pytest-cov**
 - 静态检查：**ruff** + **mypy**（strict 模式）
 
@@ -88,13 +95,15 @@ def run(ctx: Context) -> Context:
 
 - **Context 是 append-only**：只能新增字段，不得修改/删除上游已写字段（pydantic `model_copy(update=...)`）
 - 不在 `modules/` 里写复杂数值算法；调用 `domain/` 里的纯函数
-- 抛异常用 `brake_calc.errors` 里的自定义类型；非致命问题写入 `ctx.warnings`
+- 抛异常用 `brake_calc.errors` 里的自定义类型；非致命问题写入 `ctx.warnings`；自动调整（如超黏着改等黏着、FB 压力超过 EB 后自动提高 `BCP0_EB`）必须单独进入结构化结果
+
 
 ### 5.2 命名与单位
 
 - 字段名与 spec §5.2 清单**严格一致**（`Beta_list`、`F_by_controller`、`BCP_calibrated_by_controller` 等）
 - 所有数值字段在 pydantic 模型里用 `Field(..., description="单位: kN")` 注明单位
-- 能用枚举就不用字符串：`CarType = Literal["powered", "trailer"]`、`AllocationStrategy = Literal["equal_wear", "equal_adhesion"]`
+- 能用枚举就不用字符串：`ControllerType = Literal["bogie", "car"]`、`BogieType = Literal["powered_bogie", "trailer_bogie"]`、`CarType = Literal["powered_car", "trailer_car"]`、`AllocationStrategy = Literal["equal_wear", "equal_adhesion"]`
+
 
 ### 5.3 风格
 
@@ -104,21 +113,24 @@ def run(ctx: Context) -> Context:
 
 ## 6. 测试约定
 
-- **单测**：每个 module 一个 `test_sN_*.py`，覆盖正常路径 + spec 中明确的边界规则（EB/FB 强制等黏着、AW2 fallback、clamp 触发等）
-- **集成测试**：`tests/integration/test_workflow_end_to_end.py` 覆盖端到端 workflow
+- **单测**：每个 module 一个 `test_sN_*.py`，覆盖正常路径 + spec 中明确的边界规则（EB/FB 强制等黏着、AW2 fallback、clamp 触发、超黏着自动切换、FB 压力超过 EB 后自动调整等）
+- **集成测试**：`tests/integration/test_workflow_end_to_end.py` 覆盖端到端 workflow，至少包含一个 V1 example input 主路径
 - **契约测试**：pydantic 模型的 schema 快照进 `tests/fixtures/schemas/`，改契约时 snapshot diff 必须人工确认
+- **新增 V1 功能必须补测试**：车控、FB、caliper_cylinder、pressure_calibration 新结构、parking_brake_check、adhesion、electric_brake 输入预留
 - 新增/修改功能前先写/改测试；PR 里测试先行
+
 
 ## 7. Agent 工作流（给 Codex / Claude 看）
 
 做任何代码改动前，**按此顺序**：
 
 1. **读 spec**：`specs/Brake_Calc_ Workflow_Spec_v1.0.md` 对应章节（不是 Notion 链接；本地文件是权威副本）
-2. **读契约**：`src/brake_calc/contracts/` 相关字段
-3. **读相邻模块**：上下游 `run()` 的输入输出，确认字段名/形状一致
-4. **改代码**
-5. **跑检查**：`ruff + mypy + pytest`（见 §4）
-6. **不允许跳过测试直接提交**
+2. **读 V1 计划/契约冻结文档**：如存在 `docs/plans/2026-04-24-v1-contract-and-feature-upgrade.md`，先对照该文档确认当前 feature 的边界
+3. **读契约**：`src/brake_calc/contracts/` 相关字段
+4. **读相邻模块**：上下游 `run()` 的输入输出，确认字段名/形状一致
+5. **改代码**
+6. **跑检查**：`ruff + mypy + pytest`（见 §4）
+7. **不允许跳过测试直接提交**
 
 ### 禁止事项
 
@@ -127,14 +139,23 @@ def run(ctx: Context) -> Context:
 - ❌ 不得绕过 `Context`，用全局变量/模块级状态在模块间传数据
 - ❌ 不得用 `print` 做日志；统一 `logging`，模块内 `logger = logging.getLogger(__name__)`
 - ❌ 不得把 Mathcad 范例的数值硬写进实现里当做"正确答案"；它只在测试 fixture 里出现
+- ❌ 不得在 V1 输入契约冻结后，未经 spec 更新和人工确认，擅自修改 YAML 字段名、字段形状、单位或枚举值
+- ❌ 不得在前端、数据库、后端 API 中自行发明与 `Inputs` 不一致的字段结构
+- ❌ 不得把自动调整后的“实际计算配置”覆盖用户原始输入；原始输入必须保留，自动调整必须单独记录
+- ❌ 不得让 `electric_brake` 在 V1 中直接参与主制动计算；它当前仅作为输入预留和展示摘要
+
 
 ### 任务分解建议
 
-长任务（比如"从零实现 s1..s9"）分步：
 
-1. 先完成 `contracts/inputs.py` + `contracts/context.py`，跑通 schema 快照测试
-2. 再按 s1 → s9 逐个实现模块 + 单测，每步独立提交
-3. 最后跑集成测试对齐 Mathcad 范例
+长任务按以下顺序分步：
+
+1. 先冻结或更新 `specs/Brake_Calc_ Workflow_Spec_v1.0.md` 中对应章节，再同步 `contracts/inputs.py`
+2. 先补契约测试与 schema snapshot，再实现 domain / modules
+3. 按 feature 分批实现并验证，例如：控制器类型与 brake_type → 机械模型 → 标定 → 校核 → 报告
+4. 最后跑集成测试，对齐 example YAML 与 Mathcad 范例
+5. 在 V1 输入契约冻结前，不开始正式前端、数据库和后端 API 开发
+
 
 ## 8. 提交规范
 
@@ -150,11 +171,13 @@ def run(ctx: Context) -> Context:
 
 ## 9. Hermes 部署注意
 
-- 入口：`brake_calc.workflow.runner.run_workflow(inputs: Inputs) -> Report`
-- 不依赖本地文件系统；配置由调用方构造 `Inputs` 对象传入
+- 入口：本地计算入口为 `brake_calc.workflow.runner.run_workflow(inputs: Inputs) -> Report`
+- 云端：后续同时支持 Web 后端服务调用与 Hermes skill/tool 调用
+- 不依赖本地文件系统；配置可由调用方直接构造 `Inputs` 对象，或由后端从持久化配置中加载
 - `trace` 字段由 runner 写入；Hermes 侧可选择落盘或只返回摘要
-- Markdown 报告由本地 CLI / I/O 层按需导出；Hermes 默认返回结构化 `Report`，不依赖文件落盘。
+- Markdown 报告由本地 CLI / I/O 层按需导出；云端优先返回结构化 `Report`，Markdown 作为派生输出
 - 日志用结构化 JSON（`logging.Formatter` 输出 JSON 行），方便云端采集
+
 
 ## 10. 需要人类确认的场景
 
@@ -165,6 +188,10 @@ def run(ctx: Context) -> Context:
 - 修改 Context 字段命名或形状
 - 引入新的三方依赖
 - 改动 `workflow.yaml` 的执行顺序
+- 新增或修改 `input.yaml` 顶层字段、枚举值、单位或嵌套结构
+- 调整 V1 已冻结输入契约的兼容性策略（例如字段改名、删除字段、改变字段含义）
+- 将当前仅作输入预留的功能（如 electric_brake）接入主制动计算
+
 
 ---
 

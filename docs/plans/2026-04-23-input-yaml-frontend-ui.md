@@ -10,6 +10,27 @@
 
 ---
 
+## V1 对齐说明
+
+本计划已被 [2026-04-24-v1-contract-and-feature-upgrade.md](/D:/codeX/Brake_Calc_Agent/Brake_Calc/docs/plans/2026-04-24-v1-contract-and-feature-upgrade.md) 补充和约束。后续正式实施时，以 V1 计划中的字段结构和功能边界为准；本计划负责前端 UI 拆解和交互形态。
+
+对齐后请注意，以下旧结论已经失效：
+
+- 不再是“只支持架控”，V1 需要支持 `bogie` 和 `car`
+- 停放制动力校核不再是预留，而是 V1 active scope
+- `caliper_cylinder` 不再是未来项，而是 V1 active scope
+- 标定页面不再以“直接编辑 k_segments”为主，而是改成“试验点驱动”
+- 需要新增 FB、黏着限制、电制动识别摘要和自动调整提示
+
+建议你在阅读本计划时，把以下页面部分按 V1 理解：
+
+- 页面 3：增加 FB 勾选和 `response_time.FB`
+- 页面 4：增加车控 `cars[]`
+- 页面 6：增加 `caliper_cylinder`、停放制动力校核、`adhesion.mu_limit`、电制动上传识别摘要
+- 页面 7：标定结构改成 `service_brake` / `emergency_brake` 试验点输入
+
+---
+
 ## 范围
 
 本计划只覆盖“生成 `input.yaml` 的前端 UI 和交互设计”。

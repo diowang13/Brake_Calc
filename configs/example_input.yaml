@@ -1,11 +1,13 @@
 v0: 80.0
-V_list: [20.0, 40.0, 60.0, 80.0]
+V_list: [40.0, 80.0]
 brake_types:
   - name: FSB
     source: kinematic
   - name: EB
     source: kinematic
-  - name: holding_brake
+  - name: FB
+    source: fast_brake
+  - name: holding
     source: ratio_of_FSB
     ratio: 0.5
 requirement:
@@ -14,14 +16,17 @@ requirement:
     value: 1.0
   EB:
     mode: distance
-    value: 205
+    value: 180.0
 response_time:
   FSB:
     t1: 0.4
-    impulse_rate: 0.75
+    impulse_rate: 1.5
   EB:
     t1: 0.3
-    t2: 1.2
+    t2: 0.6
+  FB:
+    t1: 0.35
+    impulse_rate: 1.6
 load_groups: [AW0, AW2, AW3]
 controller_type: bogie
 n_bogies_by_controller: 1
@@ -30,46 +35,39 @@ n_cylinders_by_controller: 4
 allocation_strategy: equal_wear
 vehicle_config:
   bogies:
+    - name: powered_bogie_1
+      bogie_type: powered_bogie
     - name: trailer_bogie_1
       bogie_type: trailer_bogie
-    - name: trailer_bogie_2
-      bogie_type: trailer_bogie
-    - name: powered_bogie_3
-      bogie_type: powered_bogie
-    - name: powered_bogie_4
-      bogie_type: powered_bogie
-    - name: powered_bogie_5
-      bogie_type: powered_bogie
-    - name: powered_bogie_6
-      bogie_type: powered_bogie
 mass_params:
   powered_bogie:
     mass_static:
-      AW0: 15.82
-      AW2: 23.32
-      AW3: 26.39
-    bogie_weight: 6.3
-    rotational_mass_factor: 0.1
+      AW0: 10.0
+      AW2: 11.0
+      AW3: 12.0
+    bogie_weight: 2.0
+    rotational_mass_factor: 0.08
   trailer_bogie:
     mass_static:
-      AW0: 15.37
-      AW2: 22.27
-      AW3: 25.18
-    bogie_weight: 4.1
-    rotational_mass_factor: 0.05
+      AW0: 9.0
+      AW2: 10.0
+      AW3: 11.0
+    bogie_weight: 1.5
+    rotational_mass_factor: 0.04
 air_spring:
   powered_bogie:
     mode: explicit_linear
-    airspring_k: 43.7
-    airspring_b: 4.13
+    airspring_k: 20.0
+    airspring_b: 100.0
   trailer_bogie:
     mode: fitted_from_points
     points:
-      - pressure_kpa: 250.0
-        sprung_mass_by_spring_ton: 5.635
-      - pressure_kpa: 465.0
-        sprung_mass_by_spring_ton: 10.54
-
+      - pressure_kpa: 180.0
+        sprung_mass_by_spring_ton: 5.0
+      - pressure_kpa: 220.0
+        sprung_mass_by_spring_ton: 7.0
+      - pressure_kpa: 260.0
+        sprung_mass_by_spring_ton: 9.0
 mech_params:
   cylinder_type: tread_cylinder
   Sc: 0.0248
@@ -81,38 +79,50 @@ mech_params:
   Fs1: 1.0
   Fs2: 0.25
 pressure_calibration:
+  enabled: true
+  service_brake:
+    BCP0: 25.0
+    point_pair_mode: aw3_aw0
+    points:
+      - load_group: AW0
+        brake_type: FB
+        k_for_code: 1050.0
+      - load_group: AW3
+        brake_type: FSB
+        k_for_code: 1200.0
+  emergency_brake:
+    BCP0: 30.0
+    point_pair_mode: aw3_aw0
+    points:
+      - load_group: AW0
+        brake_type: EB
+        k_for_code: 1100.0
+      - load_group: AW3
+        brake_type: EB
+        k_for_code: 1250.0
+parking_brake_check:
+  enabled: true
+  required_safety_margin: 1.2
+  static_friction_coefficient: 0.35
+  n_parking_cylinders_by_car: 1
+  cylinder:
+    Fp: 8.75
+    Fs1: 1.2
+    Fs2: 0.15
+    Lpi: 2.04
+    eta_pi: 1.0
+    Lo: 1.0
+    eta_o: 1.0
+  environment:
+    wind_speed_max: 34.0
+    wind_resistance_coefficient: 0.0037
+    grade_by_load_group:
+      AW0: 40.0
+      AW3: 40.0
+adhesion:
+  mu_limit: 0.16
+electric_brake:
   enabled: false
-  calibrated:
-    AW0:
-      FSB:
-        BCP0: 25.0
-        k_segments:
-          - min_f: 0.0
-            max_f: 99999.0
-            kind: constant
-            value: 10.73
-      EB:
-        BCP0: 25.0
-        k_segments:
-          - min_f: 0.0
-            max_f: 99999.0
-            kind: constant
-            value: 10.73
-    AW3:
-      FSB:
-        BCP0: 25.0
-        k_segments:
-          - min_f: 0.0
-            max_f: 99999.0
-            kind: constant
-            value: 10.73
-      EB:
-        BCP0: 25.0
-        k_segments:
-          - min_f: 0.0
-            max_f: 99999.0
-            kind: constant
-            value: 10.73
-  fallback:
-    AW2: AW3
-EB_limit_min: 150.0
+  force_scope: train_total
+  characteristic_points: []
+EB_limit_min: 100.0
