@@ -5,7 +5,13 @@ from __future__ import annotations
 from pydantic import BaseModel, Field
 
 from brake_calc.contracts.inputs import Inputs
-from brake_calc.contracts.report import ClampEvent, Report, TraceEntry, WarningEntry
+from brake_calc.contracts.report import (
+    AutoAdjustmentEntry,
+    ClampEvent,
+    Report,
+    TraceEntry,
+    WarningEntry,
+)
 
 MassVector = dict[str, dict[str, dict[str, float]]]
 ForceTensor = dict[str, dict[str, dict[str, float]]]
@@ -40,6 +46,7 @@ class Context(BaseModel):
         default_factory=dict,
         description="单位: kPa",
     )
+    auto_adjustments: list[AutoAdjustmentEntry] = Field(default_factory=list, description="单位: -")
     clamp_events: list[ClampEvent] = Field(default_factory=list, description="单位: -")
     warnings: list[WarningEntry] = Field(default_factory=list, description="单位: -")
     trace: list[TraceEntry] = Field(default_factory=list, description="单位: -")

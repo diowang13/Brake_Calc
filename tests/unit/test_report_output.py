@@ -31,6 +31,17 @@ def test_dump_report_markdown_renders_core_sections() -> None:
                     "expression": "mass_dynamic_ton = 0.1 * spring_pressure_kpa + -7.2"
                 }
             },
+            "force_to_pressure_formula": {
+                "FSB": {
+                    "AW0": {
+                        "bogie_1": {
+                            "force_kN": 9.1,
+                            "formula": "BCP_by_controller_kPa = 10.757 * F_by_controller_kN + 21.0",
+                            "formula_with_force": "BCP_by_controller_kPa = 10.757 * 9.1 + 21.0",
+                        }
+                    }
+                }
+            },
             "pressure_conversion": {
                 "FSB": {
                     "AW0": {
@@ -43,6 +54,20 @@ def test_dump_report_markdown_renders_core_sections() -> None:
                     }
                 }
             },
+        },
+        calibration_summary={
+            "service_brake": {
+                "point_pair_mode": "aw3_aw0",
+                "BCP0": 25.0,
+                "input_points": [
+                    {"load_group": "AW0", "brake_type": "FB", "k_for_code": 981},
+                    {"load_group": "AW3", "brake_type": "FSB", "k_for_code": 1123},
+                ],
+                "curve_points": [
+                    {"label": "low", "force_kN": 15.0, "k_value": 9.81, "k_for_code": 981},
+                    {"label": "high", "force_kN": 33.0, "k_value": 11.23, "k_for_code": 1123},
+                ],
+            }
         },
         parking_brake_check_result={
             "per_car": {
@@ -68,13 +93,18 @@ def test_dump_report_markdown_renders_core_sections() -> None:
         },
         auto_adjustments=[
             {
-                "code": "adhesion.equal_wear_to_equal_adhesion",
-                "message": "fallback applied",
-                "original": {"allocation_strategy": "equal_wear"},
-                "applied": {"allocation_strategy": "equal_adhesion"},
-                "context": {"brake_type": "FB"},
+                "code": "fb_pressure_exceeded_eb",
+                "message": "FB pressure exceeded EB pressure and BCP0_EB was increased.",
+                "original": {"BCP0_EB": 25.0},
+                "applied": {"BCP0_EB": 29.56},
+                "context": {
+                    "load_group": "AW0",
+                    "controller": "bogie_1",
+                    "delta_pressure": 4.56,
+                },
             }
         ],
+        delta_BCP={"AW0": {"FSB": {"bogie_1": 5.0}}},
     )
 
     markdown = dump_report_markdown(report)
@@ -82,12 +112,23 @@ def test_dump_report_markdown_renders_core_sections() -> None:
     assert "# Brake Calculation Report" in markdown
     assert "## Pressure Standards" in markdown
     assert "## Theoretical Speed Checks" in markdown
+    assert "## Calibration Summary" in markdown
     assert "## Parking Brake Check" in markdown
     assert "## Electric Brake Summary" in markdown
     assert "## Auto Adjustments" in markdown
+    assert "### Force To Pressure Formula" in markdown
+    assert "whole_train" in markdown
+    assert "delta_BCP" in markdown
     assert "beta_used" in markdown
+    assert "xychart-beta" in markdown
+    assert "k_sb(f)" in markdown
     assert "mass_dynamic_ton = 0.1 * spring_pressure_kpa + -7.2" in markdown
-    assert "equal_wear" in markdown
+    assert "BCP_by_controller_kPa = 10.757 * F_by_controller_kN + 21.0" in markdown
+    assert "BCP_by_controller_kPa = 10.757 * 9.1 + 21.0" in markdown
+    assert "BCP0_EB" in markdown
+    assert "25.0" in markdown
+    assert "29.56" in markdown
+    assert "bogie_1" in markdown
 
 
 def test_cli_writes_markdown_report_when_requested(tmp_path: Path) -> None:
@@ -126,6 +167,7 @@ def test_dump_report_yaml_uses_spec_aliases() -> None:
         controller_pressure_standards={"AW0": {"FSB": {"bogie_1": 123.0}}},
         theoretical_speed_checks={},
         controller_code_params={},
+        calibration_summary={},
         parking_brake_check_result={
             "per_car": {},
             "whole_train": {"F_PB": 0.0, "incline_force": 0.0, "safety_margin": 0.0},

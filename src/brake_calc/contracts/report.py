@@ -110,6 +110,7 @@ MetricMatrix = dict[str, dict[str, dict[str, float]]]
 BrakeSummary = dict[str, dict[str, float]]
 SpeedCheckMatrix = dict[str, dict[str, dict[str, float]]]
 ControllerCodeParams = dict[str, object]
+CalibrationSummary = dict[str, object]
 
 
 class Report(BaseModel):
@@ -130,6 +131,10 @@ class Report(BaseModel):
         description="单位: km/h, m/s^2, m",
     )
     controller_code_params: ControllerCodeParams = Field(
+        default_factory=dict,
+        description="单位: -",
+    )
+    calibration_summary: CalibrationSummary = Field(
         default_factory=dict,
         description="单位: -",
     )

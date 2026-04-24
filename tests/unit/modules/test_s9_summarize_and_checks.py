@@ -71,6 +71,23 @@ def test_s9_report_includes_business_and_controller_development_outputs() -> Non
             "expression"
         ].startswith("mass_dynamic_ton = ")
     )
+    assert out.report.calibration_summary == {}
+
+
+def test_s9_report_includes_calibration_summary_when_enabled() -> None:
+    ctx = Context(validated_inputs=Inputs.model_validate(make_valid_bogie_payload()))
+    ctx = run_s8(run_s7(run_s6(run_s5(run_s4(run_s3(run_s2(ctx)))))))
+
+    out = run(ctx)
+
+    assert out.report is not None
+    assert (
+        out.report.calibration_summary["service_brake"]["curve_points"][0]["k_for_code"] == 1050
+    )
+    assert (
+        out.report.calibration_summary["emergency_brake"]["curve_points"][1]["k_for_code"]
+        == 1250
+    )
 
 
 def test_s9_theoretical_speed_checks_default_to_v0_when_v_list_is_missing() -> None:

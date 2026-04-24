@@ -77,6 +77,30 @@ def dump_report_markdown(report: Report) -> str:
                 lines.append(f"- `{bogie_type}`: `{values['expression']}`")
         lines.append("")
 
+    force_to_pressure_formula = report.controller_code_params.get("force_to_pressure_formula", {})
+    if isinstance(force_to_pressure_formula, dict):
+        lines.extend(["### Force To Pressure Formula", ""])
+        lines.append(
+            "| brake_type | load_group | controller | force_kN | formula | "
+            "formula_with_force |"
+        )
+        lines.append("| --- | --- | --- | ---: | --- | --- |")
+        for brake_type, per_group in force_to_pressure_formula.items():
+            if not isinstance(per_group, dict):
+                continue
+            for load_group, per_controller in per_group.items():
+                if not isinstance(per_controller, dict):
+                    continue
+                for controller, values in per_controller.items():
+                    if not isinstance(values, dict):
+                        continue
+                    lines.append(
+                        f"| {brake_type} | {load_group} | {controller} | "
+                        f"{float(values['force_kN']):.6g} | {values['formula']} | "
+                        f"{values['formula_with_force']} |"
+                    )
+        lines.append("")
+
     pressure_conversion = report.controller_code_params.get("pressure_conversion", {})
     if isinstance(pressure_conversion, dict):
         lines.extend(["### Pressure Conversion", ""])
@@ -102,6 +126,60 @@ def dump_report_markdown(report: Report) -> str:
                     )
         lines.append("")
 
+    if report.calibration_summary:
+        lines.extend(["## Calibration Summary", ""])
+        for case_name, case_values in report.calibration_summary.items():
+            if not isinstance(case_values, dict):
+                continue
+            lines.extend([f"### {case_name}", ""])
+            lines.append(f"- point_pair_mode: {case_values.get('point_pair_mode')}")
+            lines.append(f"- BCP0: {case_values.get('BCP0')}")
+            lines.append("")
+
+            input_points: object = case_values.get("input_points", [])
+            if isinstance(input_points, list) and input_points:
+                lines.append("| load_group | brake_type | k_for_code |")
+                lines.append("| --- | --- | ---: |")
+                for point in input_points:
+                    if not isinstance(point, dict):
+                        continue
+                    lines.append(
+                        f"| {point.get('load_group')} | {point.get('brake_type')} | "
+                        f"{point.get('k_for_code')} |"
+                    )
+                lines.append("")
+
+            curve_points: object = case_values.get("curve_points", [])
+            if isinstance(curve_points, list) and len(curve_points) >= 2:
+                lines.append("| point | force_kN | k_value | k_for_code |")
+                lines.append("| --- | ---: | ---: | ---: |")
+                x_axis: list[str] = []
+                y_axis: list[str] = []
+                for point in curve_points:
+                    if not isinstance(point, dict):
+                        continue
+                    lines.append(
+                        f"| {point.get('label')} | {point.get('force_kN')} | "
+                        f"{point.get('k_value')} | {point.get('k_for_code')} |"
+                    )
+                    x_axis.append(str(point.get("force_kN")))
+                    y_axis.append(str(point.get("k_for_code")))
+                lines.append("")
+                chart_title = "k_sb(f)" if case_name == "service_brake" else "k_eb(f)"
+                lines.extend(
+                    [
+                        "```mermaid",
+                        "xychart-beta",
+                        f'    title "{chart_title}"',
+                        '    x-axis "Force (kN)" [' + ", ".join(x_axis) + "]",
+                        '    y-axis "k_for_code" 0 --> '
+                        + str(max(int(value) for value in y_axis)),
+                        "    line [" + ", ".join(y_axis) + "]",
+                        "```",
+                        "",
+                    ]
+                )
+
     if report.parking_brake_check_result is not None:
         lines.extend(["## Parking Brake Check", ""])
         lines.append("| car | F_N_PB | F_PB | incline_force | safety_margin |")
@@ -112,6 +190,17 @@ def dump_report_markdown(report: Report) -> str:
                 f"{per_car_result.incline_force:.6g} | {per_car_result.safety_margin:.6g} |"
             )
         lines.append("")
+        lines.extend(["### whole_train", ""])
+        lines.append("| F_PB | incline_force | safety_margin | pass |")
+        lines.append("| ---: | ---: | ---: | --- |")
+        lines.append(
+            "| "
+            f"{report.parking_brake_check_result.whole_train.F_PB:.6g} | "
+            f"{report.parking_brake_check_result.whole_train.incline_force:.6g} | "
+            f"{report.parking_brake_check_result.whole_train.safety_margin:.6g} | "
+            f"{report.parking_brake_check_result.pass_} |"
+        )
+        lines.append("")
 
     if report.electric_brake_summary is not None:
         lines.extend(["## Electric Brake Summary", ""])
@@ -119,10 +208,31 @@ def dump_report_markdown(report: Report) -> str:
         lines.append(f"- force_scope: {report.electric_brake_summary.force_scope}")
         lines.append("")
 
+    if report.delta_BCP:
+        lines.extend(["## delta_BCP", ""])
+        for load_group, per_brake_type in report.delta_BCP.items():
+            lines.extend([f"### {load_group}", ""])
+            for brake_type, delta_controllers in per_brake_type.items():
+                lines.extend([f"#### {brake_type}", ""])
+                lines.append("| controller | delta_BCP (kPa) |")
+                lines.append("| --- | ---: |")
+                for controller, delta_value in delta_controllers.items():
+                    lines.append(f"| {controller} | {delta_value:.6g} |")
+                lines.append("")
+
     if report.auto_adjustments:
         lines.extend(["## Auto Adjustments", ""])
         for item in report.auto_adjustments:
             lines.append(f"- `{item.code}`: {item.message}")
+            if item.original:
+                original_parts = [f"{key}={value}" for key, value in item.original.items()]
+                lines.append(f"  original: {', '.join(original_parts)}")
+            if item.applied:
+                applied_parts = [f"{key}={value}" for key, value in item.applied.items()]
+                lines.append(f"  applied: {', '.join(applied_parts)}")
+            if item.context:
+                context_parts = [f"{key}={value}" for key, value in item.context.items()]
+                lines.append(f"  context: {', '.join(context_parts)}")
         lines.append("")
 
     if report.warnings:

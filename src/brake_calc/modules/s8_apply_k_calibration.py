@@ -7,7 +7,7 @@ from typing import cast
 
 from brake_calc.contracts.context import Context
 from brake_calc.contracts.inputs import Inputs, LoadGroup, PressureCalibrationCase
-from brake_calc.contracts.report import ClampEvent, WarningEntry
+from brake_calc.contracts.report import AutoAdjustmentEntry, ClampEvent, WarningEntry
 from brake_calc.domain.calibration import (
     build_point_pair_curve,
     evaluate_point_pair_curve,
@@ -32,6 +32,7 @@ def run(ctx: Context) -> Context:
 
     brake_type_definitions = {item.name: item for item in inputs.brake_types}
     warnings = list(ctx.warnings)
+    auto_adjustments = list(ctx.auto_adjustments)
     k_used: dict[str, dict[str, dict[str, float]]] = {}
     bcp0_used: dict[str, dict[str, dict[str, float]]] = {}
     raw_pressures: dict[str, dict[str, dict[str, float]]] = {
@@ -69,6 +70,8 @@ def run(ctx: Context) -> Context:
                 )
 
     if "FB" in raw_pressures.get("AW0", {}):
+        max_delta_pressure = 0.0
+        affected_cases: list[dict[str, str | float]] = []
         for load_group in inputs.load_groups:
             eb_pressures = raw_pressures[load_group].get("EB", {})
             fb_pressures = raw_pressures[load_group].get("FB", {})
@@ -77,19 +80,46 @@ def run(ctx: Context) -> Context:
                 if eb_pressure is None or fb_pressure <= eb_pressure:
                     continue
                 delta_pressure = fb_pressure - eb_pressure
-                raw_pressures[load_group]["EB"][controller] = eb_pressure + delta_pressure
-                bcp0_used["EB"][load_group][controller] += delta_pressure
-                warnings.append(
-                    WarningEntry(
-                        code="fb_pressure_exceeded_eb",
-                        message="FB pressure exceeded EB pressure and BCP0_EB was increased.",
-                        context={
-                            "load_group": load_group,
-                            "controller": controller,
-                            "delta_pressure": delta_pressure,
-                        },
-                    )
+                max_delta_pressure = max(max_delta_pressure, delta_pressure)
+                affected_cases.append(
+                    {
+                        "load_group": load_group,
+                        "controller": controller,
+                        "delta_pressure": delta_pressure,
+                    }
                 )
+
+        if max_delta_pressure > 0.0:
+            original_bcp0_eb = (
+                inputs.pressure_calibration.emergency_brake.BCP0
+                if inputs.pressure_calibration.enabled
+                else ctx.BCP0_initial
+            )
+            applied_bcp0_eb = original_bcp0_eb + max_delta_pressure
+            for load_group in inputs.load_groups:
+                for controller in raw_pressures[load_group].get("EB", {}):
+                    raw_pressures[load_group]["EB"][controller] += max_delta_pressure
+                    bcp0_used["EB"][load_group][controller] = applied_bcp0_eb
+
+            warnings.append(
+                WarningEntry(
+                    code="fb_pressure_exceeded_eb",
+                    message="FB pressure exceeded EB pressure and BCP0_EB was increased.",
+                    context={
+                        "delta_pressure": max_delta_pressure,
+                        "affected_cases": len(affected_cases),
+                    },
+                )
+            )
+            auto_adjustments.append(
+                AutoAdjustmentEntry(
+                    code="fb_pressure_exceeded_eb",
+                    message="FB pressure exceeded EB pressure and BCP0_EB was increased.",
+                    original={"BCP0_EB": original_bcp0_eb},
+                    applied={"BCP0_EB": applied_bcp0_eb},
+                    context={"affected_cases": affected_cases},
+                )
+            )
 
     clamp_events = list(ctx.clamp_events)
     calibrated_pressures: dict[str, dict[str, dict[str, float]]] = {
@@ -141,6 +171,7 @@ def run(ctx: Context) -> Context:
             "k_used_by_controller": k_used,
             "BCP0_used_by_controller": bcp0_used,
             "BCP_calibrated_by_controller": calibrated_pressures,
+            "auto_adjustments": auto_adjustments,
             "warnings": warnings,
             "clamp_events": clamp_events,
         }

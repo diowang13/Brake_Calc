@@ -1,5 +1,5 @@
 v0: 80.0
-V_list: [40.0, 80.0]
+V_list: [40.0,60.0, 80.0]
 brake_types:
   - name: FSB
     source: kinematic
@@ -10,23 +10,26 @@ brake_types:
   - name: holding
     source: ratio_of_FSB
     ratio: 0.5
+  - name: jerk
+    source: ratio_of_FSB
+    ratio: 0.2
 requirement:
   FSB:
     mode: a_mean
     value: 1.0
   EB:
     mode: distance
-    value: 180.0
+    value: 205.0
 response_time:
   FSB:
     t1: 0.4
-    impulse_rate: 1.5
+    impulse_rate: 0.75
   EB:
     t1: 0.3
-    t2: 0.6
+    t2: 1.2
   FB:
-    t1: 0.35
-    impulse_rate: 1.6
+    t1: 0.4
+    impulse_rate: 0.75
 load_groups: [AW0, AW2, AW3]
 controller_type: bogie
 n_bogies_by_controller: 1
@@ -35,39 +38,42 @@ n_cylinders_by_controller: 4
 allocation_strategy: equal_wear
 vehicle_config:
   bogies:
-    - name: powered_bogie_1
-      bogie_type: powered_bogie
     - name: trailer_bogie_1
       bogie_type: trailer_bogie
+    - name: trailer_bogie_2
+      bogie_type: trailer_bogie
+    - name: powered_bogie_3
+      bogie_type: powered_bogie
+    - name: powered_bogie_4
+      bogie_type: powered_bogie
+    - name: powered_bogie_5
+      bogie_type: powered_bogie
+    - name: powered_bogie_6
+      bogie_type: powered_bogie
 mass_params:
   powered_bogie:
     mass_static:
-      AW0: 10.0
-      AW2: 11.0
-      AW3: 12.0
-    bogie_weight: 2.0
-    rotational_mass_factor: 0.08
+      AW0: 15.83
+      AW2: 23.33
+      AW3: 26.37
+    bogie_weight: 6.3
+    rotational_mass_factor: 0.1
   trailer_bogie:
     mass_static:
-      AW0: 9.0
-      AW2: 10.0
-      AW3: 11.0
-    bogie_weight: 1.5
-    rotational_mass_factor: 0.04
+      AW0: 15.37
+      AW2: 22.27
+      AW3: 25.18
+    bogie_weight: 4.1
+    rotational_mass_factor: 0.05
 air_spring:
   powered_bogie:
     mode: explicit_linear
-    airspring_k: 20.0
-    airspring_b: 100.0
+    airspring_k: 43.69
+    airspring_b: 4.13
   trailer_bogie:
-    mode: fitted_from_points
-    points:
-      - pressure_kpa: 180.0
-        sprung_mass_by_spring_ton: 5.0
-      - pressure_kpa: 220.0
-        sprung_mass_by_spring_ton: 7.0
-      - pressure_kpa: 260.0
-        sprung_mass_by_spring_ton: 9.0
+    mode: explicit_linear
+    airspring_k: 43.69
+    airspring_b: 4.13
 mech_params:
   cylinder_type: tread_cylinder
   Sc: 0.0248
@@ -85,44 +91,44 @@ pressure_calibration:
     point_pair_mode: aw3_aw0
     points:
       - load_group: AW0
-        brake_type: FB
-        k_for_code: 1050.0
+        brake_type: FSB
+        k_for_code: 980.0
       - load_group: AW3
         brake_type: FSB
-        k_for_code: 1200.0
+        k_for_code: 1123.0
   emergency_brake:
-    BCP0: 30.0
+    BCP0: 25.0
     point_pair_mode: aw3_aw0
     points:
       - load_group: AW0
         brake_type: EB
-        k_for_code: 1100.0
+        k_for_code: 1014.0
       - load_group: AW3
         brake_type: EB
-        k_for_code: 1250.0
+        k_for_code: 1204.0
 parking_brake_check:
   enabled: true
   required_safety_margin: 1.2
   static_friction_coefficient: 0.35
-  n_parking_cylinders_by_car: 1
+  n_parking_cylinders_by_car: 4
   cylinder:
-    Fp: 8.75
-    Fs1: 1.2
-    Fs2: 0.15
-    Lpi: 2.04
-    eta_pi: 1.0
+    Fp: 7.4
+    Fs1: 1.0
+    Fs2: 0.25
+    Lpi: 3.4
+    eta_pi: 0.95
     Lo: 1.0
     eta_o: 1.0
   environment:
-    wind_speed_max: 34.0
+    wind_speed_max: 29.7
     wind_resistance_coefficient: 0.0037
     grade_by_load_group:
       AW0: 40.0
-      AW3: 40.0
+      AW3: 35.0
 adhesion:
-  mu_limit: 0.16
+  mu_limit: 0.15
 electric_brake:
   enabled: false
   force_scope: train_total
   characteristic_points: []
-EB_limit_min: 100.0
+EB_limit_min: 150.0

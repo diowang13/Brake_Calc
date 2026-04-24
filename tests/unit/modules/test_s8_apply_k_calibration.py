@@ -32,7 +32,6 @@ def test_s8_uses_point_driven_service_and_emergency_curves() -> None:
 
     out = run(ctx)
 
-    fsb_aw0_force = ctx.F_by_controller["FSB"]["AW0"]["powered_bogie_1"]
     fb_aw0_force = ctx.F_by_controller["FB"]["AW0"]["powered_bogie_1"]
     eb_aw0_force = ctx.F_by_controller["EB"]["AW0"]["powered_bogie_1"]
 
@@ -41,13 +40,6 @@ def test_s8_uses_point_driven_service_and_emergency_curves() -> None:
     emergency_aw0_ref = max(ctx.F_by_controller["EB"]["AW0"].values())
     emergency_aw3_ref = min(ctx.F_by_controller["EB"]["AW3"].values())
 
-    expected_service_k_fsb = _linear_value(
-        fsb_aw0_force,
-        service_aw0_ref,
-        10.5,
-        service_aw3_ref,
-        12.0,
-    )
     expected_service_k_fb = _linear_value(
         fb_aw0_force,
         service_aw0_ref,
@@ -64,7 +56,7 @@ def test_s8_uses_point_driven_service_and_emergency_curves() -> None:
     )
 
     assert out.k_used_by_controller["FSB"]["AW0"]["powered_bogie_1"] == pytest.approx(
-        expected_service_k_fsb
+        10.5
     )
     assert out.BCP0_used_by_controller["FSB"]["AW0"]["powered_bogie_1"] == pytest.approx(25.0)
     assert out.k_used_by_controller["FB"]["AW0"]["powered_bogie_1"] == pytest.approx(
@@ -88,18 +80,66 @@ def test_s8_extrapolates_aw3_aw2_pair_to_aw0_reference_range() -> None:
 
     out = run(ctx)
 
-    aw0_force = ctx.F_by_controller["FSB"]["AW0"]["powered_bogie_1"]
+    aw0_reference_force = max(ctx.F_by_controller["FB"]["AW0"].values())
     aw2_ref = sum(ctx.F_by_controller["FSB"]["AW2"].values()) / len(
         ctx.F_by_controller["FSB"]["AW2"]
     )
     aw3_ref = min(ctx.F_by_controller["FSB"]["AW3"].values())
-    expected_k_aw0 = _linear_value(aw0_force, aw2_ref, 11.5, aw3_ref, 12.0)
+    expected_k_aw0 = _linear_value(aw0_reference_force, aw2_ref, 11.5, aw3_ref, 12.0)
 
     assert out.k_used_by_controller["FSB"]["AW0"]["powered_bogie_1"] == pytest.approx(
         expected_k_aw0
     )
     assert out.k_used_by_controller["FSB"]["AW0"]["powered_bogie_1"] != pytest.approx(
         ctx.k_initial
+    )
+
+
+def test_s8_keeps_constant_k_outside_aw0_aw3_calibration_range() -> None:
+    ctx = build_ctx()
+
+    out = run(ctx)
+
+    aw0_service_k = 10.5
+    aw3_service_k = 12.0
+    aw3_emergency_k = 12.5
+
+    assert out.k_used_by_controller["holding"]["AW0"]["powered_bogie_1"] == pytest.approx(
+        aw0_service_k
+    )
+    assert out.k_used_by_controller["holding"]["AW0"]["trailer_bogie_1"] == pytest.approx(
+        aw0_service_k
+    )
+    assert out.k_used_by_controller["FB"]["AW3"]["powered_bogie_1"] == pytest.approx(
+        aw3_service_k
+    )
+    assert out.k_used_by_controller["EB"]["AW3"]["powered_bogie_1"] == pytest.approx(
+        aw3_emergency_k
+    )
+
+
+def test_s8_aw3_aw2_curve_uses_constant_k_below_aw0_reference_force() -> None:
+    payload = make_valid_bogie_payload()
+    payload["pressure_calibration"]["service_brake"]["point_pair_mode"] = "aw3_aw2"
+    payload["pressure_calibration"]["service_brake"]["points"] = [
+        {"load_group": "AW2", "brake_type": "FSB", "k_for_code": 1150.0},
+        {"load_group": "AW3", "brake_type": "FSB", "k_for_code": 1200.0},
+    ]
+    ctx = build_ctx(payload)
+
+    out = run(ctx)
+
+    aw0_force = ctx.F_by_controller["holding"]["AW0"]["powered_bogie_1"]
+    aw0_reference_force = max(ctx.F_by_controller["FB"]["AW0"].values())
+    aw2_ref = sum(ctx.F_by_controller["FSB"]["AW2"].values()) / len(
+        ctx.F_by_controller["FSB"]["AW2"]
+    )
+    aw3_ref = min(ctx.F_by_controller["FSB"]["AW3"].values())
+    expected_aw0_reference_k = _linear_value(aw0_reference_force, aw2_ref, 11.5, aw3_ref, 12.0)
+
+    assert aw0_force < aw0_reference_force
+    assert out.k_used_by_controller["holding"]["AW0"]["powered_bogie_1"] == pytest.approx(
+        expected_aw0_reference_k
     )
 
 
@@ -142,8 +182,33 @@ def test_s8_raises_eb_bcp0_when_fb_pressure_exceeds_eb() -> None:
     adjusted_bcp0_eb = out.BCP0_used_by_controller["EB"]["AW0"]["powered_bogie_1"]
 
     assert adjusted_bcp0_eb > original_bcp0_eb
+    for load_group in ("AW0", "AW2", "AW3"):
+        per_controller = out.BCP0_used_by_controller["EB"][load_group]
+        for bcp0_value in per_controller.values():
+            assert bcp0_value == pytest.approx(adjusted_bcp0_eb)
     assert (
         out.BCP_calibrated_by_controller["AW0"]["EB"]["powered_bogie_1"]
         >= out.BCP_calibrated_by_controller["AW0"]["FB"]["powered_bogie_1"]
     )
     assert any(item.code == "fb_pressure_exceeded_eb" for item in out.warnings)
+    assert any(
+        item.code == "fb_pressure_exceeded_eb" for item in getattr(out, "auto_adjustments", [])
+    )
+
+
+def test_s8_uses_single_global_bcp0_per_brake_mode() -> None:
+    ctx = build_ctx()
+
+    out = run(ctx)
+
+    expected_service_bcp0 = ctx.validated_inputs.pressure_calibration.service_brake.BCP0
+    expected_emergency_bcp0 = ctx.validated_inputs.pressure_calibration.emergency_brake.BCP0
+    for load_group in ("AW0", "AW2", "AW3"):
+        for bcp0_value in out.BCP0_used_by_controller["FSB"][load_group].values():
+            assert bcp0_value == pytest.approx(expected_service_bcp0)
+        for bcp0_value in out.BCP0_used_by_controller["FB"][load_group].values():
+            assert bcp0_value == pytest.approx(expected_service_bcp0)
+        for bcp0_value in out.BCP0_used_by_controller["holding"][load_group].values():
+            assert bcp0_value == pytest.approx(expected_service_bcp0)
+        for bcp0_value in out.BCP0_used_by_controller["EB"][load_group].values():
+            assert bcp0_value == pytest.approx(expected_emergency_bcp0)

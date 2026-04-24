@@ -1553,6 +1553,14 @@
       "title": "A Mean Req",
       "type": "object"
     },
+    "auto_adjustments": {
+      "description": "\u5355\u4f4d: -",
+      "items": {
+        "$ref": "#/$defs/AutoAdjustmentEntry"
+      },
+      "title": "Auto Adjustments",
+      "type": "array"
+    },
     "clamp_events": {
       "description": "\u5355\u4f4d: -",
       "items": {

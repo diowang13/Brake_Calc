@@ -6,6 +6,7 @@ import logging
 
 from brake_calc.contracts.context import Context
 from brake_calc.contracts.report import Report
+from brake_calc.domain.calibration import build_point_pair_curve
 from brake_calc.domain.parking_brake import evaluate_parking_brake_check
 from brake_calc.domain.reporting import (
     derive_dynamic_mass_formula,
@@ -44,6 +45,48 @@ def _round_speed_check(values: dict[str, float]) -> dict[str, float]:
         "theoretical_distance_m": round_distance_m(values["theoretical_distance_m"]),
         "beta_used": round_deceleration(values["beta_used"]),
     }
+
+
+def _build_calibration_summary(ctx: Context) -> dict[str, object]:
+    """构造标定曲线摘要，供结构化报告和 Markdown 展示。"""
+    inputs = ctx.validated_inputs
+    if inputs is None or not inputs.pressure_calibration.enabled:
+        return {}
+
+    summary: dict[str, object] = {}
+    cases = {
+        "service_brake": inputs.pressure_calibration.service_brake,
+        "emergency_brake": inputs.pressure_calibration.emergency_brake,
+    }
+    for case_name, case in cases.items():
+        low_point, high_point = build_point_pair_curve(case, ctx.F_by_controller)
+        summary[case_name] = {
+            "BCP0": round_kpa(case.BCP0),
+            "point_pair_mode": case.point_pair_mode,
+            "input_points": [
+                {
+                    "load_group": point.load_group,
+                    "brake_type": point.brake_type,
+                    "k_for_code": round_k_for_code(point.k_for_code / 100.0),
+                }
+                for point in case.points
+            ],
+            "curve_points": [
+                {
+                    "label": "low",
+                    "force_kN": round(low_point[0], 3),
+                    "k_value": round(low_point[1], 6),
+                    "k_for_code": round_k_for_code(low_point[1]),
+                },
+                {
+                    "label": "high",
+                    "force_kN": round(high_point[0], 3),
+                    "k_value": round(high_point[1], 6),
+                    "k_for_code": round_k_for_code(high_point[1]),
+                },
+            ],
+        }
+    return summary
 
 
 def run(ctx: Context) -> Context:
@@ -128,17 +171,32 @@ def run(ctx: Context) -> Context:
         )
 
     pressure_conversion: dict[str, dict[str, dict[str, dict[str, float | int]]]] = {}
+    force_to_pressure_formula: dict[str, dict[str, dict[str, dict[str, float | str]]]] = {}
     for brake_type, per_group in ctx.k_used_by_controller.items():
         pressure_conversion[brake_type] = {}
+        force_to_pressure_formula[brake_type] = {}
         for load_group, per_controller in per_group.items():
             pressure_conversion[brake_type][load_group] = {}
+            force_to_pressure_formula[brake_type][load_group] = {}
             for controller, k_value in per_controller.items():
                 bcp0_value = ctx.BCP0_used_by_controller[brake_type][load_group][controller]
+                force_value = ctx.F_by_controller[brake_type][load_group][controller]
                 pressure_conversion[brake_type][load_group][controller] = {
                     "k_used": k_value,
                     "k_used_for_code": round_k_for_code(k_value),
                     "BCP0_used": round_kpa(bcp0_value),
                     "BCP0_used_for_code": round_bcp0_for_code(bcp0_value),
+                }
+                force_to_pressure_formula[brake_type][load_group][controller] = {
+                    "force_kN": round(force_value, 3),
+                    "formula": (
+                        f"BCP_by_controller_kPa = {k_value:.6g} * F_by_controller_kN + "
+                        f"{bcp0_value:.6g}"
+                    ),
+                    "formula_with_force": (
+                        f"BCP_by_controller_kPa = {k_value:.6g} * {force_value:.6g} + "
+                        f"{bcp0_value:.6g}"
+                    ),
                 }
 
     parking_brake_check_result = None
@@ -157,6 +215,7 @@ def run(ctx: Context) -> Context:
         characteristic_points=inputs.electric_brake.characteristic_points,
     )
     auto_adjustments = getattr(ctx, "auto_adjustments", [])
+    calibration_summary = _build_calibration_summary(ctx)
 
     rounded_pressure_standards = _round_pressure_matrix(ctx.BCP_calibrated_by_controller)
     report = Report(
@@ -168,8 +227,10 @@ def run(ctx: Context) -> Context:
         theoretical_speed_checks=theoretical_speed_checks,
         controller_code_params={
             "dynamic_mass_formula": dynamic_mass_formula,
+            "force_to_pressure_formula": force_to_pressure_formula,
             "pressure_conversion": pressure_conversion,
         },
+        calibration_summary=calibration_summary,
         parking_brake_check_result=parking_brake_check_result,
         electric_brake_summary=electric_brake_summary,
         auto_adjustments=auto_adjustments,
