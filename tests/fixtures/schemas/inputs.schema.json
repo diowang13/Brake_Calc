@@ -934,6 +934,12 @@
       "$ref": "#/$defs/ResponseTimeConfig",
       "description": "\u5355\u4f4d: -"
     },
+    "schema_version": {
+      "default": 1,
+      "description": "\u5355\u4f4d: -",
+      "title": "Schema Version",
+      "type": "integer"
+    },
     "v0": {
       "description": "\u5355\u4f4d: km/h",
       "title": "V0",

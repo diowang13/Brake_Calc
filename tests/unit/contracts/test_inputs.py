@@ -11,6 +11,7 @@ from brake_calc.contracts.inputs import Inputs
 
 def make_valid_bogie_payload() -> dict[str, object]:
     return {
+        "schema_version": 1,
         "v0": 80.0,
         "V_list": [40.0, 80.0],
         "brake_types": [
@@ -150,6 +151,7 @@ def make_valid_car_payload() -> dict[str, object]:
 def test_inputs_accept_v1_bogie_shape() -> None:
     model = Inputs.model_validate(make_valid_bogie_payload())
 
+    assert model.schema_version == 1
     assert model.brake_types[2].name == "FB"
     assert model.brake_types[2].source == "fast_brake"
     assert model.response_time.FB.impulse_rate == 1.6
@@ -168,6 +170,7 @@ def test_inputs_accept_v1_bogie_shape() -> None:
 def test_inputs_accept_car_controller_shape() -> None:
     model = Inputs.model_validate(make_valid_car_payload())
 
+    assert model.schema_version == 1
     assert model.controller_type == "car"
     assert model.n_bogies_by_controller == 2
     assert model.n_springs_by_controller == 4
@@ -186,6 +189,23 @@ def test_inputs_accept_caliper_cylinder_shape() -> None:
     assert model.mech_params.cylinder_type == "caliper_cylinder"
     assert model.mech_params.Dw == 0.72
     assert model.mech_params.Rf == 0.18
+
+
+def test_inputs_default_schema_version_to_one_when_omitted() -> None:
+    payload = make_valid_bogie_payload()
+    del payload["schema_version"]
+
+    model = Inputs.model_validate(payload)
+
+    assert model.schema_version == 1
+
+
+def test_inputs_reject_unsupported_schema_version() -> None:
+    payload = make_valid_bogie_payload()
+    payload["schema_version"] = 2
+
+    with pytest.raises(ValueError, match="schema_version"):
+        Inputs.model_validate(payload)
 
 
 def test_fsb_requirement_only_accepts_a_mean() -> None:

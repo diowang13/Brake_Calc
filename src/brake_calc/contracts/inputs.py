@@ -457,6 +457,7 @@ class Inputs(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
+    schema_version: int = Field(default=1, description="单位: -")
     v0: float = Field(..., description="单位: km/h")
     V_list: list[float] | None = Field(default=None, description="单位: km/h")
     requirement: dict[str, RequirementValue] = Field(..., description="单位: -")
@@ -481,6 +482,9 @@ class Inputs(BaseModel):
     @model_validator(mode="after")
     def validate_required_shapes(self) -> "Inputs":
         """校验 V1 输入契约形状。"""
+        if self.schema_version != 1:
+            raise ValueError("schema_version must be 1 for V1")
+
         brake_type_names = [item.name for item in self.brake_types]
         if len(brake_type_names) != len(set(brake_type_names)):
             raise ValueError("brake_types must not contain duplicate names")
