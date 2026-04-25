@@ -142,6 +142,10 @@ class Report(BaseModel):
         default=None,
         description="单位: -",
     )
+    parking_brake_check_results_by_load_group: dict[str, ParkingBrakeCheckResult] = Field(
+        default_factory=dict,
+        description="单位: -",
+    )
     electric_brake_summary: ElectricBrakeSummary | None = Field(
         default=None,
         description="单位: -",

@@ -6,6 +6,13 @@
 
 本仓库实现城轨列车**制动压力标准计算**的确定性工作流：给定列车参数与制动需求，输出按 `load_group × brake_type × controller` 组织的压力标准矩阵，并在 S9 汇总理论速度检查、动态载荷/空簧压力、控制器开发参数、停放制动力校核、自动调整记录和 Markdown 报告。
 
+- **Report / Markdown 稳定口径**：
+    - Markdown 主标题结构固定为 `Summary / Key Tables / Checks / Controller Development Parameters`
+    - `Pressure / Dynamic Load Matrix` 使用紧凑矩阵，同时展示动态载荷、空簧压力和各制动类型 BCP
+    - `Calibration Summary` 是控制器开发主视图，必须展示最终生效的 `BCP0`、`BCP0_for_code`、分段 `k_for_code` 公式与分段曲线图
+    - `delta_BCP` 结构化字段保留兼容，但不作为 Markdown 主视图展示
+    - 停放制动力校核中：`F_N_PB` 表示单个制动单元闸片/瓦块双侧作用力，`F_PB` 表示每车停放制动力，`whole_train` 表示整列汇总力；`Lpi` / `Lo` 仍表示机械倍率，`2 * Rf / Dw` 仅表示夹钳制动几何换算项；按 `parking_brake_check.environment.grade_by_load_group` 输出逐载荷组结果，并保留 `parking_brake_check_result` 兼容字段
+
 - **业务真相源**：[城轨制动计算 Workflow Spec（v1.0 草案）](https://www.notion.so/Workflow-Spec-v1-0-495ad4a24779422ca99d9830f40b68e1?pvs=21)（也镜像在 `specs/Brake_Calc_ Workflow_Spec_v1.0.md`）。代码实现必须与 spec 一致，发现歧义先澄清 spec 再改代码。
 - **运行形态**：
     - 本地：通过 CLI / `python -m brake_calc` 跑调试
@@ -96,6 +103,7 @@ def run(ctx: Context) -> Context:
 - **Context 是 append-only**：只能新增字段，不得修改/删除上游已写字段（pydantic `model_copy(update=...)`）
 - 不在 `modules/` 里写复杂数值算法；调用 `domain/` 里的纯函数
 - 抛异常用 `brake_calc.errors` 里的自定义类型；非致命问题写入 `ctx.warnings`；自动调整（如超黏着改等黏着、FB 压力超过 EB 后自动提高 `BCP0_EB`）必须单独进入结构化结果
+- S9 / report 属于 V1 稳定对外交付面：未经 spec 更新和人工确认，不得擅自改动 report 字段语义、Markdown 标题层级、停车校核口径或标定摘要展示口径
 
 
 ### 5.2 命名与单位
@@ -117,6 +125,7 @@ def run(ctx: Context) -> Context:
 - **集成测试**：`tests/integration/test_workflow_end_to_end.py` 覆盖端到端 workflow，至少包含一个 V1 example input 主路径
 - **契约测试**：pydantic 模型的 schema 快照进 `tests/fixtures/schemas/`，改契约时 snapshot diff 必须人工确认
 - **新增 V1 功能必须补测试**：车控、FB、caliper_cylinder、pressure_calibration 新结构、parking_brake_check、adhesion、electric_brake 输入预留
+- **report / Markdown 相关改动必须补测试**：至少覆盖 `test_report_domain.py`、`test_s9_summarize_and_checks.py`、`test_report_output.py` 中受影响场景，重点校验停车校核粒度、`aw3_aw0 / aw3_aw2` 标定摘要、最终 `BCP0_for_code`、Markdown 标题结构与主视图内容
 - 新增/修改功能前先写/改测试；PR 里测试先行
 
 
@@ -134,7 +143,7 @@ def run(ctx: Context) -> Context:
 
 ### 禁止事项
 
-- ❌ 不得修改 `specs/` 下的文件（spec 由人类维护；如发现 spec 有歧义或错误，在 PR 描述里说明，让人类更新）
+- ❌ 不得修改 `specs/` 下的文件，除非当前任务明确要求做文档回写且已经过人工确认
 - ❌ 不得在 `modules/` 里硬编码单位换算或常数；放到 `domain/` 或 `configs/`
 - ❌ 不得绕过 `Context`，用全局变量/模块级状态在模块间传数据
 - ❌ 不得用 `print` 做日志；统一 `logging`，模块内 `logger = logging.getLogger(__name__)`
@@ -143,6 +152,7 @@ def run(ctx: Context) -> Context:
 - ❌ 不得在前端、数据库、后端 API 中自行发明与 `Inputs` 不一致的字段结构
 - ❌ 不得把自动调整后的“实际计算配置”覆盖用户原始输入；原始输入必须保留，自动调整必须单独记录
 - ❌ 不得让 `electric_brake` 在 V1 中直接参与主制动计算；它当前仅作为输入预留和展示摘要
+- ❌ 不得为追求“更好看”的文档或前端展示，擅自改动已验收的 report/Markdown 口径：包括停车校核字段语义、`Calibration Summary` 主视图内容、`delta_BCP` 的兼容定位、以及 Markdown 四段标题结构
 
 
 ### 任务分解建议

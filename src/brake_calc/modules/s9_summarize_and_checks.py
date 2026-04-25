@@ -60,31 +60,68 @@ def _build_calibration_summary(ctx: Context) -> dict[str, object]:
     }
     for case_name, case in cases.items():
         low_point, high_point = build_point_pair_curve(case, ctx.F_by_controller)
-        summary[case_name] = {
-            "BCP0": round_kpa(case.BCP0),
-            "point_pair_mode": case.point_pair_mode,
-            "input_points": [
+        representative_brake_type = "EB" if case_name == "emergency_brake" else "FSB"
+        representative_load_group = next(iter(ctx.BCP0_used_by_controller[representative_brake_type]))
+        representative_controller = next(
+            iter(ctx.BCP0_used_by_controller[representative_brake_type][representative_load_group])
+        )
+        final_bcp0 = ctx.BCP0_used_by_controller[representative_brake_type][representative_load_group][
+            representative_controller
+        ]
+        low_force_kn = round(low_point[0], 3)
+        high_force_kn = round(high_point[0], 3)
+        low_k_value = round(low_point[1], 6)
+        high_k_value = round(high_point[1], 6)
+        if high_point[0] == low_point[0]:
+            slope_for_code = 0.0
+            intercept_for_code = round_k_for_code(low_point[1])
+        else:
+            slope_for_code = (
+                round_k_for_code(high_point[1]) - round_k_for_code(low_point[1])
+            ) / (high_point[0] - low_point[0])
+            intercept_for_code = round_k_for_code(low_point[1]) - slope_for_code * low_point[0]
+        curve_symbol = "k_sb" if case_name == "service_brake" else "k_eb"
+        input_points_summary: list[dict[str, object]] = []
+        for point in case.points:
+            input_force = {
+                "AW0": max,
+                "AW3": min,
+            }.get(point.load_group, lambda values: sum(values) / len(values))(
+                ctx.F_by_controller[point.brake_type][point.load_group].values()
+            )
+            input_points_summary.append(
                 {
+                    "label": f"input_{point.load_group}",
                     "load_group": point.load_group,
                     "brake_type": point.brake_type,
+                    "force_kN": round(input_force, 3),
+                    "k_value": round(point.k_for_code / 100.0, 6),
                     "k_for_code": round_k_for_code(point.k_for_code / 100.0),
                 }
-                for point in case.points
-            ],
+            )
+        summary[case_name] = {
+            "BCP0": round_kpa(final_bcp0),
+            "BCP0_for_code": round_bcp0_for_code(final_bcp0),
+            "point_pair_mode": case.point_pair_mode,
+            "input_points": input_points_summary,
             "curve_points": [
                 {
-                    "label": "low",
-                    "force_kN": round(low_point[0], 3),
-                    "k_value": round(low_point[1], 6),
+                    "label": "curve_low",
+                    "force_kN": low_force_kn,
+                    "k_value": low_k_value,
                     "k_for_code": round_k_for_code(low_point[1]),
                 },
                 {
-                    "label": "high",
-                    "force_kN": round(high_point[0], 3),
-                    "k_value": round(high_point[1], 6),
+                    "label": "curve_high",
+                    "force_kN": high_force_kn,
+                    "k_value": high_k_value,
                     "k_for_code": round_k_for_code(high_point[1]),
                 },
             ],
+            "linear_formula_for_code": (
+                f"{curve_symbol}_for_code(f) = "
+                f"{slope_for_code:.6f} * f + {intercept_for_code:.6f}"
+            ),
         }
     return summary
 
@@ -200,14 +237,19 @@ def run(ctx: Context) -> Context:
                 }
 
     parking_brake_check_result = None
+    parking_brake_check_results_by_load_group: dict[str, object] = {}
     if inputs.parking_brake_check.enabled:
-        first_load_group = inputs.load_groups[0]
-        parking_brake_check_result = evaluate_parking_brake_check(
-            controller_type=inputs.controller_type,
-            load_group=first_load_group,
-            controller_masses=ctx.Mass_by_controller[first_load_group],
-            parking_config=inputs.parking_brake_check,
-        )
+        configured_groups = list(inputs.parking_brake_check.environment.grade_by_load_group)
+        for load_group in configured_groups:
+            parking_brake_check_results_by_load_group[load_group] = evaluate_parking_brake_check(
+                controller_type=inputs.controller_type,
+                load_group=load_group,
+                controller_masses=ctx.Mass_by_controller[load_group],
+                parking_config=inputs.parking_brake_check,
+                mech_params=inputs.mech_params,
+            )
+        first_load_group = configured_groups[0]
+        parking_brake_check_result = parking_brake_check_results_by_load_group[first_load_group]
 
     electric_brake_summary = summarize_electric_brake(
         enabled=inputs.electric_brake.enabled,
@@ -232,6 +274,7 @@ def run(ctx: Context) -> Context:
         },
         calibration_summary=calibration_summary,
         parking_brake_check_result=parking_brake_check_result,
+        parking_brake_check_results_by_load_group=parking_brake_check_results_by_load_group,
         electric_brake_summary=electric_brake_summary,
         auto_adjustments=auto_adjustments,
         warnings=ctx.warnings,

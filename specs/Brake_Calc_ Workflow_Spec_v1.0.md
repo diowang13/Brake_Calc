@@ -25,11 +25,12 @@
     - 结构示意：`BCP_calibrated_by_controller[load_group][brake_type][controller] = pressure`
 - Markdown 报告：CLI 可通过 `--markdown-output <path>` 导出 Markdown；PDF 暂不作为内置输出，由外部工具从 Markdown 转换
     - V1 Markdown 报告至少包含：
-      - 配置摘要
-      - 计算结果表格
-      - 标定与公式摘要
-      - 停放制动力校核结果
-      - 自动调整记录
+      - 顶层标题固定为：`Summary / Key Tables / Checks / Controller Development Parameters`
+      - `Summary`：配置摘要与自动调整记录
+      - `Key Tables`：`Pressure / Dynamic Load Matrix` 紧凑矩阵，同时展示动态载荷、空簧压力和各制动类型 BCP
+      - `Checks`：理论速度检查、停放制动力校核结果、电制动摘要
+      - `Controller Development Parameters`：`Calibration Summary`、动态载荷公式、压力转换参数、力到压力公式
+      - `delta_BCP` 保留为结构化兼容字段，但不作为 Markdown 主视图展示
 
 
 ### 2.2 必须可追溯的中间量
@@ -65,10 +66,15 @@
     - 内容：自动采取的策略调整记录
     - 示例：等磨耗自动切换为等黏着、`FB` 压力超过 `EB` 后自动提高 `BCP0_EB`
 - `CalibrationSummary`
-    - 内容：标定试验点、生成的 `k_sb(f)` / `k_eb(f)`、`BCP0_sb` / `BCP0_eb`、以及 AW0/AW2/AW3 对应的 `k_for_code`
+    - 内容：标定试验点、生成的 `k_sb(f)` / `k_eb(f)`、最终生效的 `BCP0` / `BCP0_for_code`、输入标定点、最终曲线边界点、分段 `k_for_code` 公式，以及面向控制器开发的分段曲线图
 - `ParkingBrakeCheckResult`
     - 内容：停放制动力校核结果
     - 包括：每车双侧作用力、每车停放制动力、每车倾斜力、每车安全余量、整列停放制动力、整列倾斜力、整列安全余量、是否通过
+    - 字段语义：
+      - `F_N_PB` = 单个制动单元闸片/瓦块双侧作用力（kN）
+      - `F_PB` = 每车停放制动力（kN）
+      - `whole_train` = 整列汇总停放制动力与倾斜力
+    - S9 兼容保留 `parking_brake_check_result`，正式逐载荷组输出写入 `parking_brake_check_results_by_load_group`
 - `ElectricBrakeSummary`
     - 内容：电制动特性输入摘要
     - 包括：是否启用、力值定义范围、识别出的特性点前若干项和末若干项
@@ -298,6 +304,16 @@
         AW0: 40
         AW3: 40
     ```
+  - 当前输入字段 `static_friction_coefficient` 在停车业务口径中承担 `xi0`
+  - 停放制动力中的 `Lpi`、`Lo` 分别表示停放缸内部倍率与执行机构外部倍率；二者按公式单独参与计算，不与夹钳半径换算项混用
+  - 另有制动形式相关的几何换算项 `brake_geometry_factor`：
+    - `tread_cylinder`：`brake_geometry_factor = 1`
+    - `caliper_cylinder`：`brake_geometry_factor = 2 * Rf / Dw`
+  - 停放制动力公式口径：
+    - `F_N_PB = ([(Fp - Fs2) * Lpi * eta_pi] - Fs1) * Lo * eta_o`
+    - `F_PB = brake_geometry_factor * F_N_PB * Np * xi0`
+  - `incline_force` 当前按“坡道项 + 风阻项”口径计算
+  - 校核结果按 `parking_brake_check.environment.grade_by_load_group` 逐载荷组输出
 
 - `adhesion`：全局黏着限制输入，供黏着校核与自动分配策略切换使用。建议结构：
   ```yaml
@@ -368,8 +384,9 @@
 | `controller_pressure_standards` | `[load_group, brake_type, controller]` | kPa | s9 | report / Markdown |
 | `theoretical_speed_checks` | `[brake_type, speed_kmh] -> {requirement_a_mean, theoretical_distance_m, beta_used}` | m/s², m | s9 | report / Markdown |
 | `controller_code_params` | `{dynamic_mass_formula, pressure_conversion}` | mixed | s9 | report / Markdown |
-| `calibration_summary` | `{service_brake, emergency_brake, k_for_code_by_case}` | mixed | s9 | report / Markdown |
-| `parking_brake_check_result` | `{per_car, whole_train, pass}` | mixed | s9 | report / Markdown |
+| `calibration_summary` | `{service_brake, emergency_brake}`，每组包含 `{BCP0, BCP0_for_code, point_pair_mode, input_points, curve_points, linear_formula_for_code}` | mixed | s9 | report / Markdown |
+| `parking_brake_check_result` | `{per_car, whole_train, pass}`（兼容字段，默认取首个已配置载荷组结果） | mixed | s9 | report / Markdown |
+| `parking_brake_check_results_by_load_group` | `[load_group] -> {per_car, whole_train, pass}` | mixed | s9 | report / Markdown |
 | `electric_brake_summary` | `{enabled, force_scope, preview_head, preview_tail}` | mixed | s9 | report / Markdown |
 
 
@@ -608,15 +625,25 @@ flowchart TD
     - `ratio_of_FSB` 类型不单独生成理论速度检查
   - `controller_code_params`：控制器开发用动态载荷公式和压力转换圆整参数
   - `calibration_summary`：标定试验点、生成的 `k_sb(f)` / `k_eb(f)`、`BCP0_sb` / `BCP0_eb`、以及 AW0/AW2/AW3 对应的 `k_for_code`
+    - 对 Markdown 主视图：
+      - 必须展示最终生效的 `BCP0` 与 `BCP0_for_code`
+      - 必须展示输入标定点 `input_AW0 / input_AW2 / input_AW3`（按实际配置出现）
+      - 必须展示最终曲线边界点 `curve_low / curve_high`
+      - 必须明确区分“输入标定点”和“最终曲线边界点”
+      - 必须展示 `k_for_code` 的分段公式与分段曲线图
+      - 曲线图应体现“低段常数 + 中段线性 + 高段常数”，纵坐标按实际数据范围自适应，不强制从 0 起画
+      - 若发生 `FB > EB` 自动调整，`emergency_brake` 下展示的 `BCP0` / `BCP0_for_code` 必须反映最终生效值，而非原始输入值
   - `parking_brake_check_result`：停放制动力校核结果，包括：
     - 每车双侧停放作用力 `F_N_PB`
     - 每车停放制动力 `F_PB`
-    - 每车倾斜力
+    - 每车倾斜力 `incline_force`
     - 每车防滚安全余量
     - 整列停放制动力
     - 整列倾斜力
     - 整列防滚安全余量
     - 是否通过
+    - `incline_force` 当前采用“坡道项 + 风阻项”口径
+  - `parking_brake_check_results_by_load_group`：按 `grade_by_load_group` 逐载荷组输出正式停车校核结果；`parking_brake_check_result` 保留为兼容字段
   - `electric_brake_summary`：电制动特性输入摘要，仅展示识别后的特性点前若干项和末若干项，当前不参与主制动计算
   - `auto_adjustments`：自动调整记录，包括但不限于：
     - 超黏着后由 `equal_wear` 自动切换为 `equal_adhesion`
@@ -760,6 +787,11 @@ pressure_calibration:
     - 在该参考力以下，使用外推点常数
     - 在参考力与 AW3 点之间，使用线性段
     - 在 AW3 点以上，使用 AW3 点常数
+  - report / Markdown 必须同时展示：
+    - 原始输入标定点 `input_AW2`、`input_AW3`
+    - 外推后用于曲线边界的 `curve_low`
+    - 高段边界点 `curve_high`
+  - 文档中必须明确“输入标定点”与“最终曲线边界点”不是同一概念
 
 #### 7.5.5 aw3_aw2 的 AW0 参考力规则
 
@@ -793,6 +825,7 @@ pressure_calibration:
   - 必须自动提高 BCP0_EB
   - 并重新计算 EB 的最终压力标准
   - 同时写入 warning 与 auto_adjustment
+  - `report.calibration_summary.emergency_brake.BCP0` 与 `BCP0_for_code` 必须写入最终提升后的生效值
   - 网页交互与报告中需明确提示：
     “快速制动压力超过紧急制动压力，已自动上调紧急制动初闸压力 BCP0_EB 并重新计算紧急制动压力标准。”
 

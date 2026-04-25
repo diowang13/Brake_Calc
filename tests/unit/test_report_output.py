@@ -60,12 +60,36 @@ def test_dump_report_markdown_renders_core_sections() -> None:
                 "point_pair_mode": "aw3_aw0",
                 "BCP0": 25.0,
                 "input_points": [
-                    {"load_group": "AW0", "brake_type": "FB", "k_for_code": 981},
-                    {"load_group": "AW3", "brake_type": "FSB", "k_for_code": 1123},
+                    {
+                        "label": "input_AW0",
+                        "load_group": "AW0",
+                        "brake_type": "FB",
+                        "force_kN": 15.0,
+                        "k_value": 9.81,
+                        "k_for_code": 981,
+                    },
+                    {
+                        "label": "input_AW3",
+                        "load_group": "AW3",
+                        "brake_type": "FSB",
+                        "force_kN": 33.0,
+                        "k_value": 11.23,
+                        "k_for_code": 1123,
+                    },
                 ],
                 "curve_points": [
-                    {"label": "low", "force_kN": 15.0, "k_value": 9.81, "k_for_code": 981},
-                    {"label": "high", "force_kN": 33.0, "k_value": 11.23, "k_for_code": 1123},
+                    {
+                        "label": "curve_low",
+                        "force_kN": 15.0,
+                        "k_value": 9.81,
+                        "k_for_code": 981,
+                    },
+                    {
+                        "label": "curve_high",
+                        "force_kN": 33.0,
+                        "k_value": 11.23,
+                        "k_for_code": 1123,
+                    },
                 ],
             }
         },
@@ -84,6 +108,40 @@ def test_dump_report_markdown_renders_core_sections() -> None:
                 "safety_margin": 0.64,
             },
             "pass": False,
+        },
+        parking_brake_check_results_by_load_group={
+            "AW0": {
+                "per_car": {
+                    "car_1": {
+                        "F_N_PB": 15.0,
+                        "F_PB": 5.3,
+                        "incline_force": 8.6,
+                        "safety_margin": 0.62,
+                    }
+                },
+                "whole_train": {
+                    "F_PB": 10.6,
+                    "incline_force": 16.5,
+                    "safety_margin": 0.64,
+                },
+                "pass": False,
+            },
+            "AW3": {
+                "per_car": {
+                    "car_1": {
+                        "F_N_PB": 15.0,
+                        "F_PB": 5.3,
+                        "incline_force": 9.1,
+                        "safety_margin": 0.58,
+                    }
+                },
+                "whole_train": {
+                    "F_PB": 10.6,
+                    "incline_force": 17.4,
+                    "safety_margin": 0.61,
+                },
+                "pass": False,
+            },
         },
         electric_brake_summary={
             "enabled": True,
@@ -110,25 +168,42 @@ def test_dump_report_markdown_renders_core_sections() -> None:
     markdown = dump_report_markdown(report)
 
     assert "# Brake Calculation Report" in markdown
-    assert "## Pressure Standards" in markdown
-    assert "## Theoretical Speed Checks" in markdown
-    assert "## Calibration Summary" in markdown
-    assert "## Parking Brake Check" in markdown
-    assert "## Electric Brake Summary" in markdown
-    assert "## Auto Adjustments" in markdown
+    assert "## Summary" in markdown
+    assert "## Key Tables" in markdown
+    assert "## Checks" in markdown
+    assert "## Controller Development Parameters" in markdown
+    assert "### Pressure / Dynamic Load Matrix" in markdown
+    assert "### Calibration Summary" in markdown
+    assert "### Parking Brake Check" in markdown
+    assert "### Pressure Conversion" in markdown
     assert "### Force To Pressure Formula" in markdown
-    assert "whole_train" in markdown
-    assert "delta_BCP" in markdown
+    assert "AW0 / bogie_1" in markdown
+    assert "AW3 / car_1" in markdown
     assert "beta_used" in markdown
-    assert "xychart-beta" in markdown
     assert "k_sb(f)" in markdown
+    assert "981                       if f <= 15" in markdown
+    assert "k_sb_for_code(f) = 7.888889 * f + 862.666667" in markdown
+    assert "BCP0_for_code = 25" in markdown
+    assert "xychart-beta" in markdown
+    assert 'title "service_brake k_for_code(f)"' in markdown
+    assert 'x-axis "f (kN)" [11.4, 15, 33, 36.6]' in markdown
+    assert 'y-axis "k_for_code" 953 --> 1151' in markdown
+    assert 'line [981, 981, 1123, 1123]' in markdown
+    assert "| input_AW0 | 15.000 | 9.810000 | 981 |" in markdown
+    assert "| input_AW0 | 15.000 | 9.810000 | 981 |" in markdown
+    assert "| curve_low | 15.000 | 9.810000 | 981 |" in markdown
+    assert "| curve_high | 33.000 | 11.230000 | 1123 |" in markdown
     assert "mass_dynamic_ton = 0.1 * spring_pressure_kpa + -7.2" in markdown
     assert "BCP_by_controller_kPa = 10.757 * F_by_controller_kN + 21.0" in markdown
     assert "BCP_by_controller_kPa = 10.757 * 9.1 + 21.0" in markdown
     assert "BCP0_EB" in markdown
     assert "25.0" in markdown
     assert "29.56" in markdown
-    assert "bogie_1" in markdown
+    assert "F_N_PB = parking brake normal force per brake unit (both sides, kN)" in markdown
+    assert "F_PB = parking brake braking force per car (kN)" in markdown
+    assert "F_PB = brake_geometry_factor * F_N_PB * Np * xi0" in markdown
+    assert "brake_geometry_factor = 1 (tread) or 2 * Rf / Dw (caliper)" in markdown
+    assert "delta_BCP" not in markdown
 
 
 def test_cli_writes_markdown_report_when_requested(tmp_path: Path) -> None:

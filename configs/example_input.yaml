@@ -5,8 +5,6 @@ brake_types:
     source: kinematic
   - name: EB
     source: kinematic
-  - name: FB
-    source: fast_brake
   - name: holding
     source: ratio_of_FSB
     ratio: 0.5
@@ -27,9 +25,6 @@ response_time:
   EB:
     t1: 0.3
     t2: 1.2
-  FB:
-    t1: 0.4
-    impulse_rate: 0.75
 load_groups: [AW0, AW2, AW3]
 controller_type: bogie
 n_bogies_by_controller: 1
@@ -88,11 +83,11 @@ pressure_calibration:
   enabled: true
   service_brake:
     BCP0: 25.0
-    point_pair_mode: aw3_aw0
+    point_pair_mode: aw3_aw2
     points:
-      - load_group: AW0
+      - load_group: AW2
         brake_type: FSB
-        k_for_code: 980.0
+        k_for_code: 1080.0
       - load_group: AW3
         brake_type: FSB
         k_for_code: 1123.0

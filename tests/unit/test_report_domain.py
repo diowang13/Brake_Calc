@@ -103,15 +103,54 @@ def test_evaluate_parking_brake_check_returns_per_car_and_whole_train_summary() 
             "trailer_car_1": {"mass_dynamic": 20.0},
         },
         parking_config=Inputs.model_validate(make_valid_car_payload()).parking_brake_check,
+        mech_params=Inputs.model_validate(make_valid_car_payload()).mech_params,
     )
 
     assert sorted(result.per_car) == ["powered_car_1", "trailer_car_1"]
-    assert result.per_car["powered_car_1"].F_N_PB == pytest.approx(15.096)
-    assert result.per_car["powered_car_1"].F_PB == pytest.approx(5.284, abs=1e-3)
-    assert result.per_car["powered_car_1"].incline_force == pytest.approx(8.633, abs=1e-3)
-    assert result.whole_train.F_PB == pytest.approx(10.567, abs=1e-3)
-    assert result.whole_train.incline_force == pytest.approx(16.482, abs=1e-3)
+    assert result.per_car["powered_car_1"].F_N_PB == pytest.approx(16.344)
+    assert result.per_car["powered_car_1"].F_PB == pytest.approx(5.72, abs=1e-3)
+    assert result.per_car["powered_car_1"].incline_force == pytest.approx(10.772, abs=1e-3)
+    assert result.whole_train.F_PB == pytest.approx(11.441, abs=1e-3)
+    assert result.whole_train.incline_force == pytest.approx(20.758, abs=1e-3)
     assert result.pass_ is False
+
+
+def test_evaluate_parking_brake_check_uses_caliper_geometry_factor_for_force() -> None:
+    payload = make_valid_car_payload()
+    payload["mech_params"]["cylinder_type"] = "caliper_cylinder"
+    payload["mech_params"]["Dw"] = 0.72
+    payload["mech_params"]["Rf"] = 0.18
+    inputs = Inputs.model_validate(payload)
+
+    result = evaluate_parking_brake_check(
+        controller_type="car",
+        load_group="AW0",
+        controller_masses={"powered_car_1": {"mass_dynamic": 22.0}},
+        parking_config=inputs.parking_brake_check,
+        mech_params=inputs.mech_params,
+    )
+
+    assert result.per_car["powered_car_1"].F_N_PB == pytest.approx(16.344)
+    assert result.per_car["powered_car_1"].F_PB == pytest.approx(2.86, abs=1e-3)
+
+
+def test_evaluate_parking_brake_check_distributes_wind_term_by_vehicle_count() -> None:
+    inputs = Inputs.model_validate(make_valid_car_payload())
+
+    result = evaluate_parking_brake_check(
+        controller_type="car",
+        load_group="AW0",
+        controller_masses={
+            "powered_car_1": {"mass_dynamic": 22.0},
+            "trailer_car_1": {"mass_dynamic": 20.0},
+            "powered_car_2": {"mass_dynamic": 22.0},
+        },
+        parking_config=inputs.parking_brake_check,
+        mech_params=inputs.mech_params,
+    )
+
+    assert result.per_car["powered_car_1"].incline_force == pytest.approx(10.058, abs=1e-3)
+    assert result.whole_train.incline_force == pytest.approx(29.391, abs=1e-3)
 
 
 def test_summarize_electric_brake_keeps_head_and_tail_preview() -> None:
