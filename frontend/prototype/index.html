@@ -1,0 +1,1155 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>brake-calc 低保真原型</title>
+  <style>
+    :root {
+      --bg: #f5f3ef;
+      --panel: #fffdf9;
+      --panel-2: #f0ebe4;
+      --line: #c8c0b7;
+      --ink: #1e1d1a;
+      --muted: #6e675f;
+      --accent: #b65f2a;
+      --accent-soft: #f4dfcf;
+      --ok: #567a52;
+      --warn: #b7751b;
+      --danger: #b53f36;
+      --shadow: 0 12px 30px rgba(35, 27, 18, 0.08);
+      --radius: 18px;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      font-family: "Segoe UI", "Microsoft YaHei UI", sans-serif;
+      background:
+        radial-gradient(circle at top left, #fff7ee, transparent 28%),
+        linear-gradient(180deg, #f8f5f0 0%, #f1ece5 100%);
+      color: var(--ink);
+    }
+
+    .shell {
+      min-height: 100vh;
+      padding: 24px;
+      display: grid;
+      grid-template-rows: auto 1fr;
+      gap: 18px;
+    }
+
+    .topbar {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 16px;
+      padding: 16px 20px;
+      border: 1px solid var(--line);
+      background: rgba(255, 253, 249, 0.82);
+      backdrop-filter: blur(10px);
+      border-radius: 20px;
+      box-shadow: var(--shadow);
+    }
+
+    .brand h1 {
+      margin: 0 0 4px;
+      font-size: 22px;
+      font-weight: 700;
+    }
+
+    .brand p {
+      margin: 0;
+      color: var(--muted);
+      font-size: 13px;
+    }
+
+    .switcher {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      justify-content: flex-end;
+    }
+
+    .switcher button,
+    .ghost-btn,
+    .primary-btn,
+    .secondary-btn,
+    .chip,
+    .segmented button,
+    .mode-card {
+      font: inherit;
+    }
+
+    .switcher button,
+    .ghost-btn,
+    .secondary-btn {
+      border: 1px solid var(--line);
+      background: var(--panel);
+      color: var(--ink);
+      border-radius: 999px;
+      padding: 10px 14px;
+      cursor: pointer;
+    }
+
+    .switcher button.active,
+    .primary-btn,
+    .segmented button.active {
+      background: var(--accent);
+      color: #fff;
+      border-color: var(--accent);
+    }
+
+    .workspace {
+      display: grid;
+      gap: 18px;
+    }
+
+    .screen {
+      display: none;
+      gap: 18px;
+    }
+
+    .screen.active {
+      display: grid;
+    }
+
+    .panel {
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      box-shadow: var(--shadow);
+    }
+
+    .panel-pad {
+      padding: 20px;
+    }
+
+    .hero-grid {
+      display: grid;
+      grid-template-columns: 1.25fr 0.75fr;
+      gap: 18px;
+    }
+
+    .stack {
+      display: grid;
+      gap: 18px;
+    }
+
+    .button-row {
+      display: flex;
+      gap: 12px;
+      flex-wrap: wrap;
+    }
+
+    .primary-btn {
+      border-radius: 999px;
+      padding: 12px 18px;
+      cursor: pointer;
+    }
+
+    .secondary-btn {
+      border-radius: 999px;
+      padding: 12px 18px;
+      cursor: pointer;
+      background: var(--accent-soft);
+      border: 1px solid #d8b392;
+    }
+
+    .title-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      gap: 16px;
+      margin-bottom: 16px;
+    }
+
+    .title-row h2,
+    .title-row h3,
+    .title-row h4 {
+      margin: 0;
+    }
+
+    .meta {
+      color: var(--muted);
+      font-size: 13px;
+    }
+
+    .table-like,
+    .list-rows {
+      display: grid;
+      gap: 10px;
+    }
+
+    .row {
+      display: grid;
+      gap: 12px;
+      align-items: center;
+      padding: 14px 16px;
+      border: 1px solid var(--line);
+      border-radius: 14px;
+      background: #fff;
+    }
+
+    .home-list .row {
+      grid-template-columns: 1.5fr 1fr 0.8fr 0.8fr auto;
+    }
+
+    .badge,
+    .status-pill,
+    .small-pill {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
+      border-radius: 999px;
+      padding: 6px 10px;
+      font-size: 12px;
+      font-weight: 600;
+      border: 1px solid transparent;
+      white-space: nowrap;
+    }
+
+    .status-ok {
+      background: #ebf4ea;
+      color: var(--ok);
+      border-color: #b7d1b2;
+    }
+
+    .status-warn {
+      background: #fff0dc;
+      color: var(--warn);
+      border-color: #e7c28f;
+    }
+
+    .status-danger {
+      background: #fde8e5;
+      color: var(--danger);
+      border-color: #e2aca5;
+    }
+
+    .status-muted {
+      background: #f2eee8;
+      color: var(--muted);
+      border-color: #d3cbc0;
+    }
+
+    .card-grid-2,
+    .card-grid-3,
+    .card-grid-4 {
+      display: grid;
+      gap: 14px;
+    }
+
+    .card-grid-2 {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+    .card-grid-3 {
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+    }
+
+    .card-grid-4 {
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+    }
+
+    .card {
+      padding: 16px;
+      border: 1px solid var(--line);
+      border-radius: 16px;
+      background: #fff;
+      min-height: 110px;
+    }
+
+    .card h4,
+    .card h5 {
+      margin: 0 0 8px;
+    }
+
+    .card p {
+      margin: 0;
+      color: var(--muted);
+      line-height: 1.5;
+      font-size: 14px;
+    }
+
+    .layout-3col {
+      display: grid;
+      grid-template-columns: 260px minmax(0, 1fr) 300px;
+      gap: 18px;
+      align-items: start;
+    }
+
+    .sidebar {
+      padding: 18px;
+      position: sticky;
+      top: 24px;
+    }
+
+    .sidebar h3,
+    .aside h3 {
+      margin: 0 0 14px;
+      font-size: 16px;
+    }
+
+    .nav-group {
+      display: grid;
+      gap: 10px;
+      margin-bottom: 18px;
+    }
+
+    .nav-group-title {
+      color: var(--muted);
+      font-size: 12px;
+      font-weight: 700;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+    }
+
+    .nav-item {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 12px;
+      padding: 12px 14px;
+      border-radius: 14px;
+      border: 1px solid var(--line);
+      background: #fff;
+    }
+
+    .nav-item.active {
+      outline: 2px solid var(--accent);
+      background: #fff7f1;
+    }
+
+    .nav-item.locked {
+      opacity: 0.55;
+      background: #f3efe9;
+    }
+
+    .main-col,
+    .aside {
+      display: grid;
+      gap: 18px;
+    }
+
+    .aside {
+      padding: 18px;
+      position: sticky;
+      top: 24px;
+    }
+
+    .tabs {
+      display: flex;
+      gap: 8px;
+      margin-bottom: 14px;
+    }
+
+    .tabs .small-pill {
+      background: #f3eee8;
+      color: var(--muted);
+      border: 1px solid var(--line);
+    }
+
+    .tabs .small-pill.active {
+      background: var(--accent-soft);
+      color: var(--accent);
+      border-color: #d7b191;
+    }
+
+    .section-note {
+      padding: 16px;
+      border: 1px solid #dcc7b2;
+      background: #fff6ed;
+      border-radius: 16px;
+      line-height: 1.6;
+    }
+
+    .field-grid-2,
+    .field-grid-3,
+    .field-grid-4 {
+      display: grid;
+      gap: 12px;
+    }
+
+    .field-grid-2 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .field-grid-3 { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+    .field-grid-4 { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+
+    .field {
+      padding: 14px;
+      border: 1px solid var(--line);
+      border-radius: 14px;
+      background: #fff;
+      min-height: 88px;
+    }
+
+    .field strong,
+    .field label {
+      display: block;
+      margin-bottom: 8px;
+      font-size: 14px;
+    }
+
+    .placeholder {
+      height: 36px;
+      border-radius: 10px;
+      background: linear-gradient(90deg, #f6f1ea, #ece4da);
+      border: 1px dashed #cabdab;
+    }
+
+    .placeholder.tall {
+      height: 68px;
+    }
+
+    .segmented {
+      display: inline-flex;
+      gap: 8px;
+      padding: 6px;
+      border: 1px solid var(--line);
+      border-radius: 999px;
+      background: #f3efe9;
+      flex-wrap: wrap;
+    }
+
+    .segmented button {
+      border: 0;
+      background: transparent;
+      padding: 10px 14px;
+      border-radius: 999px;
+      cursor: pointer;
+      color: var(--muted);
+    }
+
+    .matrix-table,
+    .perf-table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 14px;
+      background: #fff;
+      border-radius: 16px;
+      overflow: hidden;
+    }
+
+    .matrix-table th,
+    .matrix-table td,
+    .perf-table th,
+    .perf-table td {
+      border: 1px solid #ddd3c8;
+      padding: 12px;
+      text-align: left;
+      vertical-align: top;
+    }
+
+    .matrix-table th,
+    .perf-table th {
+      background: #f3eee7;
+    }
+
+    .result-block {
+      padding: 16px;
+      border: 1px solid var(--line);
+      border-radius: 16px;
+      background: #fff;
+    }
+
+    .curve-box {
+      min-height: 190px;
+      border: 1px dashed #c5b7a3;
+      border-radius: 16px;
+      background:
+        linear-gradient(180deg, rgba(244, 223, 207, 0.35), rgba(255,255,255,0)),
+        repeating-linear-gradient(0deg, transparent, transparent 28px, rgba(190, 178, 163, 0.22) 29px),
+        repeating-linear-gradient(90deg, transparent, transparent 48px, rgba(190, 178, 163, 0.22) 49px);
+      display: grid;
+      place-items: center;
+      color: var(--muted);
+      font-size: 14px;
+    }
+
+    .step-strip {
+      display: flex;
+      gap: 12px;
+      flex-wrap: wrap;
+      margin-bottom: 16px;
+    }
+
+    .step {
+      padding: 10px 14px;
+      border-radius: 999px;
+      border: 1px solid var(--line);
+      background: #f7f2eb;
+      color: var(--muted);
+    }
+
+    .step.active {
+      background: var(--accent-soft);
+      color: var(--accent);
+      border-color: #d7b191;
+    }
+
+    .footer-note {
+      color: var(--muted);
+      font-size: 13px;
+      line-height: 1.6;
+    }
+
+    @media (max-width: 1200px) {
+      .hero-grid,
+      .layout-3col,
+      .card-grid-3,
+      .card-grid-4,
+      .field-grid-4 {
+        grid-template-columns: 1fr;
+      }
+
+      .home-list .row,
+      .field-grid-3,
+      .field-grid-2,
+      .card-grid-2 {
+        grid-template-columns: 1fr;
+      }
+
+      .sidebar,
+      .aside {
+        position: static;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="shell">
+    <div class="topbar panel">
+      <div class="brand">
+        <h1>brake-calc 前端低保真原型</h1>
+        <p>5 个核心页面，用于验证主流程、只读/修订机制、载荷与空簧防错、结果首屏优先级</p>
+      </div>
+      <div class="switcher">
+        <button class="active" data-target="home">首页 / 项目列表</button>
+        <button data-target="wizard">新建初始化</button>
+        <button data-target="overview">只读总览</button>
+        <button data-target="workbench">配置工作台</button>
+        <button data-target="result">结果页</button>
+      </div>
+    </div>
+
+    <div class="workspace">
+      <section id="home" class="screen active">
+        <div class="hero-grid">
+          <div class="panel panel-pad">
+            <div class="title-row">
+              <div>
+                <h2>开始你的制动计算</h2>
+                <div class="meta">首页同时承接两条主路径：新建设计项目、打开既有项目</div>
+              </div>
+              <button class="ghost-btn">导入 YAML</button>
+            </div>
+            <div class="button-row">
+              <button class="primary-btn">新建项目计算</button>
+              <button class="secondary-btn">打开既有项目</button>
+            </div>
+          </div>
+          <div class="panel panel-pad">
+            <h3>列表筛选</h3>
+            <div class="field-grid-2">
+              <div class="field">
+                <strong>项目名称 / 编号搜索</strong>
+                <div class="placeholder"></div>
+              </div>
+              <div class="field">
+                <strong>controller_type</strong>
+                <div class="placeholder"></div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="panel panel-pad home-list">
+          <div class="title-row">
+            <div>
+              <h3>既有项目</h3>
+              <div class="meta">默认按最近修改时间倒序；每行显示项目身份、修改时间、controller_type、最近运行状态</div>
+            </div>
+            <div class="badge status-muted">按最近修改排序</div>
+          </div>
+          <div class="list-rows">
+            <div class="row">
+              <div>
+                <strong>上海机场线制动项目 / SH-HX-026</strong>
+                <div class="meta">适用于既有项目打开与重算</div>
+              </div>
+              <div>最后修改时间：2026-04-26 09:40</div>
+              <div><span class="small-pill active">架控</span></div>
+              <div><span class="status-pill status-ok">最近运行成功</span></div>
+              <button class="ghost-btn">打开</button>
+            </div>
+            <div class="row">
+              <div>
+                <strong>崇明线预研项目 / CM-PR-011</strong>
+                <div class="meta">等待补充停放校核</div>
+              </div>
+              <div>最后修改时间：2026-04-25 17:20</div>
+              <div><span class="small-pill active">车控</span></div>
+              <div><span class="status-pill status-warn">最近运行失败</span></div>
+              <button class="ghost-btn">打开</button>
+            </div>
+            <div class="row">
+              <div>
+                <strong>市域线标定更新 / SY-CAL-008</strong>
+                <div class="meta">既有成功项目，待补标定</div>
+              </div>
+              <div>最后修改时间：2026-04-24 13:05</div>
+              <div><span class="small-pill active">架控</span></div>
+              <div><span class="status-pill status-muted">未运行</span></div>
+              <button class="ghost-btn">打开</button>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section id="wizard" class="screen">
+        <div class="panel panel-pad">
+          <div class="title-row">
+            <div>
+              <h2>新建设计项目</h2>
+              <div class="meta">2 步初始化向导：项目基础信息 → 初始化配置</div>
+            </div>
+            <button class="ghost-btn">取消</button>
+          </div>
+          <div class="step-strip">
+            <div class="step">1. 项目基础信息</div>
+            <div class="step active">2. 初始化配置</div>
+          </div>
+        </div>
+
+        <div class="card-grid-2">
+          <div class="panel panel-pad">
+            <h3>步骤 1 · 项目基础信息</h3>
+            <div class="field-grid-2">
+              <div class="field">
+                <label>项目名称</label>
+                <div class="placeholder"></div>
+              </div>
+              <div class="field">
+                <label>项目编号</label>
+                <div class="placeholder"></div>
+              </div>
+              <div class="field">
+                <label>报告获取邮箱</label>
+                <div class="placeholder"></div>
+              </div>
+              <div class="field">
+                <label>备注（非必填）</label>
+                <div class="placeholder"></div>
+              </div>
+            </div>
+          </div>
+
+          <div class="panel panel-pad">
+            <h3>步骤 2 · 初始化配置</h3>
+            <div class="stack">
+              <div class="field">
+                <label>BCU 类型</label>
+                <div class="segmented">
+                  <button>架控</button>
+                  <button class="active">车控</button>
+                </div>
+              </div>
+              <div class="field-grid-3">
+                <div class="field">
+                  <label>总车数</label>
+                  <div class="placeholder"></div>
+                </div>
+                <div class="field">
+                  <label>动车数</label>
+                  <div class="placeholder"></div>
+                </div>
+                <div class="field">
+                  <label>拖车数</label>
+                  <div class="placeholder"></div>
+                </div>
+              </div>
+              <div class="section-note">
+                <strong>生成摘要</strong><br>
+                将生成 6 辆编组的初始配置，controller_type 为 `car`。进入工作台后可继续微调车辆列表与控制器实例。
+              </div>
+              <div class="card">
+                <h4>实例预览</h4>
+                <p>`trailer_car_1`、`powered_car_2`、`powered_car_3`、`trailer_car_4` ...</p>
+              </div>
+            </div>
+            <div style="margin-top:16px; justify-content:center" class="button-row">
+              <button class="ghost-btn">上一步</button>
+              <button class="primary-btn">生成配置并进入工作台</button>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section id="overview" class="screen">
+        <div class="layout-3col">
+          <aside class="panel sidebar">
+            <h3>章节导航</h3>
+            <div class="nav-group">
+              <div class="nav-group-title">主配置</div>
+              <div class="nav-item locked"><span>运行基础配置 / 技术条件</span><span class="status-pill status-muted">锁定</span></div>
+              <div class="nav-item locked"><span>车辆与控制器配置</span><span class="status-pill status-muted">锁定</span></div>
+              <div class="nav-item locked"><span>载荷与空簧</span><span class="status-pill status-muted">锁定</span></div>
+              <div class="nav-item locked"><span>基础制动机械参数</span><span class="status-pill status-muted">锁定</span></div>
+            </div>
+            <div class="nav-group">
+              <div class="nav-group-title">后置补录</div>
+              <div class="nav-item active"><span>停放校核</span><span class="status-pill status-warn">未补充</span></div>
+              <div class="nav-item"><span>标定</span><span class="status-pill status-ok">已补充</span></div>
+              <div class="nav-item"><span>电制动特性</span><span class="status-pill status-muted">未补充</span></div>
+            </div>
+          </aside>
+
+          <div class="main-col">
+            <div class="panel panel-pad">
+              <div class="title-row">
+                <div>
+                  <h2>上海机场线制动项目 / SH-HX-026</h2>
+                  <div class="meta">版本 V3 · 已运行成功版本</div>
+                </div>
+                <div class="button-row">
+                  <button class="secondary-btn">查看结果</button>
+                  <button class="ghost-btn">修订</button>
+                </div>
+              </div>
+              <div class="section-note">
+                <strong>当前为只读状态。</strong><br>
+                当前版本已运行成功，不能直接修改主配置。若需修改主配置，请点击“修订”，系统将自动创建新版本副本。
+              </div>
+            </div>
+
+            <div class="card-grid-3">
+              <div class="card">
+                <h4>最后一次运行</h4>
+                <p>2026-04-26 09:40<br>运行成功</p>
+              </div>
+              <div class="card">
+                <h4>警告与自动调整</h4>
+                <p>存在 1 条自动调整：EB 强制使用等黏着分配；无致命警告。</p>
+              </div>
+              <div class="card">
+                <h4>停放校核状态</h4>
+                <p>当前版本未补充停放校核，建议在获取线路坡度后补录。</p>
+              </div>
+            </div>
+
+            <div class="card-grid-3">
+              <div class="card">
+                <h4>补充停放校核</h4>
+                <p>状态：未补充<br>录入坡度和停放缸参数后重新运行。</p>
+                <div style="margin-top:12px"><button class="secondary-btn">点击补录</button></div>
+              </div>
+              <div class="card">
+                <h4>补充标定</h4>
+                <p>状态：已补充<br>继续维护 `aw3_aw0 / aw3_aw2` 标定点。</p>
+                <div style="margin-top:12px"><button class="secondary-btn">点击补录</button></div>
+              </div>
+              <div class="card">
+                <h4>补充电空计算</h4>
+                <p>状态：未补充<br>当前仅做 `electric_brake` 输入和曲线查看。</p>
+                <div style="margin-top:12px"><button class="secondary-btn">点击补录</button></div>
+              </div>
+            </div>
+          </div>
+
+          <aside class="panel aside">
+            <h3>版本信息</h3>
+            <div class="stack">
+              <div class="card">
+                <h4>当前版本</h4>
+                  <p>V3 · 架控口径</p>
+              </div>
+              <div class="card">
+                <h4>查看更多</h4>
+                <p>可展开少量关键配置：`controller_type`、`brake_types`、是否含 FB。</p>
+              </div>
+            </div>
+          </aside>
+        </div>
+      </section>
+
+      <section id="workbench" class="screen">
+        <div class="panel panel-pad">
+          <div class="title-row">
+            <div>
+              <h2>配置工作台 · 载荷与空簧</h2>
+              <div class="meta">顶部主动作：返回总览 / 保存 / 运行 / 下载 YAML</div>
+            </div>
+            <div class="button-row">
+              <button class="ghost-btn">返回总览</button>
+              <button class="ghost-btn">下载 YAML</button>
+              <button class="secondary-btn">保存</button>
+              <button class="primary-btn">运行</button>
+            </div>
+          </div>
+        </div>
+
+        <div class="layout-3col">
+          <aside class="panel sidebar">
+            <div class="nav-group">
+              <div class="nav-group-title">主配置</div>
+              <div class="nav-item"><span>运行基础配置 / 技术条件</span><span class="status-pill status-ok">已完成</span></div>
+              <div class="nav-item"><span>车辆与控制器配置</span><span class="status-pill status-ok">已完成</span></div>
+              <div class="nav-item active"><span>载荷与空簧</span><span class="status-pill status-warn">2 项待确认</span></div>
+              <div class="nav-item"><span>基础制动机械参数</span><span class="status-pill status-danger">1 项错误</span></div>
+            </div>
+            <div class="nav-group">
+              <div class="nav-group-title">后置补录</div>
+              <div class="nav-item"><span>停放校核</span><span class="status-pill status-muted">未开始</span></div>
+              <div class="nav-item"><span>标定</span><span class="status-pill status-muted">未开始</span></div>
+              <div class="nav-item"><span>电制动特性</span><span class="status-pill status-muted">未开始</span></div>
+            </div>
+          </aside>
+
+          <div class="main-col">
+            <div class="panel panel-pad">
+              <div class="card-grid-2">
+                <div class="card">
+                  <h4>本章状态</h4>
+                  <p>当前已完成大部分质量参数录入，仍需确认 `mass_static` 录入口径和空簧特征点横轴单位。</p>
+                </div>
+                <div class="card">
+                  <h4>本章说明</h4>
+                  <p>这一页用于组织车辆载荷、转向架参数与空簧特性。重点风险是整车 / 转向架口径、`ton / kN` 单位混填。</p>
+                </div>
+              </div>
+            </div>
+
+            <div class="panel panel-pad">
+              <div class="title-row">
+                <div>
+                  <h3>车辆载荷参数录入</h3>
+                  <div class="meta">车辆称重按载荷组录入；转向架重量单独放到下一块，避免口径混填</div>
+                </div>
+                <div class="segmented">
+                  <button class="active">按整车录入（推荐）</button>
+                  <button>按转向架录入</button>
+                </div>
+              </div>
+              <div class="section-note">
+                <strong>口径提示</strong><br>
+                当前按整车口径录入车辆载荷；后续会根据控制口径聚合。转向架参数不在本区录入，避免把整车称重和架称重混在一起。
+              </div>
+              <div style="margin-top:16px" class="stack">
+                <div class="card">
+                  <h4>AW0</h4>
+                  <div class="field-grid-2">
+                    <div class="field"><label>动架称重 (ton)</label><div class="placeholder"></div></div>
+                    <div class="field"><label>拖架称重 (ton)</label><div class="placeholder"></div></div>
+                  </div>
+                </div>
+                <div class="card">
+                  <h4>AW2</h4>
+                  <div class="field-grid-2">
+                    <div class="field"><label>动架称重 (ton)</label><div class="placeholder"></div></div>
+                    <div class="field"><label>拖架称重 (ton)</label><div class="placeholder"></div></div>
+                  </div>
+                </div>
+                <div class="card">
+                  <h4>AW3</h4>
+                  <div class="field-grid-2">
+                    <div class="field"><label>动架称重 (ton)</label><div class="placeholder"></div></div>
+                    <div class="field"><label>拖架称重 (ton)</label><div class="placeholder"></div></div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div class="panel panel-pad">
+              <div class="title-row">
+                <div>
+                  <h3>转向架参数录入</h3>
+                  <div class="meta">这里放明确按架录入的参数，并单独承担车辆称重 / 架称重的口径说明</div>
+                </div>
+              </div>
+              <div class="section-note">
+                <strong>口径关系</strong><br>
+                `bogie_weight` 始终按单个转向架录入。本区用于单独维护架称重参数，避免与上方车辆载荷参数混填。
+              </div>
+              <div style="margin-top:16px" class="field-grid-2">
+                <div class="field">
+                  <label>动车转向架重量 bogie_weight (ton)</label>
+                  <div class="placeholder"></div>
+                </div>
+                <div class="field">
+                  <label>拖车转向架重量 bogie_weight (ton)</label>
+                  <div class="placeholder"></div>
+                </div>
+              </div>
+            </div>
+
+            <div class="panel panel-pad">
+              <div class="title-row">
+                <div>
+                  <h3>空簧特性输入</h3>
+                  <div class="meta">先选输入模式，再显示对应字段；特征点拟合要强提示坐标轴单位</div>
+                </div>
+              </div>
+              <div class="segmented" style="margin-bottom:16px">
+                <button class="active">特征点拟合</button>
+                <button>显式线性公式</button>
+              </div>
+              <div class="section-note">
+                <strong>单位提示</strong><br>
+                当前为特征点拟合模式。压力轴单位为 `kPa`，质量轴单位为 `ton`。若资料提供的是 `kN`，需先确认前端辅助换算方式后再录入。
+              </div>
+              <div style="margin-top:16px" class="stack">
+                <div class="field">
+                  <label>特征点 1</label>
+                  <div class="field-grid-2">
+                    <div>
+                      <div class="meta" style="margin-bottom:6px">压力 (kPa)</div>
+                      <div class="placeholder"></div>
+                    </div>
+                    <div>
+                      <div class="meta" style="margin-bottom:6px">质量 (ton)</div>
+                      <div class="placeholder"></div>
+                    </div>
+                  </div>
+                </div>
+                <div class="field">
+                  <label>特征点 2</label>
+                  <div class="field-grid-2">
+                    <div>
+                      <div class="meta" style="margin-bottom:6px">压力 (kPa)</div>
+                      <div class="placeholder"></div>
+                    </div>
+                    <div>
+                      <div class="meta" style="margin-bottom:6px">质量 (ton)</div>
+                      <div class="placeholder"></div>
+                    </div>
+                  </div>
+                </div>
+                <div class="field">
+                  <label>特征点 3</label>
+                  <div class="field-grid-2">
+                    <div>
+                      <div class="meta" style="margin-bottom:6px">压力 (kPa)</div>
+                      <div class="placeholder"></div>
+                    </div>
+                    <div>
+                      <div class="meta" style="margin-bottom:6px">质量 (ton)</div>
+                      <div class="placeholder"></div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <aside class="panel aside">
+            <div class="tabs">
+              <span class="small-pill active">说明</span>
+              <span class="small-pill">错误</span>
+              <span class="small-pill">YAML</span>
+            </div>
+            <div class="stack">
+              <div class="card">
+                <h4>当前章节说明</h4>
+                <p>优先确认 `mass_static` 口径和空簧单位，再继续后续章节。这里是最主要的防错区。</p>
+              </div>
+              <div class="card">
+                <h4>待确认项</h4>
+                <p>1. `mass_static` 来源是整车还是转向架口径<br>2. 空簧特征点横轴是否来自 `kN` 资料</p>
+              </div>
+            </div>
+          </aside>
+        </div>
+      </section>
+
+      <section id="result" class="screen">
+        <div class="panel panel-pad">
+          <div class="title-row">
+            <div>
+              <h2>运行结果</h2>
+              <div class="meta">结果首屏优先展示制动性能检查，其次才是压力矩阵</div>
+            </div>
+            <div class="button-row">
+              <button class="ghost-btn">回到总览</button>
+              <button class="secondary-btn">返回配置</button>
+            </div>
+          </div>
+        </div>
+
+        <div class="card-grid-3">
+          <div class="card">
+            <h4>运行状态 / 时间</h4>
+            <p>2026-04-26 10:12<br>运行成功</p>
+          </div>
+          <div class="card">
+            <h4>警告</h4>
+            <p>无致命警告；存在 1 条录入提醒，结果可查看。</p>
+          </div>
+          <div class="card">
+            <h4>自动调整</h4>
+            <p>EB 自动使用等黏着分配；FB 维持与 EB 一致的控制减速度。</p>
+          </div>
+        </div>
+
+        <div class="panel panel-pad">
+          <h3>制动性能检查</h3>
+          <div class="section-note" style="margin-bottom:16px">
+            当前各基础制动类型满足技术条件。请优先核对控制减速度与不同初速度下的制动距离，再下钻查看压力矩阵。
+          </div>
+          <table class="perf-table">
+            <thead>
+              <tr>
+                <th>初速度</th>
+                <th colspan="3">最大常用制动</th>
+                <th colspan="3">紧急制动</th>
+                <th colspan="3">快速制动</th>
+              </tr>
+              <tr>
+                <th></th>
+                <th>控制减速度</th>
+                <th>平均减速度</th>
+                <th>制动距离</th>
+                <th>控制减速度</th>
+                <th>平均减速度</th>
+                <th>制动距离</th>
+                <th>控制减速度</th>
+                <th>平均减速度</th>
+                <th>制动距离</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>80 km/h</td>
+                <td style="background:#fbf6ef">...</td>
+                <td style="background:#fff">...</td>
+                <td style="background:#fbf6ef">...</td>
+                <td style="background:#f7f1ea">...</td>
+                <td style="background:#fff">...</td>
+                <td style="background:#f7f1ea">...</td>
+                <td style="background:#f3ece4">...</td>
+                <td style="background:#fff">...</td>
+                <td style="background:#f3ece4">...</td>
+              </tr>
+              <tr>
+                <td>100 km/h</td>
+                <td style="background:#fbf6ef">...</td>
+                <td style="background:#fff">...</td>
+                <td style="background:#fbf6ef">...</td>
+                <td style="background:#f7f1ea">...</td>
+                <td style="background:#fff">...</td>
+                <td style="background:#f7f1ea">...</td>
+                <td style="background:#f3ece4">...</td>
+                <td style="background:#fff">...</td>
+                <td style="background:#f3ece4">...</td>
+              </tr>
+              <tr>
+                <td>120 km/h</td>
+                <td style="background:#fbf6ef">...</td>
+                <td style="background:#fff">...</td>
+                <td style="background:#fbf6ef">...</td>
+                <td style="background:#f7f1ea">...</td>
+                <td style="background:#fff">...</td>
+                <td style="background:#f7f1ea">...</td>
+                <td style="background:#f3ece4">...</td>
+                <td style="background:#fff">...</td>
+                <td style="background:#f3ece4">...</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <div class="panel panel-pad">
+          <div class="title-row">
+            <div>
+              <h3>压力矩阵</h3>
+              <div class="meta">设计者偏 `brake_type` 视角，调试者偏 `load_group` 视角</div>
+            </div>
+            <div class="segmented">
+              <button class="active">按制动类型</button>
+              <button>按载荷类型</button>
+            </div>
+          </div>
+          <table class="matrix-table">
+            <thead>
+              <tr>
+                <th>载荷组</th>
+                <th>FSB</th>
+                <th>EB</th>
+                <th>FB</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>AW0</td>
+                <td>controller 1..n 压力标准</td>
+                <td>controller 1..n 压力标准</td>
+                <td>controller 1..n 压力标准</td>
+              </tr>
+              <tr>
+                <td>AW2</td>
+                <td>controller 1..n 压力标准</td>
+                <td>controller 1..n 压力标准</td>
+                <td>controller 1..n 压力标准</td>
+              </tr>
+              <tr>
+                <td>AW3</td>
+                <td>controller 1..n 压力标准</td>
+                <td>controller 1..n 压力标准</td>
+                <td>controller 1..n 压力标准</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <div class="card-grid-2">
+          <div class="result-block">
+            <h3>控制器开发参数</h3>
+            <p class="meta">即使没有标定，也要展示 `k_for_code` 与 `BCP0_for_code`</p>
+            <div class="field-grid-2" style="margin-top:12px">
+              <div class="field">
+                <label>常用制动 k_for_code</label>
+                <div class="placeholder"></div>
+              </div>
+              <div class="field">
+                <label>常用制动 BCP0_for_code</label>
+                <div class="placeholder"></div>
+              </div>
+              <div class="field">
+                <label>紧急制动 k_for_code</label>
+                <div class="placeholder"></div>
+              </div>
+              <div class="field">
+                <label>紧急制动 BCP0_for_code</label>
+                <div class="placeholder"></div>
+              </div>
+            </div>
+            <p class="footer-note">当前按基础计算结果生成控制器开发参数。当前未配置标定时，应明确提示这些参数来自未标定基础结果。</p>
+          </div>
+          <div class="result-block">
+            <h3>标定摘要</h3>
+            <p class="meta">存在标定时，展示当前生效的曲线摘要和点对工况。</p>
+            <div class="curve-box">标定曲线摘要 / 分段示意</div>
+          </div>
+        </div>
+      </section>
+    </div>
+  </div>
+
+  <script>
+    const buttons = document.querySelectorAll(".switcher button");
+    const screens = document.querySelectorAll(".screen");
+
+    buttons.forEach((button) => {
+      button.addEventListener("click", () => {
+        buttons.forEach((item) => item.classList.remove("active"));
+        screens.forEach((screen) => screen.classList.remove("active"));
+        button.classList.add("active");
+        document.getElementById(button.dataset.target).classList.add("active");
+      });
+    });
+  </script>
+</body>
+</html>
