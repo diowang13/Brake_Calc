@@ -836,28 +836,28 @@
               </div>
               <div class="section-note">
                 <strong>口径提示</strong><br>
-                当前按整车口径录入车辆载荷；后续会根据控制口径聚合。转向架参数不在本区录入，避免把整车称重和架称重混在一起。
+                当前按整车口径录入车辆载荷；后续会根据控制口径聚合。转向架参数不在本区录入，避免把整车称重和架称重混在一起。若切换到按转向架录入，字段名称应同步切换为“动架称重 / 拖架称重”。
               </div>
               <div style="margin-top:16px" class="stack">
                 <div class="card">
                   <h4>AW0</h4>
                   <div class="field-grid-2">
-                    <div class="field"><label>动架称重 (ton)</label><div class="placeholder"></div></div>
-                    <div class="field"><label>拖架称重 (ton)</label><div class="placeholder"></div></div>
+                    <div class="field"><label>动车称重（整车） (ton)</label><div class="placeholder"></div></div>
+                    <div class="field"><label>拖车称重（整车） (ton)</label><div class="placeholder"></div></div>
                   </div>
                 </div>
                 <div class="card">
                   <h4>AW2</h4>
                   <div class="field-grid-2">
-                    <div class="field"><label>动架称重 (ton)</label><div class="placeholder"></div></div>
-                    <div class="field"><label>拖架称重 (ton)</label><div class="placeholder"></div></div>
+                    <div class="field"><label>动车称重（整车） (ton)</label><div class="placeholder"></div></div>
+                    <div class="field"><label>拖车称重（整车） (ton)</label><div class="placeholder"></div></div>
                   </div>
                 </div>
                 <div class="card">
                   <h4>AW3</h4>
                   <div class="field-grid-2">
-                    <div class="field"><label>动架称重 (ton)</label><div class="placeholder"></div></div>
-                    <div class="field"><label>拖架称重 (ton)</label><div class="placeholder"></div></div>
+                    <div class="field"><label>动车称重（整车） (ton)</label><div class="placeholder"></div></div>
+                    <div class="field"><label>拖车称重（整车） (ton)</label><div class="placeholder"></div></div>
                   </div>
                 </div>
               </div>
@@ -899,7 +899,11 @@
               </div>
               <div class="section-note">
                 <strong>单位提示</strong><br>
-                当前为特征点拟合模式。压力轴单位为 `kPa`，质量轴单位为 `ton`。若资料提供的是 `kN`，需先确认前端辅助换算方式后再录入。
+                当前为特征点拟合模式。压力轴单位为 `kPa`，质量轴单位可按 `ton / kN` 切换。若资料提供的是 `kN`，前端应先辅助换算后再提交权威输入口径。
+                <div style="margin-top:12px" class="segmented">
+                  <button class="active">质量单位：ton</button>
+                  <button>质量单位：kN（前端辅助换算）</button>
+                </div>
               </div>
               <div style="margin-top:16px" class="stack">
                 <div class="field">
@@ -1002,22 +1006,22 @@
           <table class="perf-table">
             <thead>
               <tr>
-                <th>初速度</th>
-                <th colspan="3">最大常用制动</th>
-                <th colspan="3">紧急制动</th>
-                <th colspan="3">快速制动</th>
+                <th style="text-align:center">初速度</th>
+                <th colspan="3" style="text-align:center">最大常用制动</th>
+                <th colspan="3" style="text-align:center">紧急制动</th>
+                <th colspan="3" style="text-align:center">快速制动</th>
               </tr>
               <tr>
-                <th></th>
-                <th>控制减速度</th>
-                <th>平均减速度</th>
-                <th>制动距离</th>
-                <th>控制减速度</th>
-                <th>平均减速度</th>
-                <th>制动距离</th>
-                <th>控制减速度</th>
-                <th>平均减速度</th>
-                <th>制动距离</th>
+                <th style="text-align:center"></th>
+                <th style="text-align:center">控制减速度</th>
+                <th style="text-align:center">平均减速度</th>
+                <th style="text-align:center">制动距离</th>
+                <th style="text-align:center">控制减速度</th>
+                <th style="text-align:center">平均减速度</th>
+                <th style="text-align:center">制动距离</th>
+                <th style="text-align:center">控制减速度</th>
+                <th style="text-align:center">平均减速度</th>
+                <th style="text-align:center">制动距离</th>
               </tr>
             </thead>
             <tbody>
@@ -1065,43 +1069,79 @@
           <div class="title-row">
             <div>
               <h3>压力矩阵</h3>
-              <div class="meta">设计者偏 `brake_type` 视角，调试者偏 `load_group` 视角</div>
+              <div class="meta">使用单张矩阵表做分组对比。按载荷查看时，同控制器保持同底纹；按控制器查看时，同载荷保持同底纹。</div>
             </div>
             <div class="segmented">
-              <button class="active">按制动类型</button>
-              <button>按载荷类型</button>
+              <button class="active">按载荷类型</button>
+              <button>按控制器</button>
             </div>
           </div>
           <table class="matrix-table">
             <thead>
               <tr>
-                <th>载荷组</th>
-                <th>FSB</th>
-                <th>EB</th>
-                <th>FB</th>
+                <th style="text-align:center">载荷类型</th>
+                <th style="text-align:center">控制器</th>
+                <th style="text-align:center">最大常用</th>
+                <th style="text-align:center">快速制动</th>
+                <th style="text-align:center">紧急制动</th>
               </tr>
             </thead>
             <tbody>
               <tr>
-                <td>AW0</td>
-                <td>controller 1..n 压力标准</td>
-                <td>controller 1..n 压力标准</td>
-                <td>controller 1..n 压力标准</td>
+                <td rowspan="4" style="text-align:center; font-weight:700">AW0</td>
+                <td style="background:#dfe8f3">拖架 1</td>
+                <td style="background:#dfe8f3">...</td>
+                <td style="background:#dfe8f3">...</td>
+                <td style="background:#dfe8f3">...</td>
               </tr>
               <tr>
-                <td>AW2</td>
-                <td>controller 1..n 压力标准</td>
-                <td>controller 1..n 压力标准</td>
-                <td>controller 1..n 压力标准</td>
+                <td style="background:#dfe8f3">拖架 2</td>
+                <td style="background:#dfe8f3">...</td>
+                <td style="background:#dfe8f3">...</td>
+                <td style="background:#dfe8f3">...</td>
               </tr>
               <tr>
-                <td>AW3</td>
-                <td>controller 1..n 压力标准</td>
-                <td>controller 1..n 压力标准</td>
-                <td>controller 1..n 压力标准</td>
+                <td style="background:#f6e6d7">动架 3</td>
+                <td style="background:#f6e6d7">...</td>
+                <td style="background:#f6e6d7">...</td>
+                <td style="background:#f6e6d7">...</td>
+              </tr>
+              <tr>
+                <td style="background:#f6e6d7">动架 4</td>
+                <td style="background:#f6e6d7">...</td>
+                <td style="background:#f6e6d7">...</td>
+                <td style="background:#f6e6d7">...</td>
+              </tr>
+              <tr>
+                <td rowspan="4" style="text-align:center; font-weight:700">AW3</td>
+                <td style="background:#dfe8f3">拖架 1</td>
+                <td style="background:#dfe8f3">...</td>
+                <td style="background:#dfe8f3">...</td>
+                <td style="background:#dfe8f3">...</td>
+              </tr>
+              <tr>
+                <td style="background:#dfe8f3">拖架 2</td>
+                <td style="background:#dfe8f3">...</td>
+                <td style="background:#dfe8f3">...</td>
+                <td style="background:#dfe8f3">...</td>
+              </tr>
+              <tr>
+                <td style="background:#f6e6d7">动架 3</td>
+                <td style="background:#f6e6d7">...</td>
+                <td style="background:#f6e6d7">...</td>
+                <td style="background:#f6e6d7">...</td>
+              </tr>
+              <tr>
+                <td style="background:#f6e6d7">动架 4</td>
+                <td style="background:#f6e6d7">...</td>
+                <td style="background:#f6e6d7">...</td>
+                <td style="background:#f6e6d7">...</td>
               </tr>
             </tbody>
           </table>
+          <div style="margin-top:16px" class="section-note">
+            切到“按控制器”视图时，表头仍保持不变，但同一个控制器下展开 `AW0 / AW3` 等载荷类型，并让相同载荷组使用相同底纹，便于纵向追踪。
+          </div>
         </div>
 
         <div class="card-grid-2">

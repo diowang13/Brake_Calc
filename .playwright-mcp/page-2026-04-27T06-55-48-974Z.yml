@@ -1,0 +1,46 @@
+- main [ref=e3]:
+  - generic [ref=e4]:
+    - generic [ref=e5]:
+      - heading "brake-calc 前端应用壳" [level=1] [ref=e6]
+      - paragraph [ref=e7]: 第一阶段先让 5 个核心页面的真实 React 壳跑起来，再逐步替换为正式页面实现。
+    - navigation "核心页面切换" [ref=e8]:
+      - button "首页 / 项目列表" [ref=e9] [cursor=pointer]
+      - button "新建初始化" [ref=e10]
+      - button "只读总览" [ref=e11]
+      - button "配置工作台" [ref=e12]
+      - button "结果页" [ref=e13]
+      - button "导入摘要" [ref=e14]
+    - generic [ref=e16]:
+      - generic [ref=e17]:
+        - generic [ref=e18]:
+          - heading "开始你的制动计算" [level=2] [ref=e19]
+          - paragraph [ref=e20]: 首页同时承接新建项目计算和打开既有项目两条主路径。
+          - generic [ref=e21]:
+            - button "新建项目计算" [ref=e22] [cursor=pointer]
+            - button "打开既有项目" [ref=e23] [cursor=pointer]
+        - generic [ref=e24]:
+          - generic [ref=e25]:
+            - strong [ref=e26]: 列表筛选
+            - button "导入 YAML" [ref=e27] [cursor=pointer]
+          - strong [ref=e29]: 项目名称 / 编号搜索
+          - strong [ref=e32]: BCU 类型筛选
+      - generic [ref=e34]:
+        - generic [ref=e35]:
+          - heading "既有项目" [level=3] [ref=e36]
+          - paragraph [ref=e37]: 默认按最后修改时间倒序；列表内显示项目身份、BCU 类型和最近运行状态。
+        - generic [ref=e38]:
+          - generic [ref=e39]:
+            - strong [ref=e40]: 上海机场线制动项目 / SH-HX-026
+            - generic [ref=e41]: 适用于既有项目打开与重算
+          - generic [ref=e42]: 最后修改时间
+          - generic [ref=e43]: 架控
+          - generic [ref=e44]: 最近运行成功
+          - button "打开" [ref=e45] [cursor=pointer]
+        - generic [ref=e46]:
+          - generic [ref=e47]:
+            - strong [ref=e48]: 崇明线预研项目 / CM-PR-011
+            - generic [ref=e49]: 等待补充停放校核
+          - generic [ref=e50]: 最后修改时间
+          - generic [ref=e51]: 车控
+          - generic [ref=e52]: 最近运行失败
+          - button "打开" [ref=e53] [cursor=pointer]
