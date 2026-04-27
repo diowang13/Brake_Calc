@@ -14,6 +14,48 @@ import {
 } from "../app/styles";
 import { InfoCard, TogglePill } from "../components/ui";
 
+function SummaryCard({ icon, title, body }: { icon: string; title: string; body: string }): ReactElement {
+  return (
+    <div
+      style={{
+        border: "1px solid #d5c9ba",
+        borderRadius: "16px",
+        padding: "16px",
+        background: "#fff"
+      }}
+    >
+      <h4
+        style={{
+          display: "flex",
+          alignItems: "center",
+          gap: "8px",
+          margin: "0 0 8px"
+        }}
+      >
+        <span
+          aria-hidden="true"
+          style={{
+            display: "inline-grid",
+            placeItems: "center",
+            width: "20px",
+            height: "20px",
+            borderRadius: "999px",
+            border: "1px solid #c7a27f",
+            background: "#fff1e3",
+            color: "#8d4c22",
+            fontSize: "13px",
+            lineHeight: 1
+          }}
+        >
+          {icon}
+        </span>
+        {title}
+      </h4>
+      <p style={{ margin: 0, color: "#6b6259", lineHeight: 1.6 }}>{body}</p>
+    </div>
+  );
+}
+
 export function ResultPage({
   pressureMatrixView,
   onChangePressureMatrixView,
@@ -25,29 +67,57 @@ export function ResultPage({
 }): ReactElement {
   return (
     <div style={{ display: "grid", gap: "18px" }}>
-      <section style={panelStyle}>
-        <div style={{ display: "flex", justifyContent: "space-between", gap: "16px" }}>
-          <div>
-            <h2 style={{ margin: 0, fontSize: "32px" }}>运行结果</h2>
-            <p style={{ margin: "8px 0 0", color: "#6b6259" }}>
-              结果页先看摘要和制动性能检查，再看压力矩阵和控制器开发参数。
-            </p>
-          </div>
-          <div style={{ display: "flex", gap: "12px", flexWrap: "wrap" }}>
-            <button type="button" style={ghostActionStyle}>
-              返回配置
-            </button>
-            <button type="button" style={secondaryActionStyle} onClick={onBackToOverview}>
-              回到总览
-            </button>
-          </div>
+      <section
+        style={{
+          display: "flex",
+          justifyContent: "space-between",
+          gap: "16px",
+          alignItems: "flex-start"
+        }}
+      >
+        <div>
+          <h2 style={{ margin: 0, fontSize: "30px" }}>运行结果</h2>
+          <p style={{ margin: "8px 0 0", color: "#6b6259" }}>
+            先确认摘要和制动性能检查，再查看压力矩阵与控制器开发参数。
+          </p>
+        </div>
+        <div style={{ display: "flex", gap: "12px", flexWrap: "wrap" }}>
+          <button type="button" style={ghostActionStyle}>
+            返回配置
+          </button>
+          <button type="button" style={secondaryActionStyle} onClick={onBackToOverview}>
+            回到总览
+          </button>
         </div>
       </section>
 
-      <section style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: "14px" }}>
-        <InfoCard title="运行状态 / 最后一次运行时间" body="运行成功 · 2026-04-27 13:40" />
-        <InfoCard title="警告" body="当前存在 1 条警告：AW2 使用 AW3 fallback 结果参与检查。" />
-        <InfoCard title="自动调整" body="已触发 1 条自动调整：EB 自动切换为等黏着分配。" />
+      <section
+        style={{
+          ...panelStyle,
+          borderColor: "#c7a27f",
+          background: "#fffaf4"
+        }}
+      >
+        <div style={{ display: "flex", justifyContent: "space-between", gap: "16px" }}>
+          <div>
+            <h3 style={{ margin: 0 }}>结果摘要</h3>
+            <p style={{ margin: "8px 0 0", color: "#6b6259" }}>
+              这三项先判断本次计算是否可用，再进入明细表。
+            </p>
+          </div>
+        </div>
+        <div
+          style={{
+            display: "grid",
+            gridTemplateColumns: "repeat(3, 1fr)",
+            gap: "14px",
+            marginTop: "16px"
+          }}
+        >
+          <SummaryCard icon="✓" title="运行状态 / 最后一次运行时间" body="运行成功 · 2026-04-27 13:40" />
+          <SummaryCard icon="!" title="警告" body="当前存在 1 条警告：AW2 使用 AW3 fallback 结果参与检查。" />
+          <SummaryCard icon="↻" title="自动调整" body="已触发 1 条自动调整：EB 自动切换为等黏着分配。" />
+        </div>
       </section>
 
       <section style={panelStyle}>
