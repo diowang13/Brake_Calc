@@ -123,6 +123,131 @@ describe("App shell", () => {
     ).not.toBeInTheDocument();
   });
 
+  it("renders the technical conditions slice with business labels and brake type controls", async () => {
+    const user = userEvent.setup();
+
+    render(<App />);
+
+    await user.click(screen.getByRole("button", { name: "配置工作台" }));
+    await user.click(screen.getByRole("button", { name: /^运行基础配置 \/ 技术条件/ }));
+
+    expect(screen.getByRole("heading", { level: 3, name: "运行基础配置 / 技术条件" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { level: 4, name: "最大常用制动" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { level: 4, name: "紧急制动" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { level: 4, name: "快速制动" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { level: 4, name: "其他比例制动" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { level: 4, name: "全局黏着限制" })).toBeInTheDocument();
+    expect(screen.getByText("最高速度 v0 (km/h)")).toBeInTheDocument();
+    expect(screen.getByText("最大常用制动平均减速度要求 (m/s²)")).toBeInTheDocument();
+    expect(screen.getAllByText("空走时间 t1 (s)").length).toBeGreaterThanOrEqual(2);
+    expect(screen.getByText("冲击率 impulse_rate (m/s³)")).toBeInTheDocument();
+    expect(screen.getByRole("heading", { level: 4, name: "不同初速度下的制动距离校核要求" })).toBeInTheDocument();
+    expect(screen.getByText(/最高速度 v0 默认参与校核/)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "添加待校核速度" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "按平均减速度录入" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "按制动距离录入" })).toBeInTheDocument();
+    expect(screen.getByText("紧急制动平均减速度要求 (m/s²)")).toBeInTheDocument();
+    expect(screen.getByText("紧急制动响应时间 t2 (s)")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "启用快速制动" })).toBeInTheDocument();
+    expect(screen.queryByText("快速制动空走时间 t1 (s)")).not.toBeInTheDocument();
+    expect(screen.queryByText("快速制动冲击率 impulse_rate (m/s³)")).not.toBeInTheDocument();
+    expect(screen.getByText(/快速制动控制目标跟随紧急制动/)).toBeInTheDocument();
+    expect(screen.getByText("制动类型代号 name（写入 YAML）")).toBeInTheDocument();
+    expect(screen.getByText("相对最大常用制动比例 ratio (-)")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "添加比例制动类型" })).toBeInTheDocument();
+    expect(screen.getByText("黏着利用限制 mu_limit (-)")).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "按制动距离录入" }));
+
+    expect(screen.getByText("紧急制动距离要求 (m)")).toBeInTheDocument();
+    expect(screen.queryByText("紧急制动平均减速度要求 (m/s²)")).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "添加待校核速度" }));
+
+    expect(screen.getByText("待校核速度 1 (km/h)")).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "添加比例制动类型" }));
+
+    expect(screen.getByText("制动类型代号 2 name（写入 YAML）")).toBeInTheDocument();
+    expect(screen.getByText("相对最大常用制动比例 2 ratio (-)")).toBeInTheDocument();
+  });
+
+  it("uses ratio brake defaults and validates ratio brake names and percentage inputs", async () => {
+    const user = userEvent.setup();
+
+    render(<App />);
+
+    await user.click(screen.getByRole("button", { name: "配置工作台" }));
+    await user.click(screen.getByRole("button", { name: /^运行基础配置 \/ 技术条件/ }));
+
+    const firstNameInput = screen.getByRole("textbox", {
+      name: "制动类型代号 name（写入 YAML）"
+    });
+    const firstRatioInput = screen.getByRole("spinbutton", {
+      name: "相对最大常用制动比例 ratio (-)"
+    });
+
+    expect(firstNameInput).toHaveValue("holding");
+    expect(firstRatioInput).toHaveValue(50);
+    expect(screen.getAllByText("%").length).toBeGreaterThan(0);
+
+    await user.click(screen.getByRole("button", { name: "添加比例制动类型" }));
+
+    expect(
+      screen.getByRole("textbox", { name: "制动类型代号 2 name（写入 YAML）" })
+    ).toHaveValue("holding_2");
+
+    await user.clear(firstNameInput);
+    await user.type(firstNameInput, "中文");
+    await user.tab();
+
+    expect(screen.getByText("仅支持英文、数字、下划线")).toBeInTheDocument();
+
+    await user.clear(firstNameInput);
+    await user.type(firstNameInput, "holding_2");
+    await user.tab();
+
+    expect(screen.getByText("制动类型代号不可重复")).toBeInTheDocument();
+
+    await user.clear(firstRatioInput);
+    await user.type(firstRatioInput, "101");
+    await user.tab();
+
+    expect(screen.getByText("请输入 1 到 100 的整数")).toBeInTheDocument();
+  });
+
+  it("validates speed checks as positive integers not exceeding v0 and allows deletion", async () => {
+    const user = userEvent.setup();
+
+    render(<App />);
+
+    await user.click(screen.getByRole("button", { name: "配置工作台" }));
+    await user.click(screen.getByRole("button", { name: /^运行基础配置 \/ 技术条件/ }));
+
+    const v0Input = screen.getByRole("spinbutton", { name: "最高速度 v0 (km/h)" });
+    await user.clear(v0Input);
+    await user.type(v0Input, "80");
+    await user.tab();
+
+    await user.click(screen.getByRole("button", { name: "添加待校核速度" }));
+
+    const speedInput = screen.getByRole("spinbutton", { name: "待校核速度 1 (km/h)" });
+    await user.type(speedInput, "90");
+    await user.tab();
+
+    expect(screen.getByText("待校核速度不能超过最高速度 v0")).toBeInTheDocument();
+
+    await user.clear(speedInput);
+    await user.type(speedInput, "12.5");
+    await user.tab();
+
+    expect(screen.getByText("请输入正整数")).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "删除待校核速度 1" }));
+
+    expect(screen.queryByRole("spinbutton", { name: "待校核速度 1 (km/h)" })).not.toBeInTheDocument();
+  });
+
   it("renders the base brake mechanical slice with unit hints and parking boundary", async () => {
     const user = userEvent.setup();
 
@@ -133,14 +258,33 @@ describe("App shell", () => {
 
     expect(screen.getByRole("heading", { level: 3, name: "基础制动机械参数" })).toBeInTheDocument();
     expect(screen.getByRole("heading", { level: 4, name: "基础制动缸参数" })).toBeInTheDocument();
-    expect(screen.getByRole("heading", { level: 4, name: "条件显示项" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "踏面制动 tread_cylinder" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "制动夹钳 caliper_cylinder" })).toBeInTheDocument();
     expect(screen.getAllByText("单位提示").length).toBeGreaterThan(0);
     expect(screen.getByText(/停放缸参数不在本章/)).toBeInTheDocument();
-    expect(screen.getByText("制动缸缸径 (mm)")).toBeInTheDocument();
-    expect(screen.getByText("杠杆比 Lpi / Lo")).toBeInTheDocument();
+    expect(screen.getByText("活塞有效面积 Sc (m²)")).toBeInTheDocument();
+    expect(screen.getByText("摩擦系数 xi (-)")).toBeInTheDocument();
+    expect(screen.getByText("单元内部倍率 Li (-)")).toBeInTheDocument();
+    expect(screen.getByText("单元内部效率 eta_i (-)")).toBeInTheDocument();
+    expect(screen.getByText("外部倍率 Lo (-)")).toBeInTheDocument();
+    expect(screen.getByText("外部效率 eta_o (-)")).toBeInTheDocument();
+    expect(screen.getByText("单元复位力 Fs1 (kN)")).toBeInTheDocument();
+    expect(screen.getByText("单元复位力 Fs2 (kN)")).toBeInTheDocument();
+    expect(screen.queryByText("制动缸缸径 (mm)")).not.toBeInTheDocument();
+    expect(screen.queryByText("单缸作用力 (kN)")).not.toBeInTheDocument();
+    expect(screen.queryByText("制动单元数量 (-)")).not.toBeInTheDocument();
+    expect(screen.queryByText("制动倍率 Beta (-)")).not.toBeInTheDocument();
+    expect(screen.queryByText("杠杆比 Lpi / Lo")).not.toBeInTheDocument();
+    expect(screen.queryByText("轮径 Dw (m)")).not.toBeInTheDocument();
+    expect(screen.queryByText("摩擦半径 Rf (m)")).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "制动夹钳 caliper_cylinder" }));
+
+    expect(screen.getByText("轮径 Dw (m)")).toBeInTheDocument();
+    expect(screen.getByText("摩擦半径 Rf (m)")).toBeInTheDocument();
   });
 
-  it("renders the parking brake supplement slice with status, environment and mechanics", async () => {
+  it("renders the parking brake supplement slice as input only using contract fields", async () => {
     const user = userEvent.setup();
 
     render(<App />);
@@ -150,12 +294,27 @@ describe("App shell", () => {
 
     expect(screen.getByRole("heading", { level: 3, name: "停放校核" })).toBeInTheDocument();
     expect(screen.getByText("当前状态：未补充停放校核")).toBeInTheDocument();
+    expect(screen.getByRole("heading", { level: 4, name: "校核配置" })).toBeInTheDocument();
     expect(screen.getByRole("heading", { level: 4, name: "环境条件" })).toBeInTheDocument();
-    expect(screen.getByRole("heading", { level: 4, name: "机械参数" })).toBeInTheDocument();
-    expect(screen.getByText("AW0 坡度 (‰)")).toBeInTheDocument();
-    expect(screen.getByText("AW3 坡度 (‰)")).toBeInTheDocument();
-    expect(screen.getByText("停放缸作用力 (kN)")).toBeInTheDocument();
-    expect(screen.getByText("停放制动单元数量 (-)")).toBeInTheDocument();
+    expect(screen.getByRole("heading", { level: 4, name: "停放缸参数" })).toBeInTheDocument();
+    expect(screen.getByText("要求安全系数 required_safety_margin (-)")).toBeInTheDocument();
+    expect(screen.getByText("静摩擦系数 xi0 / static_friction_coefficient (-)")).toBeInTheDocument();
+    expect(screen.getByText("每车停放缸数量 n_parking_cylinders_by_car (-)")).toBeInTheDocument();
+    expect(screen.getByText("最大风速 wind_speed_max (m/s)")).toBeInTheDocument();
+    expect(screen.getByText("风阻系数 wind_resistance_coefficient (-)")).toBeInTheDocument();
+    expect(screen.getByText("AW0 坡度 grade_by_load_group.AW0 (‰)")).toBeInTheDocument();
+    expect(screen.getByText("AW3 坡度 grade_by_load_group.AW3 (‰)")).toBeInTheDocument();
+    expect(screen.getByText("停放弹簧输出力 Fp (kN)")).toBeInTheDocument();
+    expect(screen.getByText("停放缸内部倍率 Lpi (-)")).toBeInTheDocument();
+    expect(screen.getByText("停放缸内部效率 eta_pi (-)")).toBeInTheDocument();
+    expect(screen.getByText("执行机构外部倍率 Lo (-)")).toBeInTheDocument();
+    expect(screen.getByText("执行机构外部效率 eta_o (-)")).toBeInTheDocument();
+    expect(screen.queryByText("停放缸作用力 (kN)")).not.toBeInTheDocument();
+    expect(screen.queryByText("停车校核摩擦半径 Rf (mm)")).not.toBeInTheDocument();
+    expect(screen.queryByText("线路条件备注")).not.toBeInTheDocument();
+    expect(screen.queryByText("F_N_PB")).not.toBeInTheDocument();
+    expect(screen.queryByText("F_PB")).not.toBeInTheDocument();
+    expect(screen.queryByText("whole_train")).not.toBeInTheDocument();
   });
 
   it("renders the calibration supplement slice grouped by load cases", async () => {
@@ -207,12 +366,35 @@ describe("App shell", () => {
     expect(screen.getByRole("heading", { level: 3, name: "制动性能检查" })).toBeInTheDocument();
     expect(screen.getByText("初速度 (km/h)")).toBeInTheDocument();
     expect(screen.getAllByText("最大常用制动").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("控制减速度").length).toBeGreaterThanOrEqual(3);
+    expect(screen.getAllByText("平均减速度").length).toBeGreaterThanOrEqual(3);
+    expect(screen.getAllByText("制动距离").length).toBeGreaterThanOrEqual(3);
+    expect(screen.getByText("100 km/h")).toBeInTheDocument();
     expect(screen.getByRole("heading", { level: 3, name: "压力矩阵" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "按载荷类型" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "按控制器" })).toBeInTheDocument();
+    expect(screen.getByText("动态载荷 mass_dyn_t (ton)")).toBeInTheDocument();
+    expect(screen.getByText("标准空簧压力 spring_kPa")).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "按控制器" }));
+    expect(screen.getAllByText("AW0 / mass_dyn_t").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("AW3 / spring_kPa").length).toBeGreaterThan(0);
+
     expect(screen.getByRole("heading", { level: 3, name: "控制器开发参数" })).toBeInTheDocument();
-    expect(screen.getByText("常用制动开发参数")).toBeInTheDocument();
-    expect(screen.getByText("紧急制动开发参数")).toBeInTheDocument();
+    expect(screen.getByText("常用制动 k_for_code")).toBeInTheDocument();
+    expect(screen.getByText("常用制动 BCP0_for_code")).toBeInTheDocument();
+    expect(screen.getByText("紧急制动 k_for_code")).toBeInTheDocument();
+    expect(screen.getByText("紧急制动 BCP0_for_code")).toBeInTheDocument();
+    expect(screen.getByRole("heading", { level: 3, name: "标定摘要" })).toBeInTheDocument();
+    expect(screen.getByText("常用制动 k_for_code 分段曲线")).toBeInTheDocument();
+    expect(screen.getByText("紧急制动 k_for_code 分段曲线")).toBeInTheDocument();
+    expect(screen.getByText(/车控 EB 实际 BCP 压力标定 V1.0 暂不支持/)).toBeInTheDocument();
+    expect(screen.getByRole("heading", { level: 3, name: "停放校核结果" })).toBeInTheDocument();
+    expect(screen.getByText("F_N_PB 单个制动单元双侧作用力")).toBeInTheDocument();
+    expect(screen.getByText("F_PB 每车停放制动力")).toBeInTheDocument();
+    expect(screen.getByText("whole_train 整列汇总力")).toBeInTheDocument();
+    expect(screen.getAllByText("AW0").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("AW3").length).toBeGreaterThan(0);
   });
 
   it("renders the import summary page with supplement recognition, warnings and run readiness", async () => {

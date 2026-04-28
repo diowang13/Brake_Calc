@@ -1,10 +1,9 @@
-import type { ReactElement } from "react";
+import { Fragment, type CSSProperties, type ReactElement } from "react";
 
 import {
   ghostActionStyle,
   groupedTableCellStyle,
   panelStyle,
-  primaryActionStyle,
   secondaryActionStyle,
   stripedBlueCellStyle,
   stripedOrangeCellStyle,
@@ -12,7 +11,48 @@ import {
   tableHeaderStyle,
   tableStyle
 } from "../app/styles";
-import { InfoCard, TogglePill } from "../components/ui";
+import { TogglePill } from "../components/ui";
+
+const brakeGroups = [
+  { key: "fsb", label: "最大常用制动" },
+  { key: "eb", label: "紧急制动" },
+  { key: "fb", label: "快速制动" }
+] as const;
+
+const performanceRows = [
+  {
+    speed: "80 km/h",
+    fsb: ["1.02", "0.96", "214 m"],
+    eb: ["1.15", "1.07", "198 m"],
+    fb: ["1.08", "1.01", "206 m"]
+  },
+  {
+    speed: "100 km/h",
+    fsb: ["1.02", "0.96", "332 m"],
+    eb: ["1.15", "1.07", "306 m"],
+    fb: ["1.08", "1.01", "319 m"]
+  },
+  {
+    speed: "120 km/h",
+    fsb: ["1.01", "0.95", "468 m"],
+    eb: ["1.14", "1.06", "438 m"],
+    fb: ["1.07", "1.00", "452 m"]
+  }
+] as const;
+
+const matrixRows = [
+  { load: "AW0", controller: "拖架 1", mass: "31.24", spring: "245", fsb: "68", fb: "72", eb: "75" },
+  { load: "AW0", controller: "动架 2", mass: "34.18", spring: "263", fsb: "70", fb: "74", eb: "78" },
+  { load: "AW3", controller: "拖架 1", mass: "43.86", spring: "352", fsb: "83", fb: "88", eb: "92" },
+  { load: "AW3", controller: "动架 2", mass: "47.12", spring: "376", fsb: "86", fb: "90", eb: "95" }
+] as const;
+
+const controllerMatrixRows = [matrixRows[0], matrixRows[2], matrixRows[1], matrixRows[3]] as const;
+
+const parkingRows = [
+  { load: "AW0", fnpb: "16.39 kN", fpb: "5.74 kN", margin: "1.31", status: "通过" },
+  { load: "AW3", fnpb: "16.39 kN", fpb: "5.74 kN", margin: "1.24", status: "通过" }
+] as const;
 
 function SummaryCard({ icon, title, body }: { icon: string; title: string; body: string }): ReactElement {
   return (
@@ -53,6 +93,98 @@ function SummaryCard({ icon, title, body }: { icon: string; title: string; body:
       </h4>
       <p style={{ margin: 0, color: "#6b6259", lineHeight: 1.6 }}>{body}</p>
     </div>
+  );
+}
+
+function ParameterCard({ title, value, note }: { title: string; value: string; note: string }): ReactElement {
+  return (
+    <div
+      style={{
+        border: "1px solid #d5c9ba",
+        borderRadius: "14px",
+        padding: "14px",
+        background: "#fff"
+      }}
+    >
+      <div style={{ color: "#6b6259", fontSize: "13px", marginBottom: "8px" }}>{title}</div>
+      <div style={{ fontFamily: "Consolas, monospace", fontSize: "18px", fontWeight: 700 }}>{value}</div>
+      <div style={{ color: "#6b6259", fontSize: "13px", marginTop: "8px", lineHeight: 1.5 }}>{note}</div>
+    </div>
+  );
+}
+
+function FormulaBlock({ title, lines }: { title: string; lines: string[] }): ReactElement {
+  return (
+    <div
+      style={{
+        border: "1px dashed #c7a27f",
+        borderRadius: "14px",
+        padding: "14px",
+        background: "#fffaf4"
+      }}
+    >
+      <h4 style={{ margin: "0 0 10px" }}>{title}</h4>
+      <div style={{ display: "grid", gap: "6px", fontFamily: "Consolas, monospace", fontSize: "14px" }}>
+        {lines.map((line) => (
+          <div key={line}>{line}</div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function CurveSketch({ title, color }: { title: string; color: string }): ReactElement {
+  const lineStyle: CSSProperties = {
+    height: "3px",
+    background: color,
+    alignSelf: "center"
+  };
+
+  return (
+    <div
+      style={{
+        border: "1px solid #d5c9ba",
+        borderRadius: "14px",
+        padding: "14px",
+        background:
+          "linear-gradient(#efe4d7 1px, transparent 1px), linear-gradient(90deg, #efe4d7 1px, transparent 1px), #fff",
+        backgroundSize: "36px 36px"
+      }}
+    >
+      <h4 style={{ margin: "0 0 14px" }}>{title}</h4>
+      <div
+        aria-label={title}
+        style={{
+          height: "112px",
+          display: "grid",
+          gridTemplateColumns: "1fr 1.2fr 1fr",
+          alignItems: "center",
+          gap: "0"
+        }}
+      >
+        <div style={lineStyle} />
+        <div
+          style={{
+            height: "3px",
+            background: color,
+            transform: "rotate(9deg)",
+            transformOrigin: "center"
+          }}
+        />
+        <div style={lineStyle} />
+      </div>
+      <div style={{ color: "#6b6259", fontSize: "13px" }}>低段常数 + 中段线性 + 高段常数</div>
+    </div>
+  );
+}
+
+function MetricCells({ values }: { values: readonly string[] }): ReactElement {
+  return (
+    <>
+      <td style={tableCellStyle}>{values[0]}</td>
+      <td style={tableCellStyle}>{values[1]}</td>
+      <td style={tableCellStyle}>{values[2]}</td>
+    </>
   );
 }
 
@@ -98,13 +230,11 @@ export function ResultPage({
           background: "#fffaf4"
         }}
       >
-        <div style={{ display: "flex", justifyContent: "space-between", gap: "16px" }}>
-          <div>
-            <h3 style={{ margin: 0 }}>结果摘要</h3>
-            <p style={{ margin: "8px 0 0", color: "#6b6259" }}>
-              这三项先判断本次计算是否可用，再进入明细表。
-            </p>
-          </div>
+        <div>
+          <h3 style={{ margin: 0 }}>结果摘要</h3>
+          <p style={{ margin: "8px 0 0", color: "#6b6259" }}>
+            这三项先判断本次计算是否可用，再进入明细表。
+          </p>
         </div>
         <div
           style={{
@@ -130,24 +260,38 @@ export function ResultPage({
             <thead>
               <tr>
                 <th style={tableHeaderStyle}>初速度 (km/h)</th>
-                <th style={tableHeaderStyle}>最大常用制动</th>
-                <th style={tableHeaderStyle}>快速制动</th>
-                <th style={tableHeaderStyle}>紧急制动</th>
+                {brakeGroups.map((group) => (
+                  <th key={group.key} colSpan={3} style={tableHeaderStyle}>
+                    {group.label}
+                  </th>
+                ))}
+              </tr>
+              <tr>
+                <th style={tableHeaderStyle} />
+                {brakeGroups.map((group) => (
+                  <Fragment key={group.key}>
+                    <th key={`${group.key}-control`} style={tableHeaderStyle}>
+                      控制减速度
+                    </th>
+                    <th key={`${group.key}-mean`} style={tableHeaderStyle}>
+                      平均减速度
+                    </th>
+                    <th key={`${group.key}-distance`} style={tableHeaderStyle}>
+                      制动距离
+                    </th>
+                  </Fragment>
+                ))}
               </tr>
             </thead>
             <tbody>
-              <tr>
-                <td style={tableCellStyle}>80</td>
-                <td style={tableCellStyle}>控制减速度 1.02 / 平均减速度 0.96 / 制动距离 214</td>
-                <td style={tableCellStyle}>控制减速度 1.08 / 平均减速度 1.01 / 制动距离 206</td>
-                <td style={tableCellStyle}>控制减速度 1.15 / 平均减速度 1.07 / 制动距离 198</td>
-              </tr>
-              <tr>
-                <td style={tableCellStyle}>120</td>
-                <td style={tableCellStyle}>控制减速度 1.01 / 平均减速度 0.95 / 制动距离 468</td>
-                <td style={tableCellStyle}>控制减速度 1.07 / 平均减速度 1.00 / 制动距离 452</td>
-                <td style={tableCellStyle}>控制减速度 1.14 / 平均减速度 1.06 / 制动距离 438</td>
-              </tr>
+              {performanceRows.map((row) => (
+                <tr key={row.speed}>
+                  <td style={groupedTableCellStyle}>{row.speed}</td>
+                  <MetricCells values={row.fsb} />
+                  <MetricCells values={row.eb} />
+                  <MetricCells values={row.fb} />
+                </tr>
+              ))}
             </tbody>
           </table>
         </div>
@@ -155,7 +299,12 @@ export function ResultPage({
 
       <section style={panelStyle}>
         <div style={{ display: "flex", justifyContent: "space-between", gap: "16px", alignItems: "center" }}>
-          <h3 style={{ margin: 0 }}>压力矩阵</h3>
+          <div>
+            <h3 style={{ margin: 0 }}>压力矩阵</h3>
+            <p style={{ margin: "8px 0 0", color: "#6b6259" }}>
+              同一矩阵同时展示动态载荷、标准空簧压力和各制动类型 BCP 压力标准。
+            </p>
+          </div>
           <div style={{ display: "flex", gap: "10px", flexWrap: "wrap" }}>
             <TogglePill
               label="按载荷类型"
@@ -176,42 +325,33 @@ export function ResultPage({
                 <tr>
                   <th style={tableHeaderStyle}>载荷类型</th>
                   <th style={tableHeaderStyle}>控制器</th>
-                  <th style={tableHeaderStyle}>最大常用制动</th>
-                  <th style={tableHeaderStyle}>快速制动</th>
-                  <th style={tableHeaderStyle}>紧急制动</th>
+                  <th style={tableHeaderStyle}>动态载荷 mass_dyn_t (ton)</th>
+                  <th style={tableHeaderStyle}>标准空簧压力 spring_kPa</th>
+                  <th style={tableHeaderStyle}>最大常用制动 BCP</th>
+                  <th style={tableHeaderStyle}>快速制动 BCP</th>
+                  <th style={tableHeaderStyle}>紧急制动 BCP</th>
                 </tr>
               </thead>
               <tbody>
-                <tr>
-                  <td style={groupedTableCellStyle} rowSpan={2}>
-                    AW0
-                  </td>
-                  <td style={stripedBlueCellStyle}>拖架 1</td>
-                  <td style={stripedBlueCellStyle}>68</td>
-                  <td style={stripedBlueCellStyle}>72</td>
-                  <td style={stripedBlueCellStyle}>75</td>
-                </tr>
-                <tr>
-                  <td style={stripedOrangeCellStyle}>动架 2</td>
-                  <td style={stripedOrangeCellStyle}>70</td>
-                  <td style={stripedOrangeCellStyle}>74</td>
-                  <td style={stripedOrangeCellStyle}>78</td>
-                </tr>
-                <tr>
-                  <td style={groupedTableCellStyle} rowSpan={2}>
-                    AW3
-                  </td>
-                  <td style={stripedBlueCellStyle}>拖架 1</td>
-                  <td style={stripedBlueCellStyle}>83</td>
-                  <td style={stripedBlueCellStyle}>88</td>
-                  <td style={stripedBlueCellStyle}>92</td>
-                </tr>
-                <tr>
-                  <td style={stripedOrangeCellStyle}>动架 2</td>
-                  <td style={stripedOrangeCellStyle}>86</td>
-                  <td style={stripedOrangeCellStyle}>90</td>
-                  <td style={stripedOrangeCellStyle}>95</td>
-                </tr>
+                {matrixRows.map((row, index) => {
+                  const rowStyle = row.controller === "拖架 1" ? stripedBlueCellStyle : stripedOrangeCellStyle;
+
+                  return (
+                    <tr key={`${row.load}-${row.controller}`}>
+                      {index % 2 === 0 ? (
+                        <td style={groupedTableCellStyle} rowSpan={2}>
+                          {row.load}
+                        </td>
+                      ) : null}
+                      <td style={rowStyle}>{row.controller}</td>
+                      <td style={rowStyle}>{row.mass}</td>
+                      <td style={rowStyle}>{row.spring}</td>
+                      <td style={rowStyle}>{row.fsb}</td>
+                      <td style={rowStyle}>{row.fb}</td>
+                      <td style={rowStyle}>{row.eb}</td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           ) : (
@@ -219,43 +359,44 @@ export function ResultPage({
               <thead>
                 <tr>
                   <th style={tableHeaderStyle}>控制器</th>
-                  <th style={tableHeaderStyle}>载荷类型</th>
-                  <th style={tableHeaderStyle}>最大常用制动</th>
-                  <th style={tableHeaderStyle}>快速制动</th>
-                  <th style={tableHeaderStyle}>紧急制动</th>
+                  <th style={tableHeaderStyle}>载荷 / 指标</th>
+                  <th style={tableHeaderStyle}>数值</th>
+                  <th style={tableHeaderStyle}>最大常用制动 BCP</th>
+                  <th style={tableHeaderStyle}>快速制动 BCP</th>
+                  <th style={tableHeaderStyle}>紧急制动 BCP</th>
                 </tr>
               </thead>
               <tbody>
-                <tr>
-                  <td style={groupedTableCellStyle} rowSpan={2}>
-                    拖架 1
-                  </td>
-                  <td style={stripedBlueCellStyle}>AW0</td>
-                  <td style={stripedBlueCellStyle}>68</td>
-                  <td style={stripedBlueCellStyle}>72</td>
-                  <td style={stripedBlueCellStyle}>75</td>
-                </tr>
-                <tr>
-                  <td style={stripedOrangeCellStyle}>AW3</td>
-                  <td style={stripedOrangeCellStyle}>83</td>
-                  <td style={stripedOrangeCellStyle}>88</td>
-                  <td style={stripedOrangeCellStyle}>92</td>
-                </tr>
-                <tr>
-                  <td style={groupedTableCellStyle} rowSpan={2}>
-                    动架 2
-                  </td>
-                  <td style={stripedBlueCellStyle}>AW0</td>
-                  <td style={stripedBlueCellStyle}>70</td>
-                  <td style={stripedBlueCellStyle}>74</td>
-                  <td style={stripedBlueCellStyle}>78</td>
-                </tr>
-                <tr>
-                  <td style={stripedOrangeCellStyle}>AW3</td>
-                  <td style={stripedOrangeCellStyle}>86</td>
-                  <td style={stripedOrangeCellStyle}>90</td>
-                  <td style={stripedOrangeCellStyle}>95</td>
-                </tr>
+                {controllerMatrixRows.map((row, index) => {
+                  const rowStyle = row.load === "AW0" ? stripedBlueCellStyle : stripedOrangeCellStyle;
+
+                  return (
+                    <Fragment key={`${row.controller}-${row.load}`}>
+                      <tr key={`${row.controller}-${row.load}-mass`}>
+                        {index % 2 === 0 ? (
+                          <td style={groupedTableCellStyle} rowSpan={4}>
+                            {row.controller}
+                          </td>
+                        ) : null}
+                        <td style={rowStyle}>{`${row.load} / mass_dyn_t`}</td>
+                        <td style={rowStyle}>{`${row.mass} ton`}</td>
+                        <td style={rowStyle} rowSpan={2}>
+                          {row.fsb}
+                        </td>
+                        <td style={rowStyle} rowSpan={2}>
+                          {row.fb}
+                        </td>
+                        <td style={rowStyle} rowSpan={2}>
+                          {row.eb}
+                        </td>
+                      </tr>
+                      <tr key={`${row.controller}-${row.load}-spring`}>
+                        <td style={rowStyle}>{`${row.load} / spring_kPa`}</td>
+                        <td style={rowStyle}>{`${row.spring} kPa`}</td>
+                      </tr>
+                    </Fragment>
+                  );
+                })}
               </tbody>
             </table>
           )}
@@ -265,11 +406,91 @@ export function ResultPage({
       <section style={panelStyle}>
         <h3 style={{ marginTop: 0 }}>控制器开发参数</h3>
         <p style={{ margin: "0 0 16px", color: "#6b6259", lineHeight: 1.6 }}>
-          当前按基础计算结果生成控制器开发参数。当前未配置标定，因此以下参数用于未标定开发输入。
+          左侧给出可直接交付控制器开发的参数；右侧用分段示意表达标定后的 k_for_code 曲线。
         </p>
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "14px" }}>
-          <InfoCard title="常用制动开发参数" body="BCP0_for_code = 61 kPa；k_for_code = [0, 35] -> 1.08, (35, 70] -> 0.96" />
-          <InfoCard title="紧急制动开发参数" body="BCP0_for_code = 68 kPa；k_for_code = [0, 35] -> 1.12, (35, 70] -> 1.01" />
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "18px", alignItems: "start" }}>
+          <div style={{ display: "grid", gap: "14px" }}>
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "14px" }}>
+              <ParameterCard title="常用制动 k_for_code" value="108 / 96" note="未标定时来自基础计算；标定后按分段公式输出。" />
+              <ParameterCard title="常用制动 BCP0_for_code" value="65 kPa" note="按 5 kPa 口径向上圆整。" />
+              <ParameterCard title="紧急制动 k_for_code" value="112 / 101" note="架控 EB 标定后输出分段公式。" />
+              <ParameterCard title="紧急制动 BCP0_for_code" value="70 kPa" note="架控 EB 使用最终生效值。" />
+            </div>
+            <div
+              style={{
+                border: "1px solid #e0c4aa",
+                borderRadius: "14px",
+                padding: "14px",
+                background: "#fff6ee",
+                color: "#6b6259",
+                lineHeight: 1.6
+              }}
+            >
+              车控 EB 实际 BCP 压力标定 V1.0 暂不支持，需由开发人员线下处理，V1.1 接入。
+            </div>
+          </div>
+
+          <div style={{ display: "grid", gap: "14px" }}>
+            <h3 style={{ margin: 0 }}>标定摘要</h3>
+            <FormulaBlock
+              title="常用制动 k_for_code 分段公式"
+              lines={["k_f(f) = 108, if f < 35", "k_f(f) = 0.96f + 74.4, if 35 <= f <= 70", "k_f(f) = 96, if f > 70"]}
+            />
+            <CurveSketch title="常用制动 k_for_code 分段曲线" color="#a95522" />
+            <FormulaBlock
+              title="紧急制动 k_for_code 分段公式"
+              lines={["k_f(f) = 112, if f < 35", "k_f(f) = 1.01f + 76.65, if 35 <= f <= 70", "k_f(f) = 101, if f > 70"]}
+            />
+            <CurveSketch title="紧急制动 k_for_code 分段曲线" color="#5c6f93" />
+          </div>
+        </div>
+      </section>
+
+      <section style={panelStyle}>
+        <h3 style={{ marginTop: 0 }}>停放校核结果</h3>
+        <p style={{ margin: "0 0 16px", color: "#6b6259", lineHeight: 1.6 }}>
+          本区只展示停放制动力校核输出，输入项仍在工作台“停放校核”章节维护。
+        </p>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: "14px", marginBottom: "16px" }}>
+          <ParameterCard
+            title="F_N_PB 单个制动单元双侧作用力"
+            value="16.39 kN"
+            note="由 Fp、Fs1、Fs2、Lpi、eta_pi、Lo、eta_o 计算得到。"
+          />
+          <ParameterCard
+            title="F_PB 每车停放制动力"
+            value="5.74 kN"
+            note="结合基础制动几何换算、停放缸数量和 xi0。"
+          />
+          <ParameterCard
+            title="whole_train 整列汇总力"
+            value="68.88 kN"
+            note="按已配置车辆与载荷组汇总。"
+          />
+        </div>
+        <div style={{ overflowX: "auto" }}>
+          <table style={tableStyle}>
+            <thead>
+              <tr>
+                <th style={tableHeaderStyle}>载荷组</th>
+                <th style={tableHeaderStyle}>F_N_PB</th>
+                <th style={tableHeaderStyle}>F_PB</th>
+                <th style={tableHeaderStyle}>安全余量</th>
+                <th style={tableHeaderStyle}>结论</th>
+              </tr>
+            </thead>
+            <tbody>
+              {parkingRows.map((row) => (
+                <tr key={row.load}>
+                  <td style={groupedTableCellStyle}>{row.load}</td>
+                  <td style={tableCellStyle}>{row.fnpb}</td>
+                  <td style={tableCellStyle}>{row.fpb}</td>
+                  <td style={tableCellStyle}>{row.margin}</td>
+                  <td style={tableCellStyle}>{row.status}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
         </div>
       </section>
     </div>

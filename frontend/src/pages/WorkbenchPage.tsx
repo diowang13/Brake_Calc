@@ -1,4 +1,4 @@
-import type { ReactElement } from "react";
+import { useMemo, useState, type ReactElement } from "react";
 
 import {
   ghostActionStyle,
@@ -17,6 +17,7 @@ import {
 } from "../components/ui";
 
 export type WorkbenchSectionKey =
+  | "requirements"
   | "load-air-spring"
   | "base-brake"
   | "parking"
@@ -27,23 +28,186 @@ export function WorkbenchPage({
   loadInputMode,
   airSpringMassUnit,
   airSpringInputMode,
+  baseBrakeCylinderType,
+  emergencyRequirementMode,
+  fastBrakeEnabled,
   activeSection,
   onChangeLoadInputMode,
   onChangeAirSpringMassUnit,
   onChangeAirSpringInputMode,
+  onChangeBaseBrakeCylinderType,
+  onChangeEmergencyRequirementMode,
+  onChangeFastBrakeEnabled,
   onChangeSection,
   onBackToOverview
 }: {
   loadInputMode: "car" | "bogie";
   airSpringMassUnit: "ton" | "kn";
   airSpringInputMode: "fitted_from_points" | "explicit_linear";
+  baseBrakeCylinderType: "tread_cylinder" | "caliper_cylinder";
+  emergencyRequirementMode: "a_mean" | "distance";
+  fastBrakeEnabled: boolean;
   activeSection: WorkbenchSectionKey;
   onChangeLoadInputMode: (mode: "car" | "bogie") => void;
   onChangeAirSpringMassUnit: (unit: "ton" | "kn") => void;
   onChangeAirSpringInputMode: (mode: "fitted_from_points" | "explicit_linear") => void;
+  onChangeBaseBrakeCylinderType: (type: "tread_cylinder" | "caliper_cylinder") => void;
+  onChangeEmergencyRequirementMode: (mode: "a_mean" | "distance") => void;
+  onChangeFastBrakeEnabled: (enabled: boolean) => void;
   onChangeSection: (section: WorkbenchSectionKey) => void;
   onBackToOverview: () => void;
 }): ReactElement {
+  const [v0Value, setV0Value] = useState("");
+  const [fsbMeanValue, setFsbMeanValue] = useState("");
+  const [fsbT1Value, setFsbT1Value] = useState("");
+  const [fsbImpulseRateValue, setFsbImpulseRateValue] = useState("");
+  const [ebMeanValue, setEbMeanValue] = useState("");
+  const [ebDistanceValue, setEbDistanceValue] = useState("");
+  const [ebT1Value, setEbT1Value] = useState("");
+  const [ebT2Value, setEbT2Value] = useState("");
+  const [muLimitValue, setMuLimitValue] = useState("");
+  const [speedChecks, setSpeedChecks] = useState<string[]>([]);
+  const [ratioBrakes, setRatioBrakes] = useState<Array<{ name: string; ratioPercent: string }>>([
+    { name: "holding", ratioPercent: "50" }
+  ]);
+  const [touchedFields, setTouchedFields] = useState<Record<string, boolean>>({});
+  const [submitAttempted, setSubmitAttempted] = useState(false);
+
+  const compactSpeedBlockStyle = {
+    width: "25%",
+    minWidth: "150px",
+    display: "grid",
+    gap: "8px"
+  } as const;
+
+  const markTouched = (fieldKey: string): void => {
+    setTouchedFields((current) => ({ ...current, [fieldKey]: true }));
+  };
+
+  const parsePositiveNumberError = (value: string): string | undefined => {
+    if (value.trim() === "" || Number.isNaN(Number(value)) || Number(value) <= 0) {
+      return "请输入大于 0 的数值";
+    }
+    return undefined;
+  };
+
+  const parsePositiveIntegerError = (value: string): string | undefined => {
+    if (!/^[1-9]\d*$/.test(value.trim())) {
+      return "请输入正整数";
+    }
+    return undefined;
+  };
+
+  const ratioNameSet = useMemo(() => {
+    const counts = new Map<string, number>();
+    ratioBrakes.forEach((row) => {
+      const key = row.name.trim();
+      if (key) {
+        counts.set(key, (counts.get(key) ?? 0) + 1);
+      }
+    });
+    return counts;
+  }, [ratioBrakes]);
+
+  const fieldErrors = useMemo(() => {
+    const errors: Record<string, string | undefined> = {};
+
+    errors.v0 = parsePositiveIntegerError(v0Value);
+    errors.fsbMean = parsePositiveNumberError(fsbMeanValue);
+    errors.fsbT1 = parsePositiveNumberError(fsbT1Value);
+    errors.fsbImpulseRate = parsePositiveNumberError(fsbImpulseRateValue);
+    errors.ebModeValue =
+      emergencyRequirementMode === "a_mean"
+        ? parsePositiveNumberError(ebMeanValue)
+        : parsePositiveNumberError(ebDistanceValue);
+    errors.ebT1 = parsePositiveNumberError(ebT1Value);
+    errors.ebT2 = parsePositiveNumberError(ebT2Value);
+    errors.muLimit = parsePositiveNumberError(muLimitValue);
+
+    speedChecks.forEach((value, index) => {
+      const integerError = parsePositiveIntegerError(value);
+      if (integerError) {
+        errors[`speed-${index}`] = integerError;
+        return;
+      }
+
+      if (/^[1-9]\d*$/.test(v0Value.trim()) && Number(value) > Number(v0Value)) {
+        errors[`speed-${index}`] = "待校核速度不能超过最高速度 v0";
+      }
+    });
+
+    ratioBrakes.forEach((row, index) => {
+      const trimmedName = row.name.trim();
+      if (!/^[A-Za-z0-9_]+$/.test(trimmedName)) {
+        errors[`ratio-name-${index}`] = "仅支持英文、数字、下划线";
+      } else if ((ratioNameSet.get(trimmedName) ?? 0) > 1) {
+        errors[`ratio-name-${index}`] = "制动类型代号不可重复";
+      }
+
+      if (!/^(100|[1-9]\d?)$/.test(row.ratioPercent.trim())) {
+        errors[`ratio-percent-${index}`] = "请输入 1 到 100 的整数";
+      }
+    });
+
+    return errors;
+  }, [
+    ebDistanceValue,
+    ebMeanValue,
+    ebT1Value,
+    ebT2Value,
+    emergencyRequirementMode,
+    fsbImpulseRateValue,
+    fsbMeanValue,
+    fsbT1Value,
+    muLimitValue,
+    ratioBrakes,
+    ratioNameSet,
+    speedChecks,
+    v0Value
+  ]);
+
+  const fieldHints = useMemo(() => {
+    const hints: Record<string, string | undefined> = {};
+    if (!fieldErrors.muLimit && muLimitValue.trim() !== "" && Number(muLimitValue) >= 0.3) {
+      hints.muLimit = "通常应小于 0.3，请确认输入是否正确";
+    }
+    return hints;
+  }, [fieldErrors.muLimit, muLimitValue]);
+
+  const shouldShowFieldFeedback = (fieldKey: string): boolean => submitAttempted || touchedFields[fieldKey] === true;
+  const handleAttemptSubmit = (): void => {
+    setSubmitAttempted(true);
+  };
+
+  const updateSpeedCheck = (index: number, value: string): void => {
+    setSpeedChecks((current) => current.map((item, itemIndex) => (itemIndex === index ? value : item)));
+  };
+
+  const deleteSpeedCheck = (index: number): void => {
+    setSpeedChecks((current) => current.filter((_, itemIndex) => itemIndex !== index));
+  };
+
+  const addSpeedCheck = (): void => {
+    setSpeedChecks((current) => [...current, ""]);
+  };
+
+  const updateRatioBrake = (
+    index: number,
+    field: "name" | "ratioPercent",
+    value: string
+  ): void => {
+    setRatioBrakes((current) =>
+      current.map((item, itemIndex) => (itemIndex === index ? { ...item, [field]: value } : item))
+    );
+  };
+
+  const addRatioBrake = (): void => {
+    setRatioBrakes((current) => {
+      const nextIndex = current.length + 1;
+      return [...current, { name: `holding_${nextIndex}`, ratioPercent: "50" }];
+    });
+  };
+
   return (
     <div style={{ display: "grid", gap: "18px" }}>
       <section style={panelStyle}>
@@ -51,7 +215,7 @@ export function WorkbenchPage({
           <div>
             <h2 style={{ margin: 0, fontSize: "32px" }}>配置工作台</h2>
             <p style={{ margin: "8px 0 0", color: "#6b6259" }}>
-              当前聚焦主配置章节 `载荷与空簧`，先搭三栏外壳，再逐步接入正式表单。
+              当前按左侧章节逐块确认 V1 输入契约，先完成主制动计算，再补录后置校核内容。
             </p>
           </div>
           <div style={{ display: "flex", gap: "12px", flexWrap: "wrap" }}>
@@ -61,10 +225,10 @@ export function WorkbenchPage({
             <button type="button" style={ghostActionStyle}>
               下载 YAML
             </button>
-            <button type="button" style={secondaryActionStyle}>
+            <button type="button" style={secondaryActionStyle} onClick={handleAttemptSubmit}>
               保存
             </button>
-            <button type="button" style={primaryActionStyle}>
+            <button type="button" style={primaryActionStyle} onClick={handleAttemptSubmit}>
               运行
             </button>
           </div>
@@ -82,7 +246,12 @@ export function WorkbenchPage({
           <NavSection
             title="主配置"
             items={[
-              { label: "运行基础配置 / 技术条件", status: "已完成" },
+              {
+                label: "运行基础配置 / 技术条件",
+                status: "已完成",
+                active: activeSection === "requirements",
+                onSelect: () => onChangeSection("requirements")
+              },
               { label: "车辆与控制器配置", status: "已完成" },
               {
                 label: "载荷与空簧",
@@ -124,6 +293,276 @@ export function WorkbenchPage({
         </aside>
 
         <div style={{ display: "grid", gap: "18px" }}>
+          {activeSection === "requirements" && (
+            <section style={panelStyle}>
+              <h3 style={{ marginTop: 0 }}>运行基础配置 / 技术条件</h3>
+              <p style={{ margin: "0 0 16px", color: "#6b6259", lineHeight: 1.6 }}>
+                本章只放主制动计算的技术条件目标和全局约束。停放校核的线路坡度、风速、风阻和停放缸参数在后置补录中维护。
+              </p>
+              <div style={{ display: "grid", gap: "16px" }}>
+                <div
+                  style={{
+                    border: "1px solid #d5c9ba",
+                    borderRadius: "16px",
+                    padding: "16px",
+                    background: "#fff"
+                  }}
+                >
+                  <h4 style={{ margin: "0 0 12px" }}>最大常用制动</h4>
+                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px" }}>
+                    <FieldBlock
+                      label="最大常用制动平均减速度要求 (m/s²)"
+                      value={fsbMeanValue}
+                      onChange={setFsbMeanValue}
+                      onBlur={() => markTouched("fsbMean")}
+                      placeholder="例如 1.00"
+                      inputMode="decimal"
+                      error={shouldShowFieldFeedback("fsbMean") ? fieldErrors.fsbMean : undefined}
+                    />
+                    <FieldBlock
+                      label="空走时间 t1 (s)"
+                      value={fsbT1Value}
+                      onChange={setFsbT1Value}
+                      onBlur={() => markTouched("fsbT1")}
+                      placeholder="例如 0.70"
+                      inputMode="decimal"
+                      error={shouldShowFieldFeedback("fsbT1") ? fieldErrors.fsbT1 : undefined}
+                    />
+                    <FieldBlock
+                      label="冲击率 impulse_rate (m/s³)"
+                      value={fsbImpulseRateValue}
+                      onChange={setFsbImpulseRateValue}
+                      onBlur={() => markTouched("fsbImpulseRate")}
+                      placeholder="例如 0.75"
+                      inputMode="decimal"
+                      error={
+                        shouldShowFieldFeedback("fsbImpulseRate") ? fieldErrors.fsbImpulseRate : undefined
+                      }
+                    />
+                  </div>
+                </div>
+
+                <div
+                  style={{
+                    border: "1px solid #d5c9ba",
+                    borderRadius: "16px",
+                    padding: "16px",
+                    background: "#fff"
+                  }}
+                >
+                  <h4 style={{ margin: "0 0 12px" }}>不同初速度下的制动距离校核要求</h4>
+                  <p style={{ margin: "0 0 16px", color: "#6b6259", lineHeight: 1.6 }}>
+                    `V_list` 用于结果页输出不同初速度下的理论制动距离校核。最高速度 `v0` 默认参与校核，额外速度可按需要添加。
+                  </p>
+                  <div style={{ maxWidth: "360px", marginBottom: "12px" }}>
+                    <FieldBlock
+                      label="最高速度 v0 (km/h)"
+                      value={v0Value}
+                      onChange={setV0Value}
+                      onBlur={() => markTouched("v0")}
+                      placeholder="例如 120"
+                      inputMode="numeric"
+                      error={shouldShowFieldFeedback("v0") ? fieldErrors.v0 : undefined}
+                    />
+                  </div>
+                  <p style={{ margin: "0 0 12px", color: "#6b6259", lineHeight: 1.6 }}>
+                    最高速度 v0 默认参与校核；这里只追加 `V_list` 里的其他待校核速度。
+                  </p>
+                  <div style={{ display: "flex", flexWrap: "wrap", gap: "12px", marginBottom: "16px" }}>
+                    {speedChecks.map((value, index) => (
+                      <div key={`speed-check-${index}`} style={compactSpeedBlockStyle}>
+                        <FieldBlock
+                          label={`待校核速度 ${index + 1} (km/h)`}
+                          value={value}
+                          onChange={(nextValue) => updateSpeedCheck(index, nextValue)}
+                          onBlur={() => markTouched(`speed-${index}`)}
+                          placeholder="例如 80"
+                          inputMode="numeric"
+                          error={
+                            shouldShowFieldFeedback(`speed-${index}`)
+                              ? fieldErrors[`speed-${index}`]
+                              : undefined
+                          }
+                        />
+                        <button
+                          type="button"
+                          style={ghostActionStyle}
+                          onClick={() => deleteSpeedCheck(index)}
+                        >
+                          {`删除待校核速度 ${index + 1}`}
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                  <button type="button" style={secondaryActionStyle} onClick={addSpeedCheck}>
+                    添加待校核速度
+                  </button>
+                </div>
+
+                <div
+                  style={{
+                    border: "1px solid #d5c9ba",
+                    borderRadius: "16px",
+                    padding: "16px",
+                    background: "#fff"
+                  }}
+                >
+                  <h4 style={{ margin: "0 0 12px" }}>紧急制动</h4>
+                  <div style={{ display: "flex", gap: "10px", flexWrap: "wrap", marginBottom: "16px" }}>
+                    <TogglePill
+                      label="按平均减速度录入"
+                      active={emergencyRequirementMode === "a_mean"}
+                      onClick={() => onChangeEmergencyRequirementMode("a_mean")}
+                    />
+                    <TogglePill
+                      label="按制动距离录入"
+                      active={emergencyRequirementMode === "distance"}
+                      onClick={() => onChangeEmergencyRequirementMode("distance")}
+                    />
+                  </div>
+                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px" }}>
+                    <FieldBlock
+                      label={
+                        emergencyRequirementMode === "a_mean"
+                          ? "紧急制动平均减速度要求 (m/s²)"
+                          : "紧急制动距离要求 (m)"
+                      }
+                      value={emergencyRequirementMode === "a_mean" ? ebMeanValue : ebDistanceValue}
+                      onChange={emergencyRequirementMode === "a_mean" ? setEbMeanValue : setEbDistanceValue}
+                      onBlur={() => markTouched("ebModeValue")}
+                      placeholder={emergencyRequirementMode === "a_mean" ? "例如 1.10" : "例如 320"}
+                      inputMode="decimal"
+                      error={shouldShowFieldFeedback("ebModeValue") ? fieldErrors.ebModeValue : undefined}
+                    />
+                    <FieldBlock
+                      label="空走时间 t1 (s)"
+                      value={ebT1Value}
+                      onChange={setEbT1Value}
+                      onBlur={() => markTouched("ebT1")}
+                      placeholder="例如 0.40"
+                      inputMode="decimal"
+                      error={shouldShowFieldFeedback("ebT1") ? fieldErrors.ebT1 : undefined}
+                    />
+                    <FieldBlock
+                      label="紧急制动响应时间 t2 (s)"
+                      value={ebT2Value}
+                      onChange={setEbT2Value}
+                      onBlur={() => markTouched("ebT2")}
+                      placeholder="例如 0.80"
+                      inputMode="decimal"
+                      error={shouldShowFieldFeedback("ebT2") ? fieldErrors.ebT2 : undefined}
+                    />
+                  </div>
+                </div>
+
+                <div
+                  style={{
+                    border: "1px solid #d5c9ba",
+                    borderRadius: "16px",
+                    padding: "16px",
+                    background: "#fff"
+                  }}
+                >
+                  <h4 style={{ margin: "0 0 12px" }}>快速制动</h4>
+                  <div style={{ display: "flex", gap: "10px", flexWrap: "wrap", marginBottom: "16px" }}>
+                    <TogglePill
+                      label="启用快速制动"
+                      active={fastBrakeEnabled}
+                      onClick={() => onChangeFastBrakeEnabled(!fastBrakeEnabled)}
+                    />
+                  </div>
+                  <p style={{ margin: 0, color: "#6b6259", lineHeight: 1.6 }}>
+                    快速制动控制目标跟随紧急制动；响应时间与最大常用制动完全一致，导出 `input.yaml` 时直接复用 FSB 的 `t1` 和 `impulse_rate`。
+                  </p>
+                </div>
+
+                <div
+                  style={{
+                    border: "1px solid #d5c9ba",
+                    borderRadius: "16px",
+                    padding: "16px",
+                    background: "#fff"
+                  }}
+                >
+                  <h4 style={{ margin: "0 0 12px" }}>其他比例制动</h4>
+                  <p style={{ margin: "0 0 16px", color: "#6b6259", lineHeight: 1.6 }}>
+                    用于添加 `source = ratio_of_FSB` 的自定义制动类型；不单独配置技术条件和响应时间，按最大常用制动派生。
+                  </p>
+                  <div style={{ display: "grid", gap: "12px", marginBottom: "16px" }}>
+                    {ratioBrakes.map((row, index) => (
+                      <div
+                        key={`ratio-brake-${index}`}
+                        style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px" }}
+                      >
+                        <FieldBlock
+                          label={
+                            index === 0
+                              ? "制动类型代号 name（写入 YAML）"
+                              : `制动类型代号 ${index + 1} name（写入 YAML）`
+                          }
+                          value={row.name}
+                          onChange={(nextValue) => updateRatioBrake(index, "name", nextValue)}
+                          onBlur={() => markTouched(`ratio-name-${index}`)}
+                          placeholder={index === 0 ? "例如 holding" : `例如 holding_${index + 1}`}
+                          error={
+                            shouldShowFieldFeedback(`ratio-name-${index}`)
+                              ? fieldErrors[`ratio-name-${index}`]
+                              : undefined
+                          }
+                        />
+                        <FieldBlock
+                          label={
+                            index === 0
+                              ? "相对最大常用制动比例 ratio (-)"
+                              : `相对最大常用制动比例 ${index + 1} ratio (-)`
+                          }
+                          value={row.ratioPercent}
+                          onChange={(nextValue) => updateRatioBrake(index, "ratioPercent", nextValue)}
+                          onBlur={() => markTouched(`ratio-percent-${index}`)}
+                          placeholder="例如 50"
+                          inputMode="numeric"
+                          suffix="%"
+                          error={
+                            shouldShowFieldFeedback(`ratio-percent-${index}`)
+                              ? fieldErrors[`ratio-percent-${index}`]
+                              : undefined
+                          }
+                        />
+                      </div>
+                    ))}
+                  </div>
+                  <button type="button" style={secondaryActionStyle} onClick={addRatioBrake}>
+                    添加比例制动类型
+                  </button>
+                </div>
+
+                <div
+                  style={{
+                    border: "1px solid #d5c9ba",
+                    borderRadius: "16px",
+                    padding: "16px",
+                    background: "#fff"
+                  }}
+                >
+                  <h4 style={{ margin: "0 0 12px" }}>全局黏着限制</h4>
+                  <p style={{ margin: "0 0 16px", color: "#6b6259", lineHeight: 1.6 }}>
+                    `adhesion.mu_limit` 是全局黏着限制，供黏着校核和分配策略自动切换使用，不属于停放校核输入。
+                  </p>
+                  <FieldBlock
+                    label="黏着利用限制 mu_limit (-)"
+                    value={muLimitValue}
+                    onChange={setMuLimitValue}
+                    onBlur={() => markTouched("muLimit")}
+                    placeholder="例如 0.20"
+                    inputMode="decimal"
+                    error={shouldShowFieldFeedback("muLimit") ? fieldErrors.muLimit : undefined}
+                    hint={shouldShowFieldFeedback("muLimit") ? fieldHints.muLimit : undefined}
+                  />
+                </div>
+              </div>
+            </section>
+          )}
+
           {activeSection === "load-air-spring" && (
             <>
               <section style={panelStyle}>
@@ -252,7 +691,7 @@ export function WorkbenchPage({
             <section style={panelStyle}>
               <h3 style={{ marginTop: 0 }}>基础制动机械参数</h3>
               <p style={{ margin: "0 0 16px", color: "#6b6259", lineHeight: 1.6 }}>
-                本章只处理基础制动机械参数，重点是把单位写清楚，并避免把停放缸参数混进来。
+                本章只处理 `mech_params`，重点是把单位写清楚，并避免把停放缸参数和控制器数量参数混进来。
               </p>
               <div
                 style={{
@@ -265,7 +704,7 @@ export function WorkbenchPage({
               >
                 <strong>单位提示</strong>
                 <p style={{ margin: "8px 0 0", color: "#6b6259", lineHeight: 1.6 }}>
-                  本章优先确认 `mm / kN / -` 等单位。停放缸参数不在本章，统一放到“停放校核”章节补录，避免与制动缸参数混填。
+                  本章优先确认 `m² / m / kN / -` 等单位。停放缸参数不在本章，制动缸数量和空簧数量放到“车辆与控制器配置”中确认。
                 </p>
               </div>
               <div style={{ display: "grid", gap: "16px" }}>
@@ -278,30 +717,46 @@ export function WorkbenchPage({
                   }}
                 >
                   <h4 style={{ margin: "0 0 12px" }}>基础制动缸参数</h4>
+                  <div style={{ display: "flex", gap: "10px", flexWrap: "wrap", marginBottom: "16px" }}>
+                    <TogglePill
+                      label="踏面制动 tread_cylinder"
+                      active={baseBrakeCylinderType === "tread_cylinder"}
+                      onClick={() => onChangeBaseBrakeCylinderType("tread_cylinder")}
+                    />
+                    <TogglePill
+                      label="制动夹钳 caliper_cylinder"
+                      active={baseBrakeCylinderType === "caliper_cylinder"}
+                      onClick={() => onChangeBaseBrakeCylinderType("caliper_cylinder")}
+                    />
+                  </div>
                   <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px" }}>
-                    <FieldBlock label="制动缸缸径 (mm)" />
-                    <FieldBlock label="单缸作用力 (kN)" />
-                    <FieldBlock label="制动单元数量 (-)" />
-                    <FieldBlock label="制动倍率 Beta (-)" />
+                    <FieldBlock label="活塞有效面积 Sc (m²)" />
+                    <FieldBlock label="摩擦系数 xi (-)" />
+                    <FieldBlock label="单元内部倍率 Li (-)" />
+                    <FieldBlock label="单元内部效率 eta_i (-)" />
+                    <FieldBlock label="外部倍率 Lo (-)" />
+                    <FieldBlock label="外部效率 eta_o (-)" />
+                    <FieldBlock label="单元复位力 Fs1 (kN)" />
+                    <FieldBlock label="单元复位力 Fs2 (kN)" />
                   </div>
                 </div>
 
-                <div
-                  style={{
-                    border: "1px solid #d5c9ba",
-                    borderRadius: "16px",
-                    padding: "16px",
-                    background: "#fff"
-                  }}
-                >
-                  <h4 style={{ margin: "0 0 12px" }}>条件显示项</h4>
-                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px" }}>
-                    <FieldBlock label="轮径 Dw (mm)" />
-                    <FieldBlock label="摩擦半径 Rf (mm)" />
-                    <FieldBlock label="杠杆比 Lpi / Lo" />
-                    <FieldBlock label="基础制动类型" />
+                {baseBrakeCylinderType === "caliper_cylinder" ? (
+                  <div
+                    style={{
+                      border: "1px solid #d5c9ba",
+                      borderRadius: "16px",
+                      padding: "16px",
+                      background: "#fff"
+                    }}
+                  >
+                    <h4 style={{ margin: "0 0 12px" }}>夹钳制动几何参数</h4>
+                    <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px" }}>
+                      <FieldBlock label="轮径 Dw (m)" />
+                      <FieldBlock label="摩擦半径 Rf (m)" />
+                    </div>
                   </div>
-                </div>
+                ) : null}
               </div>
             </section>
           )}
@@ -310,11 +765,11 @@ export function WorkbenchPage({
             <section style={panelStyle}>
               <h3 style={{ marginTop: 0 }}>停放校核</h3>
               <p style={{ margin: "0 0 16px", color: "#6b6259", lineHeight: 1.6 }}>
-                本章作为后置补录章节，先看当前是否已补充完整，再分别录入环境条件和停放机械参数。
+                本章作为后置补录章节，只录入 `parking_brake_check` 输入。`F_N_PB`、`F_PB` 和整列汇总结果在结果页查看。
               </p>
               <div style={{ display: "grid", gridTemplateColumns: "repeat(2, 1fr)", gap: "14px", marginBottom: "16px" }}>
                 <InfoCard title="当前状态：未补充停放校核" body="当前版本尚未录入线路坡度和停放参数，运行结果中仅保留待补录状态。" />
-                <InfoCard title="补录提示" body="先补环境条件，再确认停放缸作用力、单元数量和相关机械参数，完成后再运行校核。" />
+                <InfoCard title="补录提示" body="先补校核配置和环境条件，再确认停放缸输入参数，完成后重新运行并在结果页查看校核结果。" />
               </div>
               <div style={{ display: "grid", gap: "16px" }}>
                 <div
@@ -325,12 +780,11 @@ export function WorkbenchPage({
                     background: "#fff"
                   }}
                 >
-                  <h4 style={{ margin: "0 0 12px" }}>环境条件</h4>
+                  <h4 style={{ margin: "0 0 12px" }}>校核配置</h4>
                   <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px" }}>
-                    <FieldBlock label="AW0 坡度 (‰)" />
-                    <FieldBlock label="AW2 坡度 (‰)" />
-                    <FieldBlock label="AW3 坡度 (‰)" />
-                    <FieldBlock label="线路条件备注" />
+                    <FieldBlock label="要求安全系数 required_safety_margin (-)" />
+                    <FieldBlock label="静摩擦系数 xi0 / static_friction_coefficient (-)" />
+                    <FieldBlock label="每车停放缸数量 n_parking_cylinders_by_car (-)" />
                   </div>
                 </div>
 
@@ -342,12 +796,33 @@ export function WorkbenchPage({
                     background: "#fff"
                   }}
                 >
-                  <h4 style={{ margin: "0 0 12px" }}>机械参数</h4>
+                  <h4 style={{ margin: "0 0 12px" }}>环境条件</h4>
                   <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px" }}>
-                    <FieldBlock label="停放缸作用力 (kN)" />
-                    <FieldBlock label="停放制动单元数量 (-)" />
-                    <FieldBlock label="停放杠杆比 Lpi / Lo" />
-                    <FieldBlock label="停车校核摩擦半径 Rf (mm)" />
+                    <FieldBlock label="最大风速 wind_speed_max (m/s)" />
+                    <FieldBlock label="风阻系数 wind_resistance_coefficient (-)" />
+                    <FieldBlock label="AW0 坡度 grade_by_load_group.AW0 (‰)" />
+                    <FieldBlock label="AW2 坡度 grade_by_load_group.AW2 (‰)" />
+                    <FieldBlock label="AW3 坡度 grade_by_load_group.AW3 (‰)" />
+                  </div>
+                </div>
+
+                <div
+                  style={{
+                    border: "1px solid #d5c9ba",
+                    borderRadius: "16px",
+                    padding: "16px",
+                    background: "#fff"
+                  }}
+                >
+                  <h4 style={{ margin: "0 0 12px" }}>停放缸参数</h4>
+                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px" }}>
+                    <FieldBlock label="停放弹簧输出力 Fp (kN)" />
+                    <FieldBlock label="单元复位力 Fs1 (kN)" />
+                    <FieldBlock label="单元复位力 Fs2 (kN)" />
+                    <FieldBlock label="停放缸内部倍率 Lpi (-)" />
+                    <FieldBlock label="停放缸内部效率 eta_pi (-)" />
+                    <FieldBlock label="执行机构外部倍率 Lo (-)" />
+                    <FieldBlock label="执行机构外部效率 eta_o (-)" />
                   </div>
                 </div>
               </div>

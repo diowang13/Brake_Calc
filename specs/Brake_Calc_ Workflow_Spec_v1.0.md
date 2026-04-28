@@ -67,6 +67,7 @@
     - 示例：等磨耗自动切换为等黏着、`FB` 压力超过 `EB` 后自动提高 `BCP0_EB`
 - `CalibrationSummary`
     - 内容：标定试验点、生成的 `k_sb(f)` / `k_eb(f)`、最终生效的 `BCP0` / `BCP0_for_code`、输入标定点、最终曲线边界点、分段 `k_for_code` 公式，以及面向控制器开发的分段曲线图
+    - 当 `controller_type = car` 时，V1.0 的 `CalibrationSummary` 不生成车控 EB 的 `k_eb(f)` 曲线和分段公式，只展示限制提示与基础压力结果来源。
 - `ParkingBrakeCheckResult`
     - 内容：停放制动力校核结果
     - 包括：每车双侧作用力、每车停放制动力、每车倾斜力、每车安全余量、整列停放制动力、整列倾斜力、整列安全余量、是否通过
@@ -84,8 +85,9 @@
 1. **载荷 AW0/AW2/AW3 仅用于选择参数组**，运行时不做组间插值
 2. **标定曲线 `k(f)` 的自变量为单 controller 目标制动力 f**，即 `k = k_of_f(load_group, brake_mode, F_by_controller)`；不使用全列总力
 3. **S7 机械模型参数与 S8 调试标定参数分离**：S7 推导 `k_initial` 与 `BCP0_initial`，S8 可选使用调试后的 `k(f)` 与 `BCP0` 计算最终压力
-4. 校准不回写到 μ 或机械模型本体；只影响输出侧压力标准
-5. 所有模式必须应用阀件限幅（如 EB 的 min/max）并在 report 中记录限幅触发
+4. **车控 EB 标定限制（V1.0）**：当 `controller_type = car` 时，紧急制动不使用 `emergency_brake` 的 `k(f) / BCP0` 试验点标定；车控 EB 实际 BCP 压力标定留待 V1.1。V1.0 不得静默套用架控 EB 标定逻辑。
+5. 校准不回写到 μ 或机械模型本体；只影响输出侧压力标准
+6. 所有模式必须应用阀件限幅（如 EB 的 min/max）并在 report 中记录限幅触发
 
 ## 4. Inputs（输入参数，待你后续补齐单位/范围/默认值）
 
@@ -250,9 +252,9 @@
   - 对 `tread_cylinder`，标准公式中的 `Dw / (2 * Rf)` 按 1 处理，因此网页端不需要输入 `Dw` 和 `Rf`
   - 对 `caliper_cylinder`，必须显式配置 `Dw` 和 `Rf`
 
-- `pressure_calibration`：可选压力标定配置，用于 S8 输出侧标定。V1 采用**试验点驱动**方式输入，不要求用户直接维护完整 `k_segments`。标定分为两组：
+- `pressure_calibration`：可选压力标定配置，用于 S8 输出侧标定。V1 采用**试验点驱动**方式输入，不要求用户直接维护完整 `k_segments`。标定分为常用/快速制动体系与紧急制动体系；其中车控项目 V1.0 仅支持 `service_brake` 标定，不支持 `emergency_brake` 标定。
   - `service_brake`：生成常用/快速制动共用的 `k_sb(f)` 与 `BCP0_sb`
-  - `emergency_brake`：生成紧急制动独立的 `k_eb(f)` 与 `BCP0_eb`
+  - `emergency_brake`：仅架控项目使用，生成紧急制动独立的 `k_eb(f)` 与 `BCP0_eb`
   - 两组都支持两种点组合方式：
     - `aw3_aw0`
     - `aw3_aw2`
@@ -580,7 +582,9 @@ flowchart TD
     - 若未启用标定，`k_used = k_initial`，`BCP0_used = BCP0_initial`
     - 若启用标定：
       - 常用/快速制动 (`FSB`、`FB`、`ratio_of_FSB`) 使用 `service_brake` 试验点生成的 `k_sb(f)` 与 `BCP0_sb`
-      - 紧急制动 (`EB`) 使用 `emergency_brake` 试验点生成的 `k_eb(f)` 与 `BCP0_eb`
+      - 当 `controller_type = bogie` 时，紧急制动 (`EB`) 使用 `emergency_brake` 试验点生成的 `k_eb(f)` 与 `BCP0_eb`
+      - 当 `controller_type = car` 时，V1.0 不支持 EB 的 `emergency_brake` 标定，EB 使用 S7 基础压力结果
+
     - 试验点生成规则：
       - AW0 取该工况下各 controller 制动力最大值作为力坐标
       - AW3 取该工况下各 controller 制动力最小值作为力坐标
@@ -593,7 +597,7 @@ flowchart TD
       - 若项目启用 `FB`，则 AW0 参考力取 `AW0 + FB` 工况下各 controller force 的最大值
       - 若项目未启用 `FB`，则 AW0 参考力取 `AW0 + FSB` 工况下各 controller force 的最大值
       - 紧急制动的 AW0 参考力取 `AW0 + EB` 工况下各 controller force 的最大值
-    - 生成的 `k_sb(f)` 与 `k_eb(f)` 必须是覆盖完整有效力区间的分段曲线：
+    - 架控项目生成的 `k_sb(f)` 与 `k_eb(f)` 必须是覆盖完整有效力区间的分段曲线，车控项目仅对`k_sb(f)`的分段曲线有相同要求：
       - 低力段常数
       - 中间段线性
       - 高力段常数
@@ -633,6 +637,8 @@ flowchart TD
       - 必须展示 `k_for_code` 的分段公式与分段曲线图
       - 曲线图应体现“低段常数 + 中段线性 + 高段常数”，纵坐标按实际数据范围自适应，不强制从 0 起画
       - 若发生 `FB > EB` 自动调整，`emergency_brake` 下展示的 `BCP0` / `BCP0_for_code` 必须反映最终生效值，而非原始输入值
+      - 当 `controller_type = car` 时，`emergency_brake` 不展示 `k_eb(f)` 标定曲线、分段 `k_for_code` 公式或标定后的 `BCP0_for_code`；应展示 V1.0 限制提示，并保留 EB 基础压力结果用于压力标准矩阵。
+
   - `parking_brake_check_result`：停放制动力校核结果，包括：
     - 每车双侧停放作用力 `F_N_PB`
     - 每车停放制动力 `F_PB`
@@ -674,11 +680,9 @@ flowchart TD
   - `BCP_calibrated = k_used * F_by_controller + BCP0_used`
 - `pressure_calibration.enabled = true` 时，S8 使用试验点驱动标定配置：
   - 常用/快速制动：由 `service_brake` 生成 `k_sb(f)` 与 `BCP0_sb`
-  - 紧急制动：由 `emergency_brake` 生成 `k_eb(f)` 与 `BCP0_eb`
-  - 最终压力统一按：
-    ```text
-    BCP_calibrated = k_used * F_by_controller + BCP0_used
-    ```
+  - 架控项目的紧急制动：由 `emergency_brake` 生成 `k_eb(f)` 与 `BCP0_eb`
+  - 车控项目的紧急制动：V1.0 不应用 `emergency_brake` 标定，仍使用 S7 基础压力结果；车控 EB 实际 BCP 压力标定留待 V1.1
+
 
 ### 7.3 标定参数的作用域
 
@@ -701,14 +705,18 @@ V1 中，`pressure_calibration` 不再要求用户直接维护完整的 `k_segme
 
 - `service_brake`
   - 生成常用/快速制动共用的 `k_sb(f)` 与 `BCP0_sb`
+  - 架控与车控项目均适用
   - 适用于：
     - `FSB`
     - `FB`
     - `ratio_of_FSB`
 - `emergency_brake`
   - 生成紧急制动独立的 `k_eb(f)` 与 `BCP0_eb`
+  - 仅适用于 `controller_type = bogie`
+  - V1.0 不适用于 `controller_type = car`
   - 适用于：
     - `EB`
+
 
 建议结构：
 
@@ -739,7 +747,9 @@ pressure_calibration:
 - 字段约束：
   - `enabled` = false 时，S8 不应用调试标定
   - `enabled` = true 时：
-    - service_brake 和 emergency_brake 两组都必须配置
+    - 当 `controller_type = bogie`：`service_brake` 和 `emergency_brake` 两组都必须配置
+    - 当 `controller_type = car`：只允许配置 `service_brake`；不得配置 `emergency_brake`
+
   - 每组必须恰好提供两个试验点
   - `point_pair_mode` 仅允许：
     - aw3_aw0
@@ -808,6 +818,8 @@ pressure_calibration:
 - 每个 controller 使用自身的 F_by_controller 查询同一套曲线
 - FSB、FB 和 ratio_of_FSB 类型共用 service_brake 生成的曲线
 - EB 使用 emergency_brake 生成的曲线
+- 当 `controller_type = car` 时，以上 EB 使用 `emergency_brake` 曲线的规则不适用；V1.0 车控项目不生成、不应用 `k_eb(f)`。
+
 
 #### 7.5.7 k_for_code 说明
 
@@ -816,7 +828,20 @@ pressure_calibration:
   k = `k_for_code` / 100
 - S9 仍需输出各载荷工况下的 k_for_code 值，供控制器开发使用
 
-#### 7.5.8 FB 与 EB 的干涉处理
+#### 7.5.8 车控 EB 标定限制（V1.0）
+
+- 当 `controller_type = car` 时，V1.0 不支持紧急制动（EB）的 `k_eb(f)` 试验点标定。
+- 车控 EB 的现场标定采用机械式实际 BCP 压力标定方法，不等同于架控 EB 当前使用的 `k_for_code / BCP0` 曲线标定。
+- 因此 V1.0 中：
+  - `pressure_calibration.service_brake` 仍可用于常用/快速制动体系；
+  - `pressure_calibration.emergency_brake` 不得用于车控项目；
+  - 车控 EB 的最终压力标准使用 S7 基础压力结果，并继续执行阀件限幅；
+  - report / Markdown / 前端不得展示车控 EB 的伪 `k_eb(f)` 标定曲线或伪 `k_for_code` 分段公式；
+  - 应明确提示“车控 EB 实际 BCP 压力标定 V1.0 暂不支持，需由开发人员线下处理；V1.1 接入”。
+- 若 `controller_type = car` 且输入中配置了 `pressure_calibration.emergency_brake`，V1.0 应作为输入错误处理，不得静默套用架控 EB 标定逻辑。
+
+
+#### 7.5.9 FB 与 EB 的干涉处理
 
 - 快速制动 FB 使用常用制动体系的 k_sb(f) 与 BCP0_sb。
 - 若标定后出现同一 load_group × controller 下：
@@ -829,8 +854,8 @@ pressure_calibration:
   - 网页交互与报告中需明确提示：
     “快速制动压力超过紧急制动压力，已自动上调紧急制动初闸压力 BCP0_EB 并重新计算紧急制动压力标准。”
 
-#### 7.5.9 覆盖性要求
-- V1 生成的 k_sb(f) 与 k_eb(f) 必须覆盖完整有效力区间。
+#### 7.5.10 覆盖性要求
+- `controller_type`=bogie条件下，V1 生成的 k_sb(f) 与 k_eb(f) 必须覆盖完整有效力区间；`controller_type`=car条件下，k_sb(f)要求覆盖完整有效力区间；
 - 不允许出现某个有效 controller force 落在曲线空档中、无法取得有效 k 值的情况
 
 ## 8. Workflow（确定执行顺序）
@@ -870,7 +895,7 @@ workflow:
   - id: s8
     use: apply_pressure_calibration
     needs: [s7]
-    desc: 可选应用压力标定；按 load_group + brake_mode + controller force 选取 k(f)，按 load_group + brake_mode 选取 BCP0，计算最终 BCP_calibrated_by_controller 并执行限幅
+    desc: 可选应用压力标定；架控项目按 load_group + brake_mode + controller force 选取 k(f)，按 load_group + brake_mode 选取 BCP0，计算最终 BCP_calibrated_by_controller 并执行限幅；车控项目 V1.0 仅开放 service_brake 标定，EB 不应用 emergency_brake 的 k(f) 标定，仍使用 S7 基础压力结果，车控 EB 实际 BCP 压力标定留待 V1.1。
   - id: s9
     use: summarize_and_checks
     needs: [s8]

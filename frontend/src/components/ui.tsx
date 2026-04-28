@@ -97,18 +97,96 @@ export function SupplementCard({ title, body }: { title: string; body: string })
   );
 }
 
-export function FieldBlock({ label }: { label: string }): ReactElement {
+export function FieldBlock({
+  label,
+  value,
+  onChange,
+  onBlur,
+  placeholder,
+  error,
+  hint,
+  suffix,
+  inputMode = "text"
+}: {
+  label: string;
+  value?: string;
+  onChange?: (value: string) => void;
+  onBlur?: () => void;
+  placeholder?: string;
+  error?: string;
+  hint?: string;
+  suffix?: string;
+  inputMode?: "text" | "decimal" | "numeric";
+}): ReactElement {
+  const isInteractive = typeof onChange === "function";
+
   return (
     <div style={{ display: "grid", gap: "8px" }}>
       <strong style={fieldLabelStyle}>{label}</strong>
-      <div
-        style={{
-          height: "42px",
-          borderRadius: "12px",
-          border: "1px dashed #ccbca8",
-          background: "#f8f2eb"
-        }}
-      />
+      {isInteractive ? (
+        <>
+          <div
+            style={{
+              minHeight: "42px",
+              borderRadius: "12px",
+              border: error ? "1px solid #c64532" : "1px solid #ccbca8",
+              background: "#fff",
+              display: "flex",
+              alignItems: "center",
+              overflow: "hidden"
+            }}
+          >
+            <input
+              aria-label={label}
+              type={inputMode === "text" ? "text" : "number"}
+              value={value ?? ""}
+              onChange={(event) => onChange(event.target.value)}
+              onBlur={onBlur}
+              placeholder={placeholder}
+              inputMode={inputMode}
+              style={{
+                flex: 1,
+                minWidth: 0,
+                border: "none",
+                outline: "none",
+                background: "transparent",
+                padding: "10px 12px",
+                fontSize: "14px"
+              }}
+            />
+            {suffix ? (
+              <span
+                style={{
+                  padding: "0 12px",
+                  color: "#6b6259",
+                  fontWeight: 700,
+                  borderLeft: "1px solid #e5d7c7",
+                  alignSelf: "stretch",
+                  display: "inline-flex",
+                  alignItems: "center",
+                  background: "#f8f2eb"
+                }}
+              >
+                {suffix}
+              </span>
+            ) : null}
+          </div>
+          {error ? (
+            <span style={{ color: "#c64532", fontSize: "12px" }}>{error}</span>
+          ) : hint ? (
+            <span style={{ color: "#6b6259", fontSize: "12px" }}>{hint}</span>
+          ) : null}
+        </>
+      ) : (
+        <div
+          style={{
+            height: "42px",
+            borderRadius: "12px",
+            border: "1px dashed #ccbca8",
+            background: "#f8f2eb"
+          }}
+        />
+      )}
     </div>
   );
 }

@@ -21,7 +21,7 @@
     - 支持架控与车控两类控制器
     - 支持 `FSB`、`EB`、`FB`、`ratio_of_FSB`
     - 支持踏面制动与制动夹钳两类基础制动模型
-    - 支持试验点驱动的压力标定
+    - 支持试验点驱动的压力标定；V1.0 中车控项目仅开放 `service_brake` 标定，不支持 `emergency_brake` 车控 EB 实际 BCP 压力标定
     - 支持停放制动力校核
     - 支持全局黏着限制与自动策略调整
     - 支持电制动特性输入预留（当前不参与主制动计算）
@@ -152,6 +152,7 @@ def run(ctx: Context) -> Context:
 - ❌ 不得在前端、数据库、后端 API 中自行发明与 `Inputs` 不一致的字段结构
 - ❌ 不得把自动调整后的“实际计算配置”覆盖用户原始输入；原始输入必须保留，自动调整必须单独记录
 - ❌ 不得让 `electric_brake` 在 V1 中直接参与主制动计算；它当前仅作为输入预留和展示摘要
+- ❌ 不得在 `controller_type = car` 时静默套用架控 `emergency_brake` 的 `k(f) / BCP0` 标定逻辑；车控 EB 实际 BCP 压力标定留待 V1.1
 - ❌ 不得为追求“更好看”的文档或前端展示，擅自改动已验收的 report/Markdown 口径：包括停车校核字段语义、`Calibration Summary` 主视图内容、`delta_BCP` 的兼容定位、以及 Markdown 四段标题结构
 
 

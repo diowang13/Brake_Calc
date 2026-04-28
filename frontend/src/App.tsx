@@ -13,10 +13,6 @@ import {
   shellStyle
 } from "./app/styles";
 import { screens, type ScreenKey } from "./app/screens";
-import {
-  FieldBlock,
-  InfoCard
-} from "./components/ui";
 import { HomePage } from "./pages/HomePage";
 import { ImportSummaryPage } from "./pages/ImportSummaryPage";
 import { OverviewPage } from "./pages/OverviewPage";
@@ -28,6 +24,13 @@ export function App(): ReactElement {
   const [activeScreen, setActiveScreen] = useState<ScreenKey>("home");
   const [loadInputMode, setLoadInputMode] = useState<"car" | "bogie">("car");
   const [airSpringMassUnit, setAirSpringMassUnit] = useState<"ton" | "kn">("ton");
+  const [emergencyRequirementMode, setEmergencyRequirementMode] = useState<"a_mean" | "distance">(
+    "a_mean"
+  );
+  const [fastBrakeEnabled, setFastBrakeEnabled] = useState(false);
+  const [baseBrakeCylinderType, setBaseBrakeCylinderType] = useState<"tread_cylinder" | "caliper_cylinder">(
+    "tread_cylinder"
+  );
   const [airSpringInputMode, setAirSpringInputMode] = useState<"fitted_from_points" | "explicit_linear">(
     "fitted_from_points"
   );
@@ -60,10 +63,16 @@ export function App(): ReactElement {
           loadInputMode={loadInputMode}
           airSpringMassUnit={airSpringMassUnit}
           airSpringInputMode={airSpringInputMode}
+          baseBrakeCylinderType={baseBrakeCylinderType}
+          emergencyRequirementMode={emergencyRequirementMode}
+          fastBrakeEnabled={fastBrakeEnabled}
           activeSection={activeWorkbenchSection}
           onChangeLoadInputMode={setLoadInputMode}
           onChangeAirSpringMassUnit={setAirSpringMassUnit}
           onChangeAirSpringInputMode={setAirSpringInputMode}
+          onChangeBaseBrakeCylinderType={setBaseBrakeCylinderType}
+          onChangeEmergencyRequirementMode={setEmergencyRequirementMode}
+          onChangeFastBrakeEnabled={setFastBrakeEnabled}
           onChangeSection={setActiveWorkbenchSection}
           onBackToOverview={() => setActiveScreen("overview")}
         />
