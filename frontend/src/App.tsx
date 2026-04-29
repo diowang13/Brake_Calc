@@ -17,12 +17,141 @@ import { HomePage } from "./pages/HomePage";
 import { ImportSummaryPage } from "./pages/ImportSummaryPage";
 import { OverviewPage } from "./pages/OverviewPage";
 import { ResultPage } from "./pages/ResultPage";
-import { WorkbenchPage, type WorkbenchSectionKey } from "./pages/WorkbenchPage";
+import {
+  WorkbenchPage,
+  type BogieControllerRow,
+  type CarControllerRow,
+  type WorkbenchSectionKey
+} from "./pages/WorkbenchPage";
 import { WizardPage } from "./pages/WizardPage";
+
+function parseCount(value: string, fallback: number): number {
+  const parsedValue = Number.parseInt(value, 10);
+  return Number.isFinite(parsedValue) && parsedValue >= 0 ? parsedValue : fallback;
+}
+
+function generateCarRows(poweredCount: number, trailerCount: number): CarControllerRow[] {
+  const trailerRows = Array.from({ length: trailerCount }, (_, index) => ({
+    name: `trailer_car_${index + 1}`,
+    type: "trailer_car" as const
+  }));
+  const poweredRows = Array.from({ length: poweredCount }, (_, index) => {
+    const controllerIndex = trailerCount + index + 1;
+    return {
+      name: `powered_car_${controllerIndex}`,
+      type: "powered_car" as const
+    };
+  });
+
+  return [...trailerRows, ...poweredRows];
+}
+
+function generateBogieRows(poweredCarCount: number, trailerCarCount: number): BogieControllerRow[] {
+  const trailerRows = Array.from({ length: trailerCarCount * 2 }, (_, index) => ({
+    name: `trailer_bogie_${index + 1}`,
+    type: "trailer_bogie" as const
+  }));
+  const poweredRows = Array.from({ length: poweredCarCount * 2 }, (_, index) => {
+    const controllerIndex = trailerRows.length + index + 1;
+    return {
+      name: `powered_bogie_${controllerIndex}`,
+      type: "powered_bogie" as const
+    };
+  });
+
+  return [...trailerRows, ...poweredRows];
+}
+
+function generateMixedBogieRows(
+  mixedCarCount: number,
+  poweredCarCount: number,
+  trailerCarCount: number
+): BogieControllerRow[] {
+  const rows: BogieControllerRow[] = [];
+  let controllerIndex = 1;
+
+  Array.from({ length: mixedCarCount }).forEach(() => {
+    rows.push({
+      name: `trailer_bogie_${controllerIndex}`,
+      type: "trailer_bogie"
+    });
+    controllerIndex += 1;
+    rows.push({
+      name: `powered_bogie_${controllerIndex}`,
+      type: "powered_bogie"
+    });
+    controllerIndex += 1;
+  });
+
+  Array.from({ length: trailerCarCount * 2 }).forEach(() => {
+    rows.push({
+      name: `trailer_bogie_${controllerIndex}`,
+      type: "trailer_bogie"
+    });
+    controllerIndex += 1;
+  });
+
+  Array.from({ length: poweredCarCount * 2 }).forEach(() => {
+    rows.push({
+      name: `powered_bogie_${controllerIndex}`,
+      type: "powered_bogie"
+    });
+    controllerIndex += 1;
+  });
+
+  return rows;
+}
+
+function getDefaultCarRows(): CarControllerRow[] {
+  return [
+    {
+      name: "trailer_car_1",
+      type: "trailer_car" as const
+    },
+    {
+      name: "powered_car_2",
+      type: "powered_car" as const
+    }
+  ];
+}
+
+function getDefaultBogieRows(): BogieControllerRow[] {
+  return [
+    {
+      name: "trailer_bogie_1",
+      type: "trailer_bogie" as const
+    },
+    {
+      name: "trailer_bogie_2",
+      type: "trailer_bogie" as const
+    },
+    {
+      name: "powered_bogie_3",
+      type: "powered_bogie" as const
+    },
+    {
+      name: "powered_bogie_4",
+      type: "powered_bogie" as const
+    }
+  ];
+}
 
 export function App(): ReactElement {
   const [activeScreen, setActiveScreen] = useState<ScreenKey>("home");
   const [loadInputMode, setLoadInputMode] = useState<"car" | "bogie">("car");
+  const [controllerConfigType, setControllerConfigType] = useState<"car" | "bogie">("car");
+  const [totalCars, setTotalCars] = useState("2");
+  const [poweredCars, setPoweredCars] = useState("1");
+  const [trailerCars, setTrailerCars] = useState("1");
+  const [mixedCars, setMixedCars] = useState("0");
+  const [hasMixedBogieVehicles, setHasMixedBogieVehicles] = useState(false);
+  const [showInitializerResetHint, setShowInitializerResetHint] = useState(false);
+  const [targetPoweredCount, setTargetPoweredCount] = useState(1);
+  const [targetTrailerCount, setTargetTrailerCount] = useState(1);
+  const [targetMixedCount, setTargetMixedCount] = useState(0);
+  const [carControllerRows, setCarControllerRows] = useState<CarControllerRow[]>(getDefaultCarRows);
+  const [bogieControllerRows, setBogieControllerRows] =
+    useState<BogieControllerRow[]>(getDefaultBogieRows);
   const [airSpringMassUnit, setAirSpringMassUnit] = useState<"ton" | "kn">("ton");
   const [emergencyRequirementMode, setEmergencyRequirementMode] = useState<"a_mean" | "distance">(
     "a_mean"
@@ -39,6 +168,54 @@ export function App(): ReactElement {
     useState<WorkbenchSectionKey>("load-air-spring");
   const currentScreen = screens.find((screen) => screen.key === activeScreen) ?? screens[0];
 
+  const clearInitializerCounts = (): void => {
+    setTotalCars("0");
+    setPoweredCars("0");
+    setTrailerCars("0");
+    setMixedCars("0");
+  };
+
+  const updateInitializerCount =
+    (setter: (value: string) => void) =>
+    (value: string): void => {
+      setter(value);
+      setShowInitializerResetHint(false);
+    };
+
+  const handleChangeBcuType = (type: "car" | "bogie"): void => {
+    if (type === "car" && hasMixedBogieVehicles) {
+      setHasMixedBogieVehicles(false);
+      clearInitializerCounts();
+      setShowInitializerResetHint(true);
+    }
+
+    setControllerConfigType(type);
+  };
+
+  const handleToggleMixedBogieVehicles = (checked: boolean): void => {
+    setHasMixedBogieVehicles(checked);
+    clearInitializerCounts();
+    setShowInitializerResetHint(true);
+  };
+
+  const handleEnterWorkbenchFromWizard = (): void => {
+    const nextPoweredCount = parseCount(poweredCars, 1);
+    const nextTrailerCount = parseCount(trailerCars, 1);
+    const nextMixedCount = parseCount(mixedCars, 0);
+
+    setTargetPoweredCount(nextPoweredCount);
+    setTargetTrailerCount(nextTrailerCount);
+    setTargetMixedCount(controllerConfigType === "bogie" && hasMixedBogieVehicles ? nextMixedCount : 0);
+    setCarControllerRows(generateCarRows(nextPoweredCount, nextTrailerCount));
+    setBogieControllerRows(
+      controllerConfigType === "bogie" && hasMixedBogieVehicles
+        ? generateMixedBogieRows(nextMixedCount, nextPoweredCount, nextTrailerCount)
+        : generateBogieRows(nextPoweredCount, nextTrailerCount)
+    );
+    setActiveWorkbenchSection("requirements");
+    setActiveScreen("workbench");
+  };
+
   const pageContent = (() => {
     if (activeScreen === "home") {
       return (
@@ -50,7 +227,24 @@ export function App(): ReactElement {
     }
 
     if (activeScreen === "wizard") {
-      return <WizardPage onEnterWorkbench={() => setActiveScreen("workbench")} />;
+      return (
+        <WizardPage
+          bcuType={controllerConfigType}
+          hasMixedBogieVehicles={hasMixedBogieVehicles}
+          mixedCars={mixedCars}
+          showResetHint={showInitializerResetHint}
+          totalCars={totalCars}
+          poweredCars={poweredCars}
+          trailerCars={trailerCars}
+          onChangeBcuType={handleChangeBcuType}
+          onChangeHasMixedBogieVehicles={handleToggleMixedBogieVehicles}
+          onChangeTotalCars={updateInitializerCount(setTotalCars)}
+          onChangeMixedCars={updateInitializerCount(setMixedCars)}
+          onChangePoweredCars={updateInitializerCount(setPoweredCars)}
+          onChangeTrailerCars={updateInitializerCount(setTrailerCars)}
+          onEnterWorkbench={handleEnterWorkbenchFromWizard}
+        />
+      );
     }
 
     if (activeScreen === "overview") {
@@ -61,12 +255,19 @@ export function App(): ReactElement {
       return (
         <WorkbenchPage
           loadInputMode={loadInputMode}
+          controllerConfigType={controllerConfigType}
           airSpringMassUnit={airSpringMassUnit}
           airSpringInputMode={airSpringInputMode}
           baseBrakeCylinderType={baseBrakeCylinderType}
           emergencyRequirementMode={emergencyRequirementMode}
           fastBrakeEnabled={fastBrakeEnabled}
           activeSection={activeWorkbenchSection}
+          targetPoweredCount={targetPoweredCount}
+          targetTrailerCount={targetTrailerCount}
+          targetMixedCount={targetMixedCount}
+          hasMixedBogieVehicles={hasMixedBogieVehicles}
+          carControllerRows={carControllerRows}
+          bogieControllerRows={bogieControllerRows}
           onChangeLoadInputMode={setLoadInputMode}
           onChangeAirSpringMassUnit={setAirSpringMassUnit}
           onChangeAirSpringInputMode={setAirSpringInputMode}
@@ -74,6 +275,8 @@ export function App(): ReactElement {
           onChangeEmergencyRequirementMode={setEmergencyRequirementMode}
           onChangeFastBrakeEnabled={setFastBrakeEnabled}
           onChangeSection={setActiveWorkbenchSection}
+          onChangeCarControllerRows={setCarControllerRows}
+          onChangeBogieControllerRows={setBogieControllerRows}
           onBackToOverview={() => setActiveScreen("overview")}
         />
       );

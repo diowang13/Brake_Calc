@@ -123,6 +123,198 @@ describe("App shell", () => {
     ).not.toBeInTheDocument();
   });
 
+  it("uses the initializer BCU type and renders the vehicle config page as instance confirmation and adjustment", async () => {
+    const user = userEvent.setup();
+
+    render(<App />);
+
+    await user.click(screen.getByRole("button", { name: "新建初始化" }));
+    await user.click(screen.getByRole("button", { name: "架控" }));
+    await user.click(screen.getByRole("button", { name: "生成配置并进入工作台" }));
+    await user.click(screen.getByRole("button", { name: /^车辆与控制器配置/ }));
+
+    expect(screen.getByRole("heading", { level: 3, name: "实例确认与调整" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { level: 4, name: "控制器实例列表" })).toBeInTheDocument();
+    expect(
+      screen.getByText("架控：每个控制器对应 1 个转向架 / 2 个空簧 / 4 个制动缸")
+    ).toBeInTheDocument();
+    expect(screen.getByRole("textbox", { name: "实例名称 1" })).toHaveValue("trailer_bogie_1");
+    expect(screen.getByRole("button", { name: "实例 1 设为拖架" })).toHaveAttribute(
+      "aria-pressed",
+      "true"
+    );
+    expect(screen.getByRole("textbox", { name: "实例名称 2" })).toHaveValue("trailer_bogie_2");
+    expect(screen.getByRole("button", { name: "实例 2 设为拖架" })).toHaveAttribute(
+      "aria-pressed",
+      "true"
+    );
+    expect(screen.queryByRole("heading", { level: 4, name: "当前控制粒度" })).not.toBeInTheDocument();
+    expect(screen.queryByText("控制粒度已在新建初始化中确定")).not.toBeInTheDocument();
+  });
+
+  it("lets vehicle instances adjust only names and powered or trailer type with total count checking", async () => {
+    const user = userEvent.setup();
+
+    render(<App />);
+
+    await user.click(screen.getByRole("button", { name: "新建初始化" }));
+    await user.click(screen.getByRole("button", { name: "车控" }));
+    await user.click(screen.getByRole("button", { name: "生成配置并进入工作台" }));
+    await user.click(screen.getByRole("button", { name: /^车辆与控制器配置/ }));
+
+    expect(screen.getByText(/编组校核通过/)).toBeInTheDocument();
+    expect(screen.getByText("目标编组")).toBeInTheDocument();
+    expect(screen.getByText("当前编组")).toBeInTheDocument();
+    expect(screen.getAllByText("动车 1").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("拖车 1").length).toBeGreaterThan(0);
+
+    expect(screen.getByRole("textbox", { name: "实例名称 1" })).toHaveValue("trailer_car_1");
+    expect(screen.getByRole("button", { name: "实例 1 设为拖车" })).toHaveAttribute(
+      "aria-pressed",
+      "true"
+    );
+    expect(screen.getByRole("button", { name: "实例 1 设为动车" })).toHaveAttribute(
+      "aria-pressed",
+      "false"
+    );
+    expect(screen.queryByText("控制制动缸数量：8")).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "实例 1 设为动车" }));
+
+    expect(screen.getByText("动车 2")).toBeInTheDocument();
+    expect(screen.getByText("拖车 0")).toBeInTheDocument();
+    expect(screen.getByRole("textbox", { name: "实例名称 1" })).toHaveValue("powered_car_1");
+    expect(screen.getByText(/编组校核需确认/)).toHaveStyle({ color: "rgb(198, 69, 50)" });
+  });
+
+  it("generates bogie controller instances from initializer car counts", async () => {
+    const user = userEvent.setup();
+
+    render(<App />);
+
+    await user.click(screen.getByRole("button", { name: "新建初始化" }));
+    await user.click(screen.getByRole("button", { name: "架控" }));
+
+    await user.clear(screen.getByRole("spinbutton", { name: "总车数" }));
+    await user.type(screen.getByRole("spinbutton", { name: "总车数" }), "6");
+    await user.clear(screen.getByRole("spinbutton", { name: "动车数量" }));
+    await user.type(screen.getByRole("spinbutton", { name: "动车数量" }), "2");
+    await user.clear(screen.getByRole("spinbutton", { name: "拖车数量" }));
+    await user.type(screen.getByRole("spinbutton", { name: "拖车数量" }), "4");
+
+    await user.click(screen.getByRole("button", { name: "生成配置并进入工作台" }));
+    await user.click(screen.getByRole("button", { name: /^车辆与控制器配置/ }));
+
+    expect(screen.getAllByText("动架 4").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("拖架 8").length).toBeGreaterThan(0);
+    expect(screen.getByRole("textbox", { name: "实例名称 1" })).toHaveValue("trailer_bogie_1");
+    expect(screen.getByRole("textbox", { name: "实例名称 2" })).toHaveValue("trailer_bogie_2");
+    expect(screen.getByRole("textbox", { name: "实例名称 12" })).toHaveValue("powered_bogie_12");
+    expect(screen.getByRole("button", { name: "实例 12 设为拖架" })).toHaveAttribute(
+      "aria-pressed",
+      "false"
+    );
+    expect(screen.getByRole("button", { name: "实例 12 设为动架" })).toHaveAttribute(
+      "aria-pressed",
+      "true"
+    );
+    expect(screen.getByText(/编组校核通过/)).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "实例 6 设为动架" }));
+
+    expect(screen.getByRole("textbox", { name: "实例名称 6" })).toHaveValue("powered_bogie_6");
+  });
+
+  it("validates initializer car counts before generating controller instances", async () => {
+    const user = userEvent.setup();
+
+    render(<App />);
+
+    await user.click(screen.getByRole("button", { name: "新建初始化" }));
+
+    await user.clear(screen.getByRole("spinbutton", { name: "总车数" }));
+    await user.type(screen.getByRole("spinbutton", { name: "总车数" }), "0");
+
+    expect(screen.getByText("总车数必须大于 0")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "生成配置并进入工作台" })).toBeDisabled();
+
+    await user.clear(screen.getByRole("spinbutton", { name: "总车数" }));
+    await user.clear(screen.getByRole("spinbutton", { name: "总车数" }));
+    await user.clear(screen.getByRole("spinbutton", { name: "总车数" }));
+    await user.type(screen.getByRole("spinbutton", { name: "总车数" }), "3");
+    await user.clear(screen.getByRole("spinbutton", { name: "动车数量" }));
+    await user.type(screen.getByRole("spinbutton", { name: "动车数量" }), "1");
+    await user.clear(screen.getByRole("spinbutton", { name: "拖车数量" }));
+    await user.type(screen.getByRole("spinbutton", { name: "拖车数量" }), "1");
+
+    expect(screen.getByText("动车数量与拖车数量之和必须等于总车数")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "生成配置并进入工作台" })).toBeDisabled();
+
+    await user.clear(screen.getByRole("spinbutton", { name: "拖车数量" }));
+    await user.type(screen.getByRole("spinbutton", { name: "拖车数量" }), "2");
+
+    expect(screen.queryByText("动车数量与拖车数量之和必须等于总车数")).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "生成配置并进入工作台" })).toBeEnabled();
+  });
+
+  it("supports mixed bogie vehicle mode from initializer through workbench target checks", async () => {
+    const user = userEvent.setup();
+
+    render(<App />);
+
+    await user.click(screen.getByRole("button", { name: "新建初始化" }));
+    await user.click(screen.getByRole("button", { name: "架控" }));
+
+    const mixedModeToggle = screen.getByRole("checkbox", { name: "存在动/拖架混合车辆" });
+    expect(mixedModeToggle).toBeInTheDocument();
+    expect(screen.queryByText("请按车辆口径填写混合车、拖车、动车数量。")).not.toBeInTheDocument();
+
+    await user.click(mixedModeToggle);
+
+    expect(screen.getByText("已切换编组模式，请重新填写车辆数量。")).toBeInTheDocument();
+    expect(screen.getByText("请按车辆口径填写混合车、拖车、动车数量。")).toBeInTheDocument();
+    expect(screen.getByText("混合车按 1 辆拖车计入拖车数量；生成实例后，将默认把首辆拖车生成为 1 个拖架 + 1 个动架。")).toBeInTheDocument();
+    expect(screen.getByRole("spinbutton", { name: "混合车数量" })).toHaveValue(0);
+    expect(screen.getByRole("spinbutton", { name: "拖车数量" })).toHaveValue(0);
+    expect(screen.getByRole("spinbutton", { name: "动车数量" })).toHaveValue(0);
+
+    await user.clear(screen.getByRole("spinbutton", { name: "总车数" }));
+    await user.type(screen.getByRole("spinbutton", { name: "总车数" }), "3");
+    await user.clear(screen.getByRole("spinbutton", { name: "混合车数量" }));
+    await user.type(screen.getByRole("spinbutton", { name: "混合车数量" }), "1");
+
+    expect(screen.queryByText("已切换编组模式，请重新填写车辆数量。")).not.toBeInTheDocument();
+
+    await user.clear(screen.getByRole("spinbutton", { name: "动车数量" }));
+    await user.type(screen.getByRole("spinbutton", { name: "动车数量" }), "3");
+
+    expect(screen.getByText("混合车数量、拖车数量与动车数量之和必须等于总车数")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "生成配置并进入工作台" })).toBeDisabled();
+
+    await user.clear(screen.getByRole("spinbutton", { name: "动车数量" }));
+    await user.type(screen.getByRole("spinbutton", { name: "动车数量" }), "2");
+    await user.clear(screen.getByRole("spinbutton", { name: "拖车数量" }));
+    await user.type(screen.getByRole("spinbutton", { name: "拖车数量" }), "0");
+    expect(screen.queryByText("混合车数量、拖车数量与动车数量之和必须等于总车数")).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "生成配置并进入工作台" }));
+    await user.click(screen.getByRole("button", { name: /^车辆与控制器配置/ }));
+
+    expect(screen.getByText("目标编组")).toBeInTheDocument();
+    expect(screen.getByText("当前编组")).toBeInTheDocument();
+    expect(screen.getByText("编组校核")).toBeInTheDocument();
+    expect(screen.getAllByText("动架 5").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("拖架 1").length).toBeGreaterThan(0);
+    expect(screen.getByRole("textbox", { name: "实例名称 1" })).toHaveValue("trailer_bogie_1");
+    expect(screen.getByRole("textbox", { name: "实例名称 2" })).toHaveValue("powered_bogie_2");
+    expect(screen.getByRole("textbox", { name: "实例名称 3" })).toHaveValue("powered_bogie_3");
+    expect(screen.getByText(/编组校核通过/)).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "实例 1 设为动架" }));
+
+    expect(screen.getByText(/编组校核需确认/)).toHaveStyle({ color: "rgb(198, 69, 50)" });
+  });
+
   it("renders the technical conditions slice with business labels and brake type controls", async () => {
     const user = userEvent.setup();
 
@@ -135,7 +327,8 @@ describe("App shell", () => {
     expect(screen.getByRole("heading", { level: 4, name: "最大常用制动" })).toBeInTheDocument();
     expect(screen.getByRole("heading", { level: 4, name: "紧急制动" })).toBeInTheDocument();
     expect(screen.getByRole("heading", { level: 4, name: "快速制动" })).toBeInTheDocument();
-    expect(screen.getByRole("heading", { level: 4, name: "其他比例制动" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { level: 4, name: "其他制动类型" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { level: 4, name: "常用制动分配方式" })).toBeInTheDocument();
     expect(screen.getByRole("heading", { level: 4, name: "全局黏着限制" })).toBeInTheDocument();
     expect(screen.getByText("最高速度 v0 (km/h)")).toBeInTheDocument();
     expect(screen.getByText("最大常用制动平均减速度要求 (m/s²)")).toBeInTheDocument();
@@ -152,9 +345,11 @@ describe("App shell", () => {
     expect(screen.queryByText("快速制动空走时间 t1 (s)")).not.toBeInTheDocument();
     expect(screen.queryByText("快速制动冲击率 impulse_rate (m/s³)")).not.toBeInTheDocument();
     expect(screen.getByText(/快速制动控制目标跟随紧急制动/)).toBeInTheDocument();
-    expect(screen.getByText("制动类型代号 name（写入 YAML）")).toBeInTheDocument();
-    expect(screen.getByText("相对最大常用制动比例 ratio (-)")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "添加比例制动类型" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "等磨耗" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "等黏着" })).toBeInTheDocument();
+    expect(screen.getByText("制动类型代号")).toBeInTheDocument();
+    expect(screen.getByText("相对最大常用制动比例 (%)")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "添加制动类型" })).toBeInTheDocument();
     expect(screen.getByText("黏着利用限制 mu_limit (-)")).toBeInTheDocument();
 
     await user.click(screen.getByRole("button", { name: "按制动距离录入" }));
@@ -166,10 +361,10 @@ describe("App shell", () => {
 
     expect(screen.getByText("待校核速度 1 (km/h)")).toBeInTheDocument();
 
-    await user.click(screen.getByRole("button", { name: "添加比例制动类型" }));
+    await user.click(screen.getByRole("button", { name: "添加制动类型" }));
 
-    expect(screen.getByText("制动类型代号 2 name（写入 YAML）")).toBeInTheDocument();
-    expect(screen.getByText("相对最大常用制动比例 2 ratio (-)")).toBeInTheDocument();
+    expect(screen.getByText("制动类型代号 2")).toBeInTheDocument();
+    expect(screen.getByText("相对最大常用制动比例 2 (%)")).toBeInTheDocument();
   });
 
   it("uses ratio brake defaults and validates ratio brake names and percentage inputs", async () => {
@@ -181,20 +376,20 @@ describe("App shell", () => {
     await user.click(screen.getByRole("button", { name: /^运行基础配置 \/ 技术条件/ }));
 
     const firstNameInput = screen.getByRole("textbox", {
-      name: "制动类型代号 name（写入 YAML）"
+      name: "制动类型代号"
     });
     const firstRatioInput = screen.getByRole("spinbutton", {
-      name: "相对最大常用制动比例 ratio (-)"
+      name: "相对最大常用制动比例 (%)"
     });
 
     expect(firstNameInput).toHaveValue("holding");
     expect(firstRatioInput).toHaveValue(50);
     expect(screen.getAllByText("%").length).toBeGreaterThan(0);
 
-    await user.click(screen.getByRole("button", { name: "添加比例制动类型" }));
+    await user.click(screen.getByRole("button", { name: "添加制动类型" }));
 
     expect(
-      screen.getByRole("textbox", { name: "制动类型代号 2 name（写入 YAML）" })
+      screen.getByRole("textbox", { name: "制动类型代号 2" })
     ).toHaveValue("holding_2");
 
     await user.clear(firstNameInput);

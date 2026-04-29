@@ -16,8 +16,69 @@ import {
   TogglePill
 } from "../components/ui";
 
+export type CarControllerRow = {
+  name: string;
+  type: "powered_car" | "trailer_car";
+};
+
+export type BogieControllerRow = {
+  name: string;
+  type: "powered_bogie" | "trailer_bogie";
+};
+
+function CountCard({
+  title,
+  poweredLabel,
+  poweredCount,
+  trailerLabel,
+  trailerCount,
+  tone = "neutral",
+  emphasizeCounts = false
+}: {
+  title: string;
+  poweredLabel: string;
+  poweredCount: number;
+  trailerLabel: string;
+  trailerCount: number;
+  tone?: "neutral" | "danger";
+  emphasizeCounts?: boolean;
+}): ReactElement {
+  const isDanger = tone === "danger";
+
+  return (
+    <div
+      style={{
+        border: isDanger ? "1px solid #c64532" : "1px solid #d5c9ba",
+        borderRadius: "16px",
+        padding: "14px",
+        background: isDanger ? "#fff1ee" : "#fff"
+      }}
+    >
+      <h4 style={{ margin: "0 0 10px", color: isDanger ? "#c64532" : "#1f1b16" }}>{title}</h4>
+      <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
+        {[`${poweredLabel} ${poweredCount}`, `${trailerLabel} ${trailerCount}`].map((item) => (
+          <span
+            key={`${title}-${item}`}
+            style={{
+              borderRadius: "999px",
+              padding: emphasizeCounts ? "8px 12px" : "6px 10px",
+              background: isDanger || emphasizeCounts ? "#ffe4df" : "#f8f2eb",
+              color: isDanger || emphasizeCounts ? "#c64532" : "#493f35",
+              fontWeight: 700,
+              fontSize: emphasizeCounts ? "16px" : "13px"
+            }}
+          >
+            {item}
+          </span>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 export type WorkbenchSectionKey =
   | "requirements"
+  | "vehicle-config"
   | "load-air-spring"
   | "base-brake"
   | "parking"
@@ -26,12 +87,19 @@ export type WorkbenchSectionKey =
 
 export function WorkbenchPage({
   loadInputMode,
+  controllerConfigType,
   airSpringMassUnit,
   airSpringInputMode,
   baseBrakeCylinderType,
   emergencyRequirementMode,
   fastBrakeEnabled,
   activeSection,
+  targetPoweredCount,
+  targetTrailerCount,
+  targetMixedCount,
+  hasMixedBogieVehicles,
+  carControllerRows,
+  bogieControllerRows,
   onChangeLoadInputMode,
   onChangeAirSpringMassUnit,
   onChangeAirSpringInputMode,
@@ -39,15 +107,24 @@ export function WorkbenchPage({
   onChangeEmergencyRequirementMode,
   onChangeFastBrakeEnabled,
   onChangeSection,
+  onChangeCarControllerRows,
+  onChangeBogieControllerRows,
   onBackToOverview
 }: {
   loadInputMode: "car" | "bogie";
+  controllerConfigType: "car" | "bogie";
   airSpringMassUnit: "ton" | "kn";
   airSpringInputMode: "fitted_from_points" | "explicit_linear";
   baseBrakeCylinderType: "tread_cylinder" | "caliper_cylinder";
   emergencyRequirementMode: "a_mean" | "distance";
   fastBrakeEnabled: boolean;
   activeSection: WorkbenchSectionKey;
+  targetPoweredCount: number;
+  targetTrailerCount: number;
+  targetMixedCount: number;
+  hasMixedBogieVehicles: boolean;
+  carControllerRows: CarControllerRow[];
+  bogieControllerRows: BogieControllerRow[];
   onChangeLoadInputMode: (mode: "car" | "bogie") => void;
   onChangeAirSpringMassUnit: (unit: "ton" | "kn") => void;
   onChangeAirSpringInputMode: (mode: "fitted_from_points" | "explicit_linear") => void;
@@ -55,6 +132,8 @@ export function WorkbenchPage({
   onChangeEmergencyRequirementMode: (mode: "a_mean" | "distance") => void;
   onChangeFastBrakeEnabled: (enabled: boolean) => void;
   onChangeSection: (section: WorkbenchSectionKey) => void;
+  onChangeCarControllerRows: (rows: CarControllerRow[]) => void;
+  onChangeBogieControllerRows: (rows: BogieControllerRow[]) => void;
   onBackToOverview: () => void;
 }): ReactElement {
   const [v0Value, setV0Value] = useState("");
@@ -66,6 +145,9 @@ export function WorkbenchPage({
   const [ebT1Value, setEbT1Value] = useState("");
   const [ebT2Value, setEbT2Value] = useState("");
   const [muLimitValue, setMuLimitValue] = useState("");
+  const [allocationStrategy, setAllocationStrategy] = useState<"equal_wear" | "equal_adhesion">(
+    "equal_wear"
+  );
   const [speedChecks, setSpeedChecks] = useState<string[]>([]);
   const [ratioBrakes, setRatioBrakes] = useState<Array<{ name: string; ratioPercent: string }>>([
     { name: "holding", ratioPercent: "50" }
@@ -208,6 +290,58 @@ export function WorkbenchPage({
     });
   };
 
+  const vehicleCountSummary =
+    controllerConfigType === "car"
+      ? {
+          targetPowered: targetPoweredCount,
+          targetTrailer: targetTrailerCount,
+          currentPowered: carControllerRows.filter((row) => row.type === "powered_car").length,
+          currentTrailer: carControllerRows.filter((row) => row.type === "trailer_car").length,
+          poweredLabel: "动车",
+          trailerLabel: "拖车",
+          scopeLabel: "车控：每个控制器对应 1 辆车 / 2 个转向架 / 4 个空簧 / 8 个制动缸"
+        }
+      : {
+          targetPowered: targetPoweredCount * 2 + targetMixedCount,
+          targetTrailer: targetTrailerCount * 2 + targetMixedCount,
+          currentPowered: bogieControllerRows.filter((row) => row.type === "powered_bogie").length,
+          currentTrailer: bogieControllerRows.filter((row) => row.type === "trailer_bogie").length,
+          poweredLabel: "动架",
+          trailerLabel: "拖架",
+          scopeLabel: "架控：每个控制器对应 1 个转向架 / 2 个空簧 / 4 个制动缸"
+        };
+  const vehicleCountMatches =
+    vehicleCountSummary.currentPowered === vehicleCountSummary.targetPowered &&
+    vehicleCountSummary.currentTrailer === vehicleCountSummary.targetTrailer;
+
+  const updateCarControllerName = (index: number, name: string): void => {
+    onChangeCarControllerRows(
+      carControllerRows.map((row, rowIndex) => (rowIndex === index ? { ...row, name } : row))
+    );
+  };
+
+  const updateBogieControllerName = (index: number, name: string): void => {
+    onChangeBogieControllerRows(
+      bogieControllerRows.map((row, rowIndex) => (rowIndex === index ? { ...row, name } : row))
+    );
+  };
+
+  const updateCarControllerType = (index: number, type: CarControllerRow["type"]): void => {
+    onChangeCarControllerRows(
+      carControllerRows.map((row, rowIndex) =>
+        rowIndex === index ? { name: `${type}_${index + 1}`, type } : row
+      )
+    );
+  };
+
+  const updateBogieControllerType = (index: number, type: BogieControllerRow["type"]): void => {
+    onChangeBogieControllerRows(
+      bogieControllerRows.map((row, rowIndex) =>
+        rowIndex === index ? { name: `${type}_${index + 1}`, type } : row
+      )
+    );
+  };
+
   return (
     <div style={{ display: "grid", gap: "18px" }}>
       <section style={panelStyle}>
@@ -252,7 +386,12 @@ export function WorkbenchPage({
                 active: activeSection === "requirements",
                 onSelect: () => onChangeSection("requirements")
               },
-              { label: "车辆与控制器配置", status: "已完成" },
+              {
+                label: "车辆与控制器配置",
+                status: "待验收",
+                active: activeSection === "vehicle-config",
+                onSelect: () => onChangeSection("vehicle-config")
+              },
               {
                 label: "载荷与空簧",
                 status: "2 项待确认",
@@ -484,9 +623,35 @@ export function WorkbenchPage({
                     background: "#fff"
                   }}
                 >
-                  <h4 style={{ margin: "0 0 12px" }}>其他比例制动</h4>
+                  <h4 style={{ margin: "0 0 12px" }}>常用制动分配方式</h4>
                   <p style={{ margin: "0 0 16px", color: "#6b6259", lineHeight: 1.6 }}>
-                    用于添加 `source = ratio_of_FSB` 的自定义制动类型；不单独配置技术条件和响应时间，按最大常用制动派生。
+                    用于配置最大常用制动及按其比例定义的自定义制动类型所采用的分配方式。
+                  </p>
+                  <div style={{ display: "flex", gap: "10px", flexWrap: "wrap" }}>
+                    <TogglePill
+                      label="等磨耗"
+                      active={allocationStrategy === "equal_wear"}
+                      onClick={() => setAllocationStrategy("equal_wear")}
+                    />
+                    <TogglePill
+                      label="等黏着"
+                      active={allocationStrategy === "equal_adhesion"}
+                      onClick={() => setAllocationStrategy("equal_adhesion")}
+                    />
+                  </div>
+                </div>
+
+                <div
+                  style={{
+                    border: "1px solid #d5c9ba",
+                    borderRadius: "16px",
+                    padding: "16px",
+                    background: "#fff"
+                  }}
+                >
+                  <h4 style={{ margin: "0 0 12px" }}>其他制动类型</h4>
+                  <p style={{ margin: "0 0 16px", color: "#6b6259", lineHeight: 1.6 }}>
+                    用于添加自定义制动类型。
                   </p>
                   <div style={{ display: "grid", gap: "12px", marginBottom: "16px" }}>
                     {ratioBrakes.map((row, index) => (
@@ -497,8 +662,8 @@ export function WorkbenchPage({
                         <FieldBlock
                           label={
                             index === 0
-                              ? "制动类型代号 name（写入 YAML）"
-                              : `制动类型代号 ${index + 1} name（写入 YAML）`
+                              ? "制动类型代号"
+                              : `制动类型代号 ${index + 1}`
                           }
                           value={row.name}
                           onChange={(nextValue) => updateRatioBrake(index, "name", nextValue)}
@@ -513,8 +678,8 @@ export function WorkbenchPage({
                         <FieldBlock
                           label={
                             index === 0
-                              ? "相对最大常用制动比例 ratio (-)"
-                              : `相对最大常用制动比例 ${index + 1} ratio (-)`
+                              ? "相对最大常用制动比例 (%)"
+                              : `相对最大常用制动比例 ${index + 1} (%)`
                           }
                           value={row.ratioPercent}
                           onChange={(nextValue) => updateRatioBrake(index, "ratioPercent", nextValue)}
@@ -532,7 +697,7 @@ export function WorkbenchPage({
                     ))}
                   </div>
                   <button type="button" style={secondaryActionStyle} onClick={addRatioBrake}>
-                    添加比例制动类型
+                    添加制动类型
                   </button>
                 </div>
 
@@ -561,6 +726,155 @@ export function WorkbenchPage({
                 </div>
               </div>
             </section>
+          )}
+
+          {activeSection === "vehicle-config" && (
+            <>
+              <section style={panelStyle}>
+                <h3 style={{ marginTop: 0 }}>实例确认与调整</h3>
+                <p style={{ margin: "0 0 16px", color: "#6b6259", lineHeight: 1.6 }}>
+                  初始化向导会先生成首版 `vehicle_config`。这一页只负责确认和微调实例，不承担从零创建实例的主流程。
+                </p>
+                <InfoCard
+                  title="本页目标"
+                  body="确认初始化生成的控制器实例是否符合项目编组，再决定是否需要调整名称、类型或个别实例。"
+                />
+              </section>
+
+              <section style={panelStyle}>
+                <h4 style={{ marginTop: 0 }}>控制器实例列表</h4>
+                <p style={{ margin: "0 0 16px", color: "#6b6259", lineHeight: 1.6 }}>
+                  当前 BCU 类型：{controllerConfigType === "car" ? "车控" : "架控"}。这里仅调整实例名称和动/拖类型；控制器数量来自初始化编组，调整后需要核对总数。
+                </p>
+                <p style={{ margin: "0 0 16px", color: "#6b6259", lineHeight: 1.6 }}>
+                  {vehicleCountSummary.scopeLabel}
+                </p>
+                <div
+                  style={{
+                    display: "grid",
+                    gridTemplateColumns: "repeat(3, 1fr)",
+                    gap: "12px",
+                    marginBottom: "16px"
+                  }}
+                >
+                  <CountCard
+                    title="目标编组"
+                    poweredLabel={vehicleCountSummary.poweredLabel}
+                    poweredCount={vehicleCountSummary.targetPowered}
+                    trailerLabel={vehicleCountSummary.trailerLabel}
+                    trailerCount={vehicleCountSummary.targetTrailer}
+                  />
+                  <CountCard
+                    title="当前编组"
+                    poweredLabel={vehicleCountSummary.poweredLabel}
+                    poweredCount={vehicleCountSummary.currentPowered}
+                    trailerLabel={vehicleCountSummary.trailerLabel}
+                    trailerCount={vehicleCountSummary.currentTrailer}
+                    tone={vehicleCountMatches ? "neutral" : "danger"}
+                    emphasizeCounts={controllerConfigType === "bogie" && hasMixedBogieVehicles}
+                  />
+                  <div
+                    style={{
+                      border: vehicleCountMatches ? "1px solid #d5c9ba" : "1px solid #c64532",
+                      borderRadius: "16px",
+                      padding: "14px",
+                      background: vehicleCountMatches ? "#fff" : "#fff1ee"
+                    }}
+                  >
+                    <h4
+                      style={{
+                        margin: "0 0 8px",
+                        color: vehicleCountMatches ? "#1f1b16" : "#c64532"
+                      }}
+                    >
+                      编组校核
+                    </h4>
+                    <p
+                      style={{
+                        margin: 0,
+                        color: vehicleCountMatches ? "#6b6259" : "#c64532",
+                        lineHeight: 1.5
+                      }}
+                    >
+                      {vehicleCountMatches ? "编组校核通过，与初始化目标一致。" : "编组校核需确认，当前动/拖数量与初始化目标不一致。"}
+                    </p>
+                  </div>
+                </div>
+                <div style={{ display: "grid", gap: "12px" }}>
+                  {controllerConfigType === "car"
+                    ? carControllerRows.map((row, index) => (
+                        <div
+                          key={`car-controller-${index}`}
+                          style={{
+                            border: "1px solid #d5c9ba",
+                            borderRadius: "16px",
+                            padding: "16px",
+                            background: "#fff",
+                            display: "grid",
+                            gap: "12px"
+                          }}
+                        >
+                          <strong>{`控制器实例 ${index + 1}`}</strong>
+                          <FieldBlock
+                            label={`实例名称 ${index + 1}`}
+                            value={row.name}
+                            onChange={(value) => updateCarControllerName(index, value)}
+                          />
+                          <div>
+                            <strong style={{ fontSize: "14px" }}>车辆类型</strong>
+                            <div style={{ display: "flex", gap: "10px", flexWrap: "wrap", marginTop: "8px" }}>
+                              <TogglePill
+                                label={`实例 ${index + 1} 设为拖车`}
+                                active={row.type === "trailer_car"}
+                                onClick={() => updateCarControllerType(index, "trailer_car")}
+                              />
+                              <TogglePill
+                                label={`实例 ${index + 1} 设为动车`}
+                                active={row.type === "powered_car"}
+                                onClick={() => updateCarControllerType(index, "powered_car")}
+                              />
+                            </div>
+                          </div>
+                        </div>
+                      ))
+                    : bogieControllerRows.map((row, index) => (
+                        <div
+                          key={`bogie-controller-${index}`}
+                          style={{
+                            border: "1px solid #d5c9ba",
+                            borderRadius: "16px",
+                            padding: "16px",
+                            background: "#fff",
+                            display: "grid",
+                            gap: "12px"
+                          }}
+                        >
+                          <strong>{`控制器实例 ${index + 1}`}</strong>
+                          <FieldBlock
+                            label={`实例名称 ${index + 1}`}
+                            value={row.name}
+                            onChange={(value) => updateBogieControllerName(index, value)}
+                          />
+                          <div>
+                            <strong style={{ fontSize: "14px" }}>转向架类型</strong>
+                            <div style={{ display: "flex", gap: "10px", flexWrap: "wrap", marginTop: "8px" }}>
+                              <TogglePill
+                                label={`实例 ${index + 1} 设为拖架`}
+                                active={row.type === "trailer_bogie"}
+                                onClick={() => updateBogieControllerType(index, "trailer_bogie")}
+                              />
+                              <TogglePill
+                                label={`实例 ${index + 1} 设为动架`}
+                                active={row.type === "powered_bogie"}
+                                onClick={() => updateBogieControllerType(index, "powered_bogie")}
+                              />
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+                </div>
+              </section>
+            </>
           )}
 
           {activeSection === "load-air-spring" && (
