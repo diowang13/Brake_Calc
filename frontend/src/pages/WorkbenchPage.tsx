@@ -8,7 +8,7 @@ import {
 } from "../app/styles";
 import {
   ActiveInfoTabs,
-  CalibrationCaseCard,
+  CalibrationConfigCard,
   FieldBlock,
   InfoCard,
   NavSection,
@@ -85,6 +85,8 @@ export type WorkbenchSectionKey =
   | "calibration"
   | "electric";
 
+type CalibrationMode = "aw3_aw0" | "aw3_aw2";
+
 export function WorkbenchPage({
   loadInputMode,
   controllerConfigType,
@@ -154,6 +156,10 @@ export function WorkbenchPage({
   ]);
   const [touchedFields, setTouchedFields] = useState<Record<string, boolean>>({});
   const [submitAttempted, setSubmitAttempted] = useState(false);
+  const [serviceCalibrationMode, setServiceCalibrationMode] = useState<CalibrationMode>("aw3_aw0");
+  const [emergencyCalibrationMode, setEmergencyCalibrationMode] = useState<CalibrationMode>("aw3_aw0");
+  const [servicePointOneBrakeType, setServicePointOneBrakeType] = useState<"FSB" | "FB">("FSB");
+  const [servicePointTwoBrakeType, setServicePointTwoBrakeType] = useState<"FSB" | "FB">("FB");
 
   const compactSpeedBlockStyle = {
     width: "25%",
@@ -420,12 +426,6 @@ export function WorkbenchPage({
                 status: "未开始",
                 active: activeSection === "calibration",
                 onSelect: () => onChangeSection("calibration")
-              },
-              {
-                label: "电空计算",
-                status: "未开始",
-                active: activeSection === "electric",
-                onSelect: () => onChangeSection("electric")
               }
             ]}
           />
@@ -1147,19 +1147,48 @@ export function WorkbenchPage({
             <section style={panelStyle}>
               <h3 style={{ marginTop: 0 }}>标定</h3>
               <p style={{ margin: "0 0 16px", color: "#6b6259", lineHeight: 1.6 }}>
-                本章按载重工况组织，而不是先按制动模式组织。先判断每组工况当前是否完整，再进入对应试验点表。
+                本页录入的是试验点驱动的实设系数，不是直接录入完整 k(f) 分段曲线。
               </p>
               <div style={{ display: "grid", gap: "16px" }}>
-                <CalibrationCaseCard
-                  title="AW3-AW0 工况"
-                  status="当前状态：已完成 aw3_aw0 首轮标定"
-                  summary="已完成首轮常用制动与紧急制动标定，可继续替换试验点并重新运行。"
+                <CalibrationConfigCard
+                  title="常用控制系数标定"
+                  status="当前状态：未配置"
+                  summary="常用与快速制动共用同一组 pressure_calibration.service_brake；先选择当前点对模式，再补录两条试验点。"
+                  mode={serviceCalibrationMode}
+                  onChangeMode={setServiceCalibrationMode}
+                  pressureLabel="实设出闸压力"
+                  showBrakeTypeSelect={true}
+                  firstPointLoadGroup="AW3"
+                  secondPointLoadGroup={serviceCalibrationMode === "aw3_aw0" ? "AW0" : "AW2"}
+                  firstPointBrakeType={servicePointOneBrakeType}
+                  secondPointBrakeType={servicePointTwoBrakeType}
+                  onChangeFirstPointBrakeType={(value) =>
+                    setServicePointOneBrakeType(value === "FB" ? "FB" : "FSB")
+                  }
+                  onChangeSecondPointBrakeType={(value) =>
+                    setServicePointTwoBrakeType(value === "FB" ? "FB" : "FSB")
+                  }
                 />
-                <CalibrationCaseCard
-                  title="AW3-AW2 工况"
-                  status="当前状态：待补充 aw3_aw2 标定"
-                  summary="当前尚未补 aw3_aw2 试验点，待第二轮试验数据返回后补录。"
-                />
+                {controllerConfigType === "bogie" ? (
+                  <CalibrationConfigCard
+                    title="紧急控制系数标定"
+                    status="当前状态：未配置"
+                    summary="紧急制动标定仅用于架控项目，对应 pressure_calibration.emergency_brake；每个试验点的 brake_type 固定为 EB。"
+                    mode={emergencyCalibrationMode}
+                    onChangeMode={setEmergencyCalibrationMode}
+                    pressureLabel="实设出闸压力"
+                    showBrakeTypeSelect={false}
+                    firstPointLoadGroup="AW3"
+                    secondPointLoadGroup={emergencyCalibrationMode === "aw3_aw0" ? "AW0" : "AW2"}
+                    firstPointBrakeType="EB"
+                    secondPointBrakeType="EB"
+                  />
+                ) : (
+                  <InfoCard
+                    title="车控紧急制动标定限制"
+                    body="V1.0 暂不支持车控紧急制动的压力标定。当前 EB 结果仍使用理论压力计算结果，紧急制动的压力调整需要人工在计算报告中手动调整。"
+                  />
+                )}
               </div>
             </section>
           )}

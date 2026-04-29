@@ -1,6 +1,7 @@
 import type { ReactElement } from "react";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
+import { importYaml, loadConfig, saveConfig } from "./api/configClient";
 import {
   ghostActionStyle,
   headerPanelStyle,
@@ -13,6 +14,8 @@ import {
   shellStyle
 } from "./app/styles";
 import { screens, type ScreenKey } from "./app/screens";
+import type { LoadConfigResult } from "./contracts/config";
+import type { Report } from "./contracts/report";
 import { HomePage } from "./pages/HomePage";
 import { ImportSummaryPage } from "./pages/ImportSummaryPage";
 import { OverviewPage } from "./pages/OverviewPage";
@@ -24,6 +27,41 @@ import {
   type WorkbenchSectionKey
 } from "./pages/WorkbenchPage";
 import { WizardPage } from "./pages/WizardPage";
+
+const mockReport: Report = {
+  parking_brake_check_result: {
+    per_car: {
+      car_1: { F_N_PB: 16.39, F_PB: 15.0, incline_force: 5.0, safety_margin: 3.0 },
+      car_2: { F_N_PB: 16.39, F_PB: 15.0, incline_force: 5.0, safety_margin: 3.0 },
+      car_3: { F_N_PB: 16.39, F_PB: 15.0, incline_force: 5.0, safety_margin: 3.0 },
+      car_4: { F_N_PB: 16.39, F_PB: 15.0, incline_force: 5.0, safety_margin: 3.0 }
+    },
+    whole_train: { F_PB: 60.0, incline_force: 20.0, safety_margin: 3.0 },
+    pass: true
+  },
+  parking_brake_check_results_by_load_group: {
+    AW0: {
+      per_car: {
+        car_1: { F_N_PB: 16.39, F_PB: 15.0, incline_force: 5.0, safety_margin: 3.0 },
+        car_2: { F_N_PB: 16.39, F_PB: 15.0, incline_force: 5.0, safety_margin: 3.0 },
+        car_3: { F_N_PB: 16.39, F_PB: 15.0, incline_force: 5.0, safety_margin: 3.0 },
+        car_4: { F_N_PB: 16.39, F_PB: 15.0, incline_force: 5.0, safety_margin: 3.0 }
+      },
+      whole_train: { F_PB: 60.0, incline_force: 20.0, safety_margin: 3.0 },
+      pass: true
+    },
+    AW3: {
+      per_car: {
+        car_1: { F_N_PB: 16.39, F_PB: 15.0, incline_force: 9.0, safety_margin: 1.67 },
+        car_2: { F_N_PB: 16.39, F_PB: 15.0, incline_force: 9.0, safety_margin: 1.67 },
+        car_3: { F_N_PB: 16.39, F_PB: 15.0, incline_force: 9.0, safety_margin: 1.67 },
+        car_4: { F_N_PB: 16.39, F_PB: 15.0, incline_force: 9.0, safety_margin: 1.67 }
+      },
+      whole_train: { F_PB: 60.0, incline_force: 36.0, safety_margin: 1.67 },
+      pass: false
+    }
+  }
+};
 
 function parseCount(value: string, fallback: number): number {
   const parsedValue = Number.parseInt(value, 10);
@@ -166,7 +204,59 @@ export function App(): ReactElement {
   const [pressureMatrixView, setPressureMatrixView] = useState<"load" | "controller">("load");
   const [activeWorkbenchSection, setActiveWorkbenchSection] =
     useState<WorkbenchSectionKey>("load-air-spring");
+  const [overviewData, setOverviewData] = useState<LoadConfigResult | null>(null);
+  const [activeInputConfigId, setActiveInputConfigId] = useState<string | null>(null);
+  const [importProjectName, setImportProjectName] = useState("");
+  const [importProjectCode, setImportProjectCode] = useState("");
+  const [importYamlText, setImportYamlText] = useState("schema_version: 1\nv0: 80\n");
   const currentScreen = screens.find((screen) => screen.key === activeScreen) ?? screens[0];
+
+  const handleEnterWorkbenchFromImportSummary = async (): Promise<void> => {
+    try {
+      const now = new Date().toISOString();
+      const imported = await importYaml(importYamlText);
+      const saved = await saveConfig({
+        project: {
+          project_name: importProjectName,
+          project_code: importProjectCode,
+          email: null,
+          note: "",
+        },
+        yaml_text: importYamlText,
+        form_state: imported.form_state ?? {},
+        validation_status: imported.valid ? "valid" : "invalid",
+        errors: imported.errors,
+        created_at: now,
+      });
+      setActiveInputConfigId(saved.input_config_id);
+    } catch {}
+    setActiveScreen("workbench");
+  };
+
+  useEffect(() => {
+    let isCancelled = false;
+    if (activeScreen !== "overview" || activeInputConfigId === null) {
+      return () => {
+        isCancelled = true;
+      };
+    }
+
+    loadConfig(activeInputConfigId)
+      .then((result) => {
+        if (!isCancelled) {
+          setOverviewData(result);
+        }
+      })
+      .catch(() => {
+        if (!isCancelled) {
+          setOverviewData(null);
+        }
+      });
+
+    return () => {
+      isCancelled = true;
+    };
+  }, [activeScreen, activeInputConfigId]);
 
   const clearInitializerCounts = (): void => {
     setTotalCars("0");
@@ -248,7 +338,7 @@ export function App(): ReactElement {
     }
 
     if (activeScreen === "overview") {
-      return <OverviewPage onViewResult={() => setActiveScreen("result")} />;
+      return <OverviewPage onViewResult={() => setActiveScreen("result")} overviewData={overviewData} />;
     }
 
     if (activeScreen === "workbench") {
@@ -285,6 +375,8 @@ export function App(): ReactElement {
     if (activeScreen === "result") {
       return (
         <ResultPage
+          report={mockReport}
+          requiredSafetyMargin={2.0}
           pressureMatrixView={pressureMatrixView}
           onChangePressureMatrixView={setPressureMatrixView}
           onBackToOverview={() => setActiveScreen("overview")}
@@ -295,8 +387,14 @@ export function App(): ReactElement {
     if (activeScreen === "import-summary") {
       return (
         <ImportSummaryPage
-          onEnterWorkbench={() => setActiveScreen("workbench")}
+          onEnterWorkbench={handleEnterWorkbenchFromImportSummary}
           onViewOverview={() => setActiveScreen("overview")}
+          projectName={importProjectName}
+          projectCode={importProjectCode}
+          onChangeProjectName={setImportProjectName}
+          onChangeProjectCode={setImportProjectCode}
+          yamlText={importYamlText}
+          onChangeYamlText={setImportYamlText}
         />
       );
     }

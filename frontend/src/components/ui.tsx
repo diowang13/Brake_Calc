@@ -191,6 +191,69 @@ export function FieldBlock({
   );
 }
 
+export function SelectFieldBlock({
+  label,
+  value,
+  options,
+  onChange
+}: {
+  label: string;
+  value: string;
+  options: Array<{ label: string; value: string }>;
+  onChange?: (value: string) => void;
+}): ReactElement {
+  const isInteractive = typeof onChange === "function";
+
+  return (
+    <div style={{ display: "grid", gap: "8px" }}>
+      <strong style={fieldLabelStyle}>{label}</strong>
+      {isInteractive ? (
+        <div
+          style={{
+            minHeight: "42px",
+            borderRadius: "12px",
+            border: "1px solid #ccbca8",
+            background: "#fff",
+            display: "flex",
+            alignItems: "center",
+            overflow: "hidden"
+          }}
+        >
+          <select
+            aria-label={label}
+            value={value}
+            onChange={(event) => onChange(event.target.value)}
+            style={{
+              flex: 1,
+              minWidth: 0,
+              border: "none",
+              outline: "none",
+              background: "transparent",
+              padding: "10px 12px",
+              fontSize: "14px"
+            }}
+          >
+            {options.map((option) => (
+              <option key={`${label}-${option.value}`} value={option.value}>
+                {option.label}
+              </option>
+            ))}
+          </select>
+        </div>
+      ) : (
+        <div
+          style={{
+            height: "42px",
+            borderRadius: "12px",
+            border: "1px dashed #ccbca8",
+            background: "#f8f2eb"
+          }}
+        />
+      )}
+    </div>
+  );
+}
+
 export function PointRow({ index, unitLabel }: { index: number; unitLabel: string }): ReactElement {
   return (
     <div
@@ -210,14 +273,36 @@ export function PointRow({ index, unitLabel }: { index: number; unitLabel: strin
   );
 }
 
-export function CalibrationCaseCard({
+export function CalibrationConfigCard({
   title,
   status,
-  summary
+  summary,
+  mode,
+  onChangeMode,
+  pressureLabel,
+  warning,
+  showBrakeTypeSelect,
+  firstPointLoadGroup,
+  secondPointLoadGroup,
+  firstPointBrakeType,
+  secondPointBrakeType,
+  onChangeFirstPointBrakeType,
+  onChangeSecondPointBrakeType
 }: {
   title: string;
   status: string;
   summary: string;
+  mode: "aw3_aw0" | "aw3_aw2";
+  onChangeMode: (mode: "aw3_aw0" | "aw3_aw2") => void;
+  pressureLabel: string;
+  warning?: string;
+  showBrakeTypeSelect: boolean;
+  firstPointLoadGroup: "AW3";
+  secondPointLoadGroup: "AW0" | "AW2";
+  firstPointBrakeType: string;
+  secondPointBrakeType: string;
+  onChangeFirstPointBrakeType?: (value: string) => void;
+  onChangeSecondPointBrakeType?: (value: string) => void;
 }): ReactElement {
   return (
     <div
@@ -235,33 +320,91 @@ export function CalibrationCaseCard({
         <strong style={{ display: "block", marginBottom: "8px" }}>{status}</strong>
         <p style={{ margin: 0, color: "#6b6259", lineHeight: 1.6 }}>{summary}</p>
       </div>
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px" }}>
-        <div
-          style={{
-            border: "1px solid #d5c9ba",
-            borderRadius: "14px",
-            padding: "14px",
-            background: "#fffaf4"
-          }}
-        >
-          <h5 style={{ margin: "0 0 10px" }}>常用制动试验点表</h5>
-          <div style={{ display: "grid", gap: "10px" }}>
-            <FieldBlock label="试验点 1：压力 / 载荷" />
-            <FieldBlock label="试验点 2：压力 / 载荷" />
-          </div>
+      <div style={{ display: "flex", gap: "12px", flexWrap: "wrap" }}>
+        <TogglePill label="AW3-AW0 模式" active={mode === "aw3_aw0"} onClick={() => onChangeMode("aw3_aw0")} />
+        <TogglePill label="AW3-AW2 模式" active={mode === "aw3_aw2"} onClick={() => onChangeMode("aw3_aw2")} />
+      </div>
+      <div
+        style={{
+          border: "1px solid #d5c9ba",
+          borderRadius: "14px",
+          padding: "14px",
+          background: "#fffaf4"
+        }}
+      >
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px", marginBottom: "12px" }}>
+          <FieldBlock label={pressureLabel} />
+          <InfoCard title="理论参考值" body="待接入基础机械模型计算结果后，在此显示理论参考值。" />
         </div>
-        <div
-          style={{
-            border: "1px solid #d5c9ba",
-            borderRadius: "14px",
-            padding: "14px",
-            background: "#fffaf4"
-          }}
-        >
-          <h5 style={{ margin: "0 0 10px" }}>紧急制动试验点表</h5>
-          <div style={{ display: "grid", gap: "10px" }}>
-            <FieldBlock label="试验点 1：压力 / 载荷" />
-            <FieldBlock label="试验点 2：压力 / 载荷" />
+        {warning ? (
+          <div
+            style={{
+              border: "1px solid #e0c4aa",
+              borderRadius: "14px",
+              padding: "14px",
+              marginBottom: "12px",
+              background: "#fff6ee",
+              color: "#6b6259",
+              lineHeight: 1.6
+            }}
+          >
+            {warning}
+          </div>
+        ) : null}
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px" }}>
+          <div
+            style={{
+              border: "1px solid #d5c9ba",
+              borderRadius: "14px",
+              padding: "14px",
+              background: "#fff"
+            }}
+          >
+            <h5 style={{ margin: "0 0 10px" }}>{`试验点 1（${firstPointLoadGroup}）`}</h5>
+            <div style={{ display: "grid", gap: "10px" }}>
+              {showBrakeTypeSelect ? (
+                <SelectFieldBlock
+                  label="制动类型"
+                  value={firstPointBrakeType}
+                  options={[
+                    { label: "常用", value: "FSB" },
+                    { label: "快速", value: "FB" }
+                  ]}
+                  onChange={onChangeFirstPointBrakeType}
+                />
+              ) : (
+                <InfoCard title="制动类型固定为 EB" body="紧急控制系数标定的试验点不提供 brake_type 切换。" />
+              )}
+              <FieldBlock label="实设控制系数 k_for_code" />
+              <InfoCard title="理论参考值" body="待接入基础机械模型计算结果后，在此显示理论参考值。" />
+            </div>
+          </div>
+          <div
+            style={{
+              border: "1px solid #d5c9ba",
+              borderRadius: "14px",
+              padding: "14px",
+              background: "#fff"
+            }}
+          >
+            <h5 style={{ margin: "0 0 10px" }}>{`试验点 2（${secondPointLoadGroup}）`}</h5>
+            <div style={{ display: "grid", gap: "10px" }}>
+              {showBrakeTypeSelect ? (
+                <SelectFieldBlock
+                  label="制动类型"
+                  value={secondPointBrakeType}
+                  options={[
+                    { label: "常用", value: "FSB" },
+                    { label: "快速", value: "FB" }
+                  ]}
+                  onChange={onChangeSecondPointBrakeType}
+                />
+              ) : (
+                <InfoCard title="制动类型固定为 EB" body="紧急控制系数标定的试验点不提供 brake_type 切换。" />
+              )}
+              <FieldBlock label="实设控制系数 k_for_code" />
+              <InfoCard title="理论参考值" body="待接入基础机械模型计算结果后，在此显示理论参考值。" />
+            </div>
           </div>
         </div>
       </div>

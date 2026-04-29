@@ -36,10 +36,11 @@ describe("App shell", () => {
     expect(screen.getByText("当前为只读状态。")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "查看结果" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "修订" })).toBeInTheDocument();
-    expect(screen.getAllByRole("button", { name: "点击补录" }).length).toBe(3);
+    expect(screen.getAllByRole("button", { name: "点击补录" }).length).toBe(2);
     expect(screen.getByText("最后一次运行")).toBeInTheDocument();
     expect(screen.getByText("警告与自动调整")).toBeInTheDocument();
     expect(screen.getByText("停放校核状态")).toBeInTheDocument();
+    expect(screen.queryByText("电空计算")).not.toBeInTheDocument();
 
     await user.click(screen.getByRole("button", { name: "配置工作台" }));
     expect(screen.getByRole("heading", { level: 2, name: "配置工作台" })).toBeInTheDocument();
@@ -512,7 +513,7 @@ describe("App shell", () => {
     expect(screen.queryByText("whole_train")).not.toBeInTheDocument();
   });
 
-  it("renders the calibration supplement slice grouped by load cases", async () => {
+  it("renders the car-controller calibration slice with service card only and a car EB warning", async () => {
     const user = userEvent.setup();
 
     render(<App />);
@@ -521,28 +522,53 @@ describe("App shell", () => {
     await user.click(screen.getByRole("button", { name: /^标定/ }));
 
     expect(screen.getByRole("heading", { level: 3, name: "标定" })).toBeInTheDocument();
-    expect(screen.getByRole("heading", { level: 4, name: "AW3-AW0 工况" })).toBeInTheDocument();
-    expect(screen.getByRole("heading", { level: 4, name: "AW3-AW2 工况" })).toBeInTheDocument();
-    expect(screen.getByText("当前状态：已完成 aw3_aw0 首轮标定")).toBeInTheDocument();
-    expect(screen.getByText("当前状态：待补充 aw3_aw2 标定")).toBeInTheDocument();
-    expect(screen.getAllByText("常用制动试验点表").length).toBeGreaterThan(0);
-    expect(screen.getAllByText("紧急制动试验点表").length).toBeGreaterThan(0);
+    expect(screen.getByText(/本页录入的是试验点驱动的实设系数/)).toBeInTheDocument();
+    expect(screen.getByRole("heading", { level: 4, name: "常用控制系数标定" })).toBeInTheDocument();
+    expect(screen.getByText("当前状态：未配置")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "AW3-AW0 模式" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "AW3-AW2 模式" })).toBeInTheDocument();
+    expect(screen.getByText("实设出闸压力")).toBeInTheDocument();
+    expect(screen.getAllByText("理论参考值").length).toBeGreaterThan(0);
+    expect(screen.getByText("试验点 1（AW3）")).toBeInTheDocument();
+    expect(screen.getByText("试验点 2（AW0）")).toBeInTheDocument();
+    expect(screen.getAllByText("制动类型").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("实设控制系数 k_for_code").length).toBeGreaterThan(0);
+    expect(
+      screen.getByText(
+        "V1.0 暂不支持车控紧急制动的压力标定。当前 EB 结果仍使用理论压力计算结果，紧急制动的压力调整需要人工在计算报告中手动调整。"
+      )
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByRole("heading", { level: 4, name: "紧急控制系数标定" })
+    ).not.toBeInTheDocument();
   });
 
-  it("renders the electric brake supplement slice with curve area and point table", async () => {
+  it("renders separate service and emergency calibration cards for bogie controller projects", async () => {
+    const user = userEvent.setup();
+
+    render(<App />);
+
+    await user.click(screen.getByRole("button", { name: "新建初始化" }));
+    await user.click(screen.getByRole("button", { name: "架控" }));
+    await user.click(screen.getByRole("button", { name: "生成配置并进入工作台" }));
+    await user.click(screen.getByRole("button", { name: /^标定/ }));
+
+    expect(screen.getByRole("heading", { level: 4, name: "常用控制系数标定" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { level: 4, name: "紧急控制系数标定" })).toBeInTheDocument();
+    expect(screen.getAllByText("当前状态：未配置").length).toBeGreaterThanOrEqual(2);
+    expect(screen.getAllByText("试验点 1（AW3）").length).toBeGreaterThanOrEqual(2);
+    expect(screen.getAllByText("试验点 2（AW0）").length).toBeGreaterThanOrEqual(2);
+    expect(screen.getAllByText("制动类型固定为 EB").length).toBeGreaterThanOrEqual(2);
+  });
+
+  it("hides the electric brake supplement entry from current frontend navigation", async () => {
     const user = userEvent.setup();
 
     render(<App />);
 
     await user.click(screen.getByRole("button", { name: "配置工作台" }));
-    await user.click(screen.getByRole("button", { name: /^电空计算/ }));
 
-    expect(screen.getByRole("heading", { level: 3, name: "电制动特性" })).toBeInTheDocument();
-    expect(screen.getByText("当前仅做输入补录和摘要展示，不参与 V1 主制动计算。")).toBeInTheDocument();
-    expect(screen.getByRole("heading", { level: 4, name: "电制动曲线" })).toBeInTheDocument();
-    expect(screen.getByRole("heading", { level: 4, name: "特性点表" })).toBeInTheDocument();
-    expect(screen.getAllByText("速度 (km/h)").length).toBeGreaterThan(0);
-    expect(screen.getAllByText("电制动力 (kN)").length).toBeGreaterThan(0);
+    expect(screen.queryByRole("button", { name: /^电空计算/ })).not.toBeInTheDocument();
   });
 
   it("renders the result page with summary, performance checks, pressure matrix and controller params", async () => {
@@ -587,9 +613,22 @@ describe("App shell", () => {
     expect(screen.getByRole("heading", { level: 3, name: "停放校核结果" })).toBeInTheDocument();
     expect(screen.getByText("F_N_PB 单个制动单元双侧作用力")).toBeInTheDocument();
     expect(screen.getByText("F_PB 每车停放制动力")).toBeInTheDocument();
-    expect(screen.getByText("whole_train 整列汇总力")).toBeInTheDocument();
-    expect(screen.getAllByText("AW0").length).toBeGreaterThan(0);
-    expect(screen.getAllByText("AW3").length).toBeGreaterThan(0);
+    expect(screen.getByText("全列停放制动力")).toBeInTheDocument();
+    expect(screen.getByText("最恶劣工况下的倾斜力")).toBeInTheDocument();
+    expect(screen.getByText("要求防滚余量：2.00")).toBeInTheDocument();
+    expect(screen.getByText("1车")).toBeInTheDocument();
+    expect(screen.getByText("2车")).toBeInTheDocument();
+    expect(screen.getByText("全列合计")).toBeInTheDocument();
+    expect(screen.getByText("全列防滚余量")).toBeInTheDocument();
+    expect(screen.getByText("单车停放制动力")).toBeInTheDocument();
+    expect(screen.getByText("AW0 单车倾斜力")).toBeInTheDocument();
+    expect(screen.getByText("AW3 单车倾斜力")).toBeInTheDocument();
+    expect(screen.queryByText("AW2 单车倾斜力")).not.toBeInTheDocument();
+    expect(screen.getByText("要求防滚余量：2.00")).toBeInTheDocument();
+    expect(screen.getByRole("cell", { name: "1.67" })).toHaveStyle({
+      color: "rgb(198, 69, 50)",
+      fontWeight: "700"
+    });
   });
 
   it("renders the import summary page with supplement recognition, warnings and run readiness", async () => {
@@ -603,6 +642,11 @@ describe("App shell", () => {
     expect(screen.getByText("是否包含停放校核 / 标定 / electric_brake 等后置内容")).toBeInTheDocument();
     expect(screen.getByText("是否存在导入警告")).toBeInTheDocument();
     expect(screen.getByText("是否可直接运行")).toBeInTheDocument();
+    expect(screen.getByText("导入 YAML 不包含项目元数据，请先补全后再保存为配置版本。")).toBeInTheDocument();
+    expect(screen.getByRole("textbox", { name: "项目名称" })).toBeInTheDocument();
+    expect(screen.getByRole("textbox", { name: "项目编号" })).toBeInTheDocument();
+    expect(screen.getByRole("textbox", { name: "导入 YAML 文本" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "进入工作台" })).toBeDisabled();
     expect(screen.getByRole("button", { name: "进入工作台" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "查看总览" })).toBeInTheDocument();
   });
@@ -630,6 +674,8 @@ describe("App shell", () => {
     ).toBeInTheDocument();
 
     await user.click(screen.getByRole("button", { name: "导入摘要" }));
+    await user.type(screen.getByRole("textbox", { name: "项目名称" }), "导入项目");
+    await user.type(screen.getByRole("textbox", { name: "项目编号" }), "IMP-001");
     await user.click(screen.getByRole("button", { name: "进入工作台" }));
     expect(screen.getByRole("heading", { level: 2, name: "配置工作台" })).toBeInTheDocument();
   });

@@ -5,6 +5,7 @@ from pathlib import Path
 from brake_calc.storage.db import connect_sqlite
 
 INITIAL_SCHEMA_VERSION = "001_initial_storage_schema"
+INPUT_CONFIG_REVISION_METADATA_VERSION = "002_input_config_revision_metadata"
 
 INITIAL_SCHEMA_SQL = """
 CREATE TABLE IF NOT EXISTS schema_migrations (
@@ -71,6 +72,16 @@ CREATE TABLE IF NOT EXISTS email_deliveries (
 );
 """
 
+INPUT_CONFIG_REVISION_METADATA_SQL = """
+ALTER TABLE input_configs ADD COLUMN source_input_config_id TEXT;
+ALTER TABLE input_configs ADD COLUMN revision_reason TEXT;
+"""
+
+MIGRATIONS: list[tuple[str, str]] = [
+    (INITIAL_SCHEMA_VERSION, INITIAL_SCHEMA_SQL),
+    (INPUT_CONFIG_REVISION_METADATA_VERSION, INPUT_CONFIG_REVISION_METADATA_SQL),
+]
+
 
 def initialize_database(database_path: str | Path) -> None:
     """初始化 SQLite schema，并记录已应用 migration。"""
@@ -83,16 +94,16 @@ def initialize_database(database_path: str | Path) -> None:
             )
             """
         )
-        applied = connection.execute(
-            "SELECT 1 FROM schema_migrations WHERE version = ?",
-            (INITIAL_SCHEMA_VERSION,),
-        ).fetchone()
-        if applied is not None:
-            return
-
-        connection.executescript(INITIAL_SCHEMA_SQL)
-        connection.execute(
-            "INSERT INTO schema_migrations(version) VALUES (?)",
-            (INITIAL_SCHEMA_VERSION,),
-        )
-        connection.commit()
+        for version, script in MIGRATIONS:
+            applied = connection.execute(
+                "SELECT 1 FROM schema_migrations WHERE version = ?",
+                (version,),
+            ).fetchone()
+            if applied is not None:
+                continue
+            connection.executescript(script)
+            connection.execute(
+                "INSERT INTO schema_migrations(version) VALUES (?)",
+                (version,),
+            )
+            connection.commit()

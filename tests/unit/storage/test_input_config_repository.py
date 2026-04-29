@@ -122,3 +122,39 @@ def test_yaml_sha256_is_stable_for_same_text() -> None:
     yaml_text = "schema_version: 1\nv0: 80\n"
 
     assert yaml_sha256(yaml_text) == yaml_sha256(yaml_text)
+
+
+def test_input_config_repository_persists_revision_metadata(tmp_path: Path) -> None:
+    project_repository, repository = make_repositories(tmp_path / "storage.sqlite3")
+    project = project_repository.create(
+        project_name="Line 1",
+        project_code="LINE-001",
+        email=None,
+        note="",
+        created_at="2026-04-25T10:00:00Z",
+    )
+    baseline = repository.create(
+        project_id=project.id,
+        schema_version=1,
+        yaml_text="schema_version: 1\nv0: 80\n",
+        form_state={"schema_version": 1, "v0": 80},
+        validation_status="valid",
+        validation_errors=[],
+        source="manual_save",
+        created_at="2026-04-25T10:05:00Z",
+    )
+    revised = repository.create(
+        project_id=project.id,
+        schema_version=1,
+        yaml_text="schema_version: 1\nv0: 90\n",
+        form_state={"schema_version": 1, "v0": 90},
+        validation_status="valid",
+        validation_errors=[],
+        source="manual_save",
+        source_input_config_id=baseline.id,
+        revision_reason="外部条件变更",
+        created_at="2026-04-25T10:10:00Z",
+    )
+
+    assert revised.source_input_config_id == baseline.id
+    assert revised.revision_reason == "外部条件变更"

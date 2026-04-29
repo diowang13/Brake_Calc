@@ -54,6 +54,14 @@ def save_config(request: dict[str, object], *, config_service: object) -> dict[s
             validation_status=str(request.get("validation_status", "not_validated")),
             errors=errors,
             created_at=str(request["created_at"]),
+            source_input_config_id=(
+                None
+                if request.get("source_input_config_id") is None
+                else str(request["source_input_config_id"])
+            ),
+            revision_reason=(
+                None if request.get("revision_reason") is None else str(request["revision_reason"])
+            ),
         )
     )
     return _serialize(result)

@@ -1,4 +1,5 @@
 import { Fragment, type CSSProperties, type ReactElement } from "react";
+import type { Report } from "../contracts/report";
 
 import {
   ghostActionStyle,
@@ -49,10 +50,9 @@ const matrixRows = [
 
 const controllerMatrixRows = [matrixRows[0], matrixRows[2], matrixRows[1], matrixRows[3]] as const;
 
-const parkingRows = [
-  { load: "AW0", fnpb: "16.39 kN", fpb: "5.74 kN", margin: "1.31", status: "通过" },
-  { load: "AW3", fnpb: "16.39 kN", fpb: "5.74 kN", margin: "1.24", status: "通过" }
-] as const;
+function formatFixed(value: number): string {
+  return value.toFixed(2);
+}
 
 function SummaryCard({ icon, title, body }: { icon: string; title: string; body: string }): ReactElement {
   return (
@@ -189,14 +189,30 @@ function MetricCells({ values }: { values: readonly string[] }): ReactElement {
 }
 
 export function ResultPage({
+  report,
+  requiredSafetyMargin,
   pressureMatrixView,
   onChangePressureMatrixView,
   onBackToOverview
 }: {
+  report: Report;
+  requiredSafetyMargin: number;
   pressureMatrixView: "load" | "controller";
   onChangePressureMatrixView: (view: "load" | "controller") => void;
   onBackToOverview: () => void;
 }): ReactElement {
+  const parkingRowsByLoadGroup = Object.entries(report.parking_brake_check_results_by_load_group);
+  const parkingReference = parkingRowsByLoadGroup[0]?.[1] ?? report.parking_brake_check_result;
+  const parkingPerCarEntries = parkingReference ? Object.entries(parkingReference.per_car) : [];
+  const parkingCars = parkingPerCarEntries.map((_, index) => `${index + 1}车`);
+  const wholeTrainFpb = parkingReference?.whole_train.F_PB ?? 0;
+  const worstWholeTrainIncline = parkingRowsByLoadGroup.reduce(
+    (maxIncline, [, result]) => Math.max(maxIncline, result.whole_train.incline_force),
+    0
+  );
+  const parkingUnitForce = parkingPerCarEntries[0]?.[1].F_N_PB ?? 0;
+  const parkingPerCarForce = parkingPerCarEntries[0]?.[1].F_PB ?? 0;
+
   return (
     <div style={{ display: "grid", gap: "18px" }}>
       <section
@@ -451,44 +467,78 @@ export function ResultPage({
         <p style={{ margin: "0 0 16px", color: "#6b6259", lineHeight: 1.6 }}>
           本区只展示停放制动力校核输出，输入项仍在工作台“停放校核”章节维护。
         </p>
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: "14px", marginBottom: "16px" }}>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: "14px", marginBottom: "16px" }}>
           <ParameterCard
             title="F_N_PB 单个制动单元双侧作用力"
-            value="16.39 kN"
+            value={`${formatFixed(parkingUnitForce)} kN`}
             note="由 Fp、Fs1、Fs2、Lpi、eta_pi、Lo、eta_o 计算得到。"
           />
           <ParameterCard
             title="F_PB 每车停放制动力"
-            value="5.74 kN"
+            value={`${formatFixed(parkingPerCarForce)} kN`}
             note="结合基础制动几何换算、停放缸数量和 xi0。"
           />
           <ParameterCard
-            title="whole_train 整列汇总力"
-            value="68.88 kN"
-            note="按已配置车辆与载荷组汇总。"
+            title="全列停放制动力"
+            value={`${formatFixed(wholeTrainFpb)} kN`}
+            note={`要求防滚余量：${formatFixed(requiredSafetyMargin)}`}
+          />
+          <ParameterCard
+            title="最恶劣工况下的倾斜力"
+            value={`${formatFixed(worstWholeTrainIncline)} kN`}
+            note="取各已配置载荷工况中的全列倾斜力最大值。"
           />
         </div>
         <div style={{ overflowX: "auto" }}>
           <table style={tableStyle}>
             <thead>
               <tr>
-                <th style={tableHeaderStyle}>载荷组</th>
-                <th style={tableHeaderStyle}>F_N_PB</th>
-                <th style={tableHeaderStyle}>F_PB</th>
-                <th style={tableHeaderStyle}>安全余量</th>
-                <th style={tableHeaderStyle}>结论</th>
+                <th style={tableHeaderStyle} />
+                {parkingCars.map((car) => (
+                  <th key={car} style={tableHeaderStyle}>
+                    {car}
+                  </th>
+                ))}
+                <th style={tableHeaderStyle}>全列合计</th>
+                <th style={tableHeaderStyle}>全列防滚余量</th>
               </tr>
             </thead>
             <tbody>
-              {parkingRows.map((row) => (
-                <tr key={row.load}>
-                  <td style={groupedTableCellStyle}>{row.load}</td>
-                  <td style={tableCellStyle}>{row.fnpb}</td>
-                  <td style={tableCellStyle}>{row.fpb}</td>
-                  <td style={tableCellStyle}>{row.margin}</td>
-                  <td style={tableCellStyle}>{row.status}</td>
+              {parkingReference ? (
+                <tr>
+                  <td style={groupedTableCellStyle}>单车停放制动力</td>
+                  {parkingPerCarEntries.map(([carName, values], index) => (
+                    <td key={`parking-force-${carName}-${parkingCars[index]}`} style={tableCellStyle}>
+                      {formatFixed(values.F_PB)}
+                    </td>
+                  ))}
+                  <td style={tableCellStyle}>{formatFixed(parkingReference.whole_train.F_PB)}</td>
+                  <td style={tableCellStyle}>-</td>
                 </tr>
-              ))}
+              ) : null}
+              {parkingRowsByLoadGroup.map(([loadGroup, result]) => {
+                const isFailing = result.whole_train.safety_margin < requiredSafetyMargin;
+                return (
+                  <tr key={loadGroup}>
+                    <td style={groupedTableCellStyle}>{`${loadGroup} 单车倾斜力`}</td>
+                    {parkingPerCarEntries.map(([carName], index) => (
+                      <td key={`${loadGroup}-${carName}-${parkingCars[index]}`} style={tableCellStyle}>
+                        {formatFixed(result.per_car[carName]?.incline_force ?? 0)}
+                      </td>
+                    ))}
+                    <td style={tableCellStyle}>{formatFixed(result.whole_train.incline_force)}</td>
+                    <td
+                      style={{
+                        ...tableCellStyle,
+                        color: isFailing ? "#c64532" : tableCellStyle.color,
+                        fontWeight: isFailing ? 700 : tableCellStyle.fontWeight
+                      }}
+                    >
+                      {formatFixed(result.whole_train.safety_margin)}
+                    </td>
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
         </div>

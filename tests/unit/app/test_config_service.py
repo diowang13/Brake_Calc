@@ -42,6 +42,8 @@ class FakeInputConfig:
         validation_status: str,
         validation_errors_json: str,
         created_at: str,
+        source_input_config_id: str | None = None,
+        revision_reason: str | None = None,
     ) -> None:
         self.id = input_config_id
         self.project_id = project_id
@@ -55,6 +57,8 @@ class FakeInputConfig:
         self.source = "manual_save"
         self.created_at = created_at
         self.exported_filename = None
+        self.source_input_config_id = source_input_config_id
+        self.revision_reason = revision_reason
 
 
 class FakeProjectRepository:
@@ -124,6 +128,8 @@ class FakeInputConfigRepository:
         source: str,
         created_at: str,
         exported_filename: str | None = None,
+        source_input_config_id: str | None = None,
+        revision_reason: str | None = None,
     ) -> FakeInputConfig:
         item = FakeInputConfig(
             input_config_id=f"input-{len(self.items) + 1}",
@@ -135,6 +141,8 @@ class FakeInputConfigRepository:
             validation_status=validation_status,
             validation_errors_json=json.dumps(validation_errors, ensure_ascii=True, sort_keys=True),
             created_at=created_at,
+            source_input_config_id=source_input_config_id,
+            revision_reason=revision_reason,
         )
         self.items[item.id] = item
         return item
@@ -215,3 +223,46 @@ def test_config_service_generates_export_filename_from_project_code_and_timestam
     )
 
     assert filename == "LINE-001_input_20260425_1234.yaml"
+
+
+def test_config_service_persists_revision_metadata_in_saved_config() -> None:
+    service = ConfigService(
+        project_repository=FakeProjectRepository(),
+        input_config_repository=FakeInputConfigRepository(),
+    )
+    baseline = service.save_config(
+        SaveConfigRequest(
+            project=ProjectPayload(
+                project_name="Line 1",
+                project_code="LINE-001",
+                email=None,
+                note="baseline",
+            ),
+            yaml_text="schema_version: 1\nv0: 80\n",
+            form_state={"schema_version": 1, "v0": 80},
+            validation_status="valid",
+            errors=[],
+            created_at="2026-04-25T12:00:00Z",
+        )
+    )
+    revised = service.save_config(
+        SaveConfigRequest(
+            project=ProjectPayload(
+                project_name="Line 1",
+                project_code="LINE-001",
+                email=None,
+                note="revised",
+            ),
+            yaml_text="schema_version: 1\nv0: 90\n",
+            form_state={"schema_version": 1, "v0": 90},
+            validation_status="valid",
+            errors=[],
+            created_at="2026-04-25T13:00:00Z",
+            source_input_config_id=baseline.input_config_id,
+            revision_reason="外部条件变更",
+        )
+    )
+
+    loaded = service.load_config(revised.input_config_id)
+    assert loaded.source_input_config_id == baseline.input_config_id
+    assert loaded.revision_reason == "外部条件变更"

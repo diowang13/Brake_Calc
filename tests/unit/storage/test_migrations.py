@@ -52,4 +52,18 @@ def test_initialize_database_records_initial_migration(tmp_path: Path) -> None:
             "SELECT version FROM schema_migrations ORDER BY version"
         ).fetchall()
 
-    assert applied_migrations == [("001_initial_storage_schema",)]
+    assert applied_migrations == [
+        ("001_initial_storage_schema",),
+        ("002_input_config_revision_metadata",),
+    ]
+
+
+def test_initialize_database_adds_revision_metadata_columns_to_input_configs(tmp_path: Path) -> None:
+    database_path = tmp_path / "storage.sqlite3"
+    initialize_database(database_path)
+
+    with sqlite3.connect(database_path) as connection:
+        column_rows = connection.execute("PRAGMA table_info(input_configs)").fetchall()
+    column_names = {str(row[1]) for row in column_rows}
+
+    assert {"source_input_config_id", "revision_reason"}.issubset(column_names)

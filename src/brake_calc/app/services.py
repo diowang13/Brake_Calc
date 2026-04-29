@@ -57,6 +57,8 @@ class InputConfigRepositoryProtocol(Protocol):
         source: str,
         created_at: str,
         exported_filename: str | None = None,
+        source_input_config_id: str | None = None,
+        revision_reason: str | None = None,
     ) -> "InputConfigRecordProtocol": ...
     def get(self, input_config_id: str) -> "InputConfigRecordProtocol | None": ...
     def get_latest_for_project(self, project_id: str) -> "InputConfigRecordProtocol | None": ...
@@ -78,6 +80,8 @@ class InputConfigRecordProtocol(Protocol):
     form_state_json: str
     validation_status: str
     validation_errors_json: str
+    source_input_config_id: str | None
+    revision_reason: str | None
 
 
 class CalculationRunRepositoryProtocol(Protocol):
@@ -227,6 +231,8 @@ class ConfigService:
             validation_errors=[error.__dict__ for error in request.errors],
             source="manual_save",
             created_at=request.created_at,
+            source_input_config_id=request.source_input_config_id,
+            revision_reason=request.revision_reason,
         )
         return SaveConfigResult(
             project_id=project.id,
@@ -258,6 +264,9 @@ class ConfigService:
                 )
                 for item in json.loads(input_config.validation_errors_json)
             ],
+            version=input_config.version,
+            source_input_config_id=input_config.source_input_config_id,
+            revision_reason=input_config.revision_reason,
         )
 
     def build_export_filename(self, *, project_code: str, created_at: str) -> str:

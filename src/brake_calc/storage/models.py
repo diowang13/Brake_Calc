@@ -30,6 +30,8 @@ class InputConfigRecord:
     source: str
     created_at: str
     exported_filename: str | None
+    source_input_config_id: str | None
+    revision_reason: str | None
 
 
 @dataclass(frozen=True)

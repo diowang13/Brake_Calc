@@ -32,6 +32,8 @@ class SaveConfigRequest:
     validation_status: str
     errors: list[ValidationErrorItem]
     created_at: str
+    source_input_config_id: str | None = None
+    revision_reason: str | None = None
 
 
 @dataclass(frozen=True)
@@ -50,6 +52,9 @@ class LoadConfigResult:
     form_state: dict[str, object]
     validation_status: str
     errors: list[ValidationErrorItem]
+    version: int
+    source_input_config_id: str | None
+    revision_reason: str | None
 
 
 @dataclass(frozen=True)

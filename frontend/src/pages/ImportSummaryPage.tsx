@@ -5,11 +5,26 @@ import { InfoCard } from "../components/ui";
 
 export function ImportSummaryPage({
   onEnterWorkbench,
-  onViewOverview
+  onViewOverview,
+  projectName,
+  projectCode,
+  onChangeProjectName,
+  onChangeProjectCode,
+  yamlText,
+  onChangeYamlText,
 }: {
   onEnterWorkbench: () => void;
   onViewOverview: () => void;
+  projectName: string;
+  projectCode: string;
+  onChangeProjectName: (value: string) => void;
+  onChangeProjectCode: (value: string) => void;
+  yamlText: string;
+  onChangeYamlText: (value: string) => void;
 }): ReactElement {
+  const canEnterWorkbench =
+    projectName.trim().length > 0 && projectCode.trim().length > 0 && yamlText.trim().length > 0;
+
   return (
     <div style={{ display: "grid", gap: "18px" }}>
       <section style={panelStyle}>
@@ -21,7 +36,12 @@ export function ImportSummaryPage({
             </p>
           </div>
           <div style={{ display: "flex", gap: "12px", flexWrap: "wrap" }}>
-            <button type="button" style={primaryActionStyle} onClick={onEnterWorkbench}>
+            <button
+              type="button"
+              style={primaryActionStyle}
+              onClick={onEnterWorkbench}
+              disabled={!canEnterWorkbench}
+            >
               进入工作台
             </button>
             <button type="button" style={secondaryActionStyle} onClick={onViewOverview}>
@@ -29,6 +49,47 @@ export function ImportSummaryPage({
             </button>
           </div>
         </div>
+      </section>
+      <section style={panelStyle}>
+        <h3 style={{ marginTop: 0 }}>项目元数据补录</h3>
+        <p style={{ margin: "8px 0 0", color: "#6b6259" }}>
+          导入 YAML 不包含项目元数据，请先补全后再保存为配置版本。
+        </p>
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px", marginTop: "14px" }}>
+          <label style={{ display: "grid", gap: "6px", fontSize: "14px" }}>
+            项目名称
+            <input
+              aria-label="项目名称"
+              value={projectName}
+              onChange={(event) => onChangeProjectName(event.target.value)}
+              style={{ border: "1px solid #d5c9ba", borderRadius: "10px", padding: "8px 10px" }}
+            />
+          </label>
+          <label style={{ display: "grid", gap: "6px", fontSize: "14px" }}>
+            项目编号
+            <input
+              aria-label="项目编号"
+              value={projectCode}
+              onChange={(event) => onChangeProjectCode(event.target.value)}
+              style={{ border: "1px solid #d5c9ba", borderRadius: "10px", padding: "8px 10px" }}
+            />
+          </label>
+        </div>
+        <label style={{ display: "grid", gap: "6px", fontSize: "14px", marginTop: "12px" }}>
+          导入 YAML 文本
+          <textarea
+            aria-label="导入 YAML 文本"
+            value={yamlText}
+            onChange={(event) => onChangeYamlText(event.target.value)}
+            rows={8}
+            style={{
+              border: "1px solid #d5c9ba",
+              borderRadius: "10px",
+              padding: "10px",
+              fontFamily: "Consolas, monospace",
+            }}
+          />
+        </label>
       </section>
 
       <section style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: "14px" }}>

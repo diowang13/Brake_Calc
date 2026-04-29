@@ -63,6 +63,8 @@ def _row_to_input_config(row: tuple[object, ...] | None) -> InputConfigRecord | 
         source=str(row[9]),
         created_at=str(row[10]),
         exported_filename=None if row[11] is None else str(row[11]),
+        source_input_config_id=None if row[12] is None else str(row[12]),
+        revision_reason=None if row[13] is None else str(row[13]),
     )
 
 
@@ -221,6 +223,8 @@ class InputConfigRepository:
         source: str,
         created_at: str,
         exported_filename: str | None = None,
+        source_input_config_id: str | None = None,
+        revision_reason: str | None = None,
     ) -> InputConfigRecord:
         input_config_id = str(uuid.uuid4())
         current_version = self._connection.execute(
@@ -234,8 +238,9 @@ class InputConfigRepository:
             INSERT INTO input_configs (
                 id, project_id, version, schema_version, yaml_text,
                 form_state_json, yaml_sha256, validation_status,
-                validation_errors_json, source, created_at, exported_filename
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                validation_errors_json, source, created_at, exported_filename,
+                source_input_config_id, revision_reason
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 input_config_id,
@@ -250,6 +255,8 @@ class InputConfigRepository:
                 source,
                 created_at,
                 exported_filename,
+                source_input_config_id,
+                revision_reason,
             ),
         )
         self._connection.commit()
@@ -263,7 +270,8 @@ class InputConfigRepository:
             SELECT
                 id, project_id, version, schema_version, yaml_text,
                 form_state_json, yaml_sha256, validation_status,
-                validation_errors_json, source, created_at, exported_filename
+                validation_errors_json, source, created_at, exported_filename,
+                source_input_config_id, revision_reason
             FROM input_configs
             WHERE id = ?
             """,
@@ -277,7 +285,8 @@ class InputConfigRepository:
             SELECT
                 id, project_id, version, schema_version, yaml_text,
                 form_state_json, yaml_sha256, validation_status,
-                validation_errors_json, source, created_at, exported_filename
+                validation_errors_json, source, created_at, exported_filename,
+                source_input_config_id, revision_reason
             FROM input_configs
             WHERE project_id = ?
             ORDER BY version DESC
