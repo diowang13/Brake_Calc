@@ -82,9 +82,21 @@ export function OverviewPage({
             <div style={{ display: "flex", gap: "12px", alignItems: "start" }}>
               <button
                 type="button"
-                style={secondaryActionStyle}
+                style={
+                  !hasRunRecord
+                    ? {
+                        ...secondaryActionStyle,
+                        background: "#ece6de",
+                        border: "1px solid #cfc4b8",
+                        color: "#9d9388",
+                        boxShadow: "none",
+                        cursor: "not-allowed",
+                      }
+                    : secondaryActionStyle
+                }
                 onClick={onViewResult}
                 disabled={!hasRunRecord}
+                title={!hasRunRecord ? "暂无结果（请先运行）" : undefined}
               >
                 查看结果
               </button>
@@ -108,6 +120,11 @@ export function OverviewPage({
                 ? "当前版本来自导入配置，尚未运行。请先补录后置章节并运行，再查看结果。"
                 : "当前版本已运行成功，不能直接修改主配置。若需修改主配置，请点击“修订”创建新版本副本。"}
             </p>
+            {isImportedVersion ? (
+              <p style={{ margin: "8px 0 0", color: "#8a5a35", lineHeight: 1.6 }}>
+                暂无结果（请先运行）。
+              </p>
+            ) : null}
           </div>
         </section>
 

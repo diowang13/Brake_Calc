@@ -848,28 +848,18 @@ describe("App shell", () => {
     expect(screen.getByText("标准空簧压力 spring_kPa")).toBeInTheDocument();
 
     await user.click(screen.getByRole("button", { name: "按控制器" }));
-    expect(screen.getByText("载荷 / 指标")).toBeInTheDocument();
-    expect(screen.getByText(/\/ mass_dyn_t/)).toBeInTheDocument();
-    expect(screen.getByText(/\/ spring_kPa/)).toBeInTheDocument();
+    expect(screen.getByText("载荷类型")).toBeInTheDocument();
+    expect(screen.getByText("动态载荷 (ton)")).toBeInTheDocument();
+    expect(screen.getByText("标准空簧 (kPa)")).toBeInTheDocument();
 
     expect(screen.getByRole("heading", { level: 3, name: "控制器开发参数" })).toBeInTheDocument();
-    expect(screen.getByText("常用制动 k_for_code")).toBeInTheDocument();
-    expect(screen.getByText("常用制动 BCP0_for_code")).toBeInTheDocument();
-    expect(screen.getByText("紧急制动 k_for_code")).toBeInTheDocument();
-    expect(screen.getByText("紧急制动 BCP0_for_code")).toBeInTheDocument();
+    expect(screen.getByText("原始计算值（流程输入基值）")).toBeInTheDocument();
     expect(screen.getByRole("heading", { level: 3, name: "标定摘要" })).toBeInTheDocument();
     expect(screen.getByText("后端标定曲线")).toBeInTheDocument();
     expect(screen.getByText(/同一坐标轴下的 service_brake 与 emergency_brake 分段曲线/)).toBeInTheDocument();
     expect(screen.getByText(/车控 EB 实际 BCP 压力标定 V1.0 暂不支持/)).toBeInTheDocument();
-    expect(screen.getByRole("heading", { level: 3, name: "停放校核结果" })).toBeInTheDocument();
-    expect(screen.getByText("F_N_PB 单个制动单元双侧作用力")).toBeInTheDocument();
-    expect(screen.getByText("F_PB 每车停放制动力")).toBeInTheDocument();
-    expect(screen.getByText("全列停放制动力")).toBeInTheDocument();
-    expect(screen.getByText("最恶劣工况下的倾斜力")).toBeInTheDocument();
-    expect(screen.getByText("要求防滚余量：2.00")).toBeInTheDocument();
-    expect(screen.getByText("全列合计")).toBeInTheDocument();
-    expect(screen.getByText("全列防滚余量")).toBeInTheDocument();
-    expect(screen.getByText("要求防滚余量：2.00")).toBeInTheDocument();
+    expect(screen.getByRole("heading", { level: 3, name: "停放校核结果（未开启）" })).toBeInTheDocument();
+    expect(screen.queryByText("F_N_PB 单个制动单元双侧作用力")).not.toBeInTheDocument();
   });
 
   it("renders the import summary page with supplement recognition, warnings and run readiness", async () => {
@@ -890,6 +880,7 @@ describe("App shell", () => {
     expect(screen.getByRole("button", { name: "保存并查看总览" })).toBeDisabled();
     expect(screen.getByRole("button", { name: "保存并查看总览" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "查看总览" })).toBeInTheDocument();
+    expect(screen.getByText("请先补全：项目名称、项目编号。")).toBeInTheDocument();
   });
 
   it("navigates between overview, result, import summary, wizard and workbench through primary actions", async () => {
@@ -1433,6 +1424,9 @@ describe("App shell", () => {
     await screen.findByRole("heading", { level: 2, name: /上海机场线制动项目|禁用初始化项目/ });
 
     expect(screen.getByRole("button", { name: "新建初始化" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "查看结果" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "查看结果" })).toHaveAttribute("title", "暂无结果（请先运行）");
+    expect(screen.getByText("暂无结果（请先运行）。")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "首页 / 项目列表" })).toBeEnabled();
   });
 
@@ -1579,7 +1573,8 @@ describe("App shell", () => {
         calibration_summary: {
           service_brake: {
             BCP0_for_code: 25,
-            input_points: [{ k_for_code: 1014 }],
+            BCP0: 25,
+            input_points: [{ load_group: "AW3", k_for_code: 1123 }, { load_group: "AW0", k_for_code: 980 }],
             curve_points: [
               { label: "curve_low", force_kN: 20, k_for_code: 980 },
               { label: "curve_high", force_kN: 31, k_for_code: 1123 },
@@ -1588,7 +1583,8 @@ describe("App shell", () => {
           },
           emergency_brake: {
             BCP0_for_code: 30,
-            input_points: [{ k_for_code: 1204 }],
+            BCP0: 30,
+            input_points: [{ load_group: "AW3", k_for_code: 1204 }, { load_group: "AW0", k_for_code: 1014 }],
             curve_points: [
               { label: "curve_low", force_kN: 24, k_for_code: 1014 },
               { label: "curve_high", force_kN: 34, k_for_code: 1204 },
@@ -1661,8 +1657,8 @@ describe("App shell", () => {
     expect(await screen.findByText("44.00 kN")).toBeInTheDocument();
     expect(screen.getByText("40.0 km/h")).toBeInTheDocument();
     expect(screen.getAllByText("trailer_bogie_1").length).toBeGreaterThan(0);
-    expect(screen.getByText("1014")).toBeInTheDocument();
-    expect(screen.getByText("1204")).toBeInTheDocument();
+    expect(screen.getAllByText("1014").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("1204").length).toBeGreaterThan(0);
     expect(screen.queryByText("快速制动")).not.toBeInTheDocument();
     expect(screen.getByText("holding BCP")).toBeInTheDocument();
     expect(screen.getByText("jerk BCP")).toBeInTheDocument();
@@ -1676,13 +1672,19 @@ describe("App shell", () => {
     expect(screen.getByText(/f > 34\.00: 1204/)).toBeInTheDocument();
     expect(screen.getByLabelText("service_brake 分段曲线示意")).toBeInTheDocument();
     expect(screen.getByLabelText("emergency_brake 分段曲线示意")).toBeInTheDocument();
-    expect(screen.getByText("原始值保留（来自 report.calibration_summary）")).toBeInTheDocument();
+    expect(screen.getByText("原始计算值（流程输入基值）")).toBeInTheDocument();
+    expect(screen.getByText("标定点值")).toBeInTheDocument();
+    expect(screen.getByText("最终生效值（标定 + 调整后）")).toBeInTheDocument();
+    expect(screen.getByText("常用制动试验点 1（AW3）")).toBeInTheDocument();
+    expect(screen.getByText("常用制动试验点 2（AW0）")).toBeInTheDocument();
+    expect(screen.getByText("紧急制动试验点 1（AW3）")).toBeInTheDocument();
+    expect(screen.getByText("紧急制动试验点 2（AW0）")).toBeInTheDocument();
     expect(screen.getByText("要求防滚余量：1.20")).toBeInTheDocument();
 
     await user.click(screen.getByRole("button", { name: "按控制器" }));
-    const aw0Label = screen.getAllByText("AW0 / mass_dyn_t")[0];
-    const aw2Label = screen.getAllByText("AW2 / mass_dyn_t")[0];
-    const aw3Label = screen.getAllByText("AW3 / mass_dyn_t")[0];
+    const aw0Label = screen.getAllByText("AW0")[0];
+    const aw2Label = screen.getAllByText("AW2")[0];
+    const aw3Label = screen.getAllByText("AW3")[0];
     expect(
       aw0Label.compareDocumentPosition(aw2Label) & Node.DOCUMENT_POSITION_FOLLOWING
     ).toBeTruthy();
@@ -1753,10 +1755,12 @@ describe("App shell", () => {
     await user.click(screen.getByRole("button", { name: "运行" }));
 
     expect(await screen.findByRole("heading", { level: 2, name: "运行结果" })).toBeInTheDocument();
+    expect(screen.queryByText("标定点值")).not.toBeInTheDocument();
+    expect(screen.queryByText("最终生效值（标定 + 调整后）")).not.toBeInTheDocument();
     expect(screen.getByText("service_brake: -")).toBeInTheDocument();
     expect(screen.getByText("emergency_brake: -")).toBeInTheDocument();
-    expect(screen.queryByText("976")).not.toBeInTheDocument();
-    expect(screen.queryByText("1014")).not.toBeInTheDocument();
+    expect(screen.getAllByText("976").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("1014").length).toBeGreaterThan(0);
   });
 
   it("allows editing calibration fields after import and updates JSON highlight", async () => {
@@ -1795,15 +1799,68 @@ describe("App shell", () => {
     expect(bcp0Input).toHaveValue(25);
     await user.clear(bcp0Input);
     await user.type(bcp0Input, "31");
+    let highlighted = screen.getByTestId("last-changed-path");
+    expect(highlighted).toHaveTextContent("\"BCP0\": 31");
 
     const kInput = screen.getByRole("spinbutton", { name: "常用试验点1 k_for_code" });
     expect(kInput).toHaveValue(1204);
     await user.clear(kInput);
     await user.type(kInput, "1320");
 
-    const highlighted = screen.getByTestId("last-changed-path");
+    highlighted = screen.getByTestId("last-changed-path");
     expect(highlighted).toHaveTextContent("\"k_for_code\": 1320");
     expect(highlighted).toHaveStyle({ color: "rgb(198, 69, 50)" });
+  });
+
+  it("highlights the emergency calibration point path without colliding with service point key names", async () => {
+    const user = userEvent.setup();
+
+    render(<App />);
+
+    const yamlText = [
+      "schema_version: 1",
+      "controller_type: bogie",
+      "pressure_calibration:",
+      "  enabled: true",
+      "  service_brake:",
+      "    BCP0: 25.0",
+      "    point_pair_mode: aw3_aw0",
+      "    points:",
+      "      - load_group: AW3",
+      "        brake_type: FSB",
+      "        k_for_code: 1123.0",
+      "      - load_group: AW0",
+      "        brake_type: FSB",
+      "        k_for_code: 980.0",
+      "  emergency_brake:",
+      "    BCP0: 25.0",
+      "    point_pair_mode: aw3_aw0",
+      "    points:",
+      "      - load_group: AW3",
+      "        brake_type: EB",
+      "        k_for_code: 1204.0",
+      "      - load_group: AW0",
+      "        brake_type: EB",
+      "        k_for_code: 1014.0",
+      "",
+    ].join("\n");
+    const file = new File([yamlText], "example_calibration_highlight_collision.yaml", { type: "text/yaml" });
+    await user.upload(screen.getByLabelText("上传 YAML 文件"), file);
+    await screen.findByRole("heading", { level: 2, name: "导入摘要" });
+    await user.type(screen.getByRole("textbox", { name: "项目名称" }), "高亮冲突项目");
+    await user.type(screen.getByRole("textbox", { name: "项目编号" }), "IMP-CAL-HL-001");
+    await user.click(screen.getByRole("button", { name: "保存并查看总览" }));
+    await screen.findByRole("heading", { level: 2, name: /上海机场线制动项目|高亮冲突项目/ });
+
+    await user.click(screen.getByRole("button", { name: "修订" }));
+    await user.click(screen.getByRole("button", { name: /^标定/ }));
+
+    const emergencyPointOneInput = screen.getByRole("spinbutton", { name: "紧急试验点1 k_for_code" });
+    await user.clear(emergencyPointOneInput);
+    await user.type(emergencyPointOneInput, "1666");
+
+    const highlighted = screen.getByTestId("last-changed-path");
+    expect(highlighted).toHaveTextContent("\"k_for_code\": 1666");
   });
 
   it("does not keep air_spring points in YAML when explicit_linear mode is used", async () => {

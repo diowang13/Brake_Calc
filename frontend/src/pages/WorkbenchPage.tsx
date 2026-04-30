@@ -1060,6 +1060,45 @@ export function WorkbenchPage({
     if (lastChangedPath === null) {
       return lines.map((line) => ({ line, highlighted: false }));
     }
+    const indexedPointPathMatch = lastChangedPath.match(
+      /^pressure_calibration\.(service_brake|emergency_brake)\.points\[(\d+)\]\.(k_for_code|brake_type)$/
+    );
+    if (indexedPointPathMatch !== null) {
+      const [, brakeScope, pointIndexText, pointKey] = indexedPointPathMatch;
+      const pointIndex = Number(pointIndexText);
+      const sectionLine = lines.findIndex((line) => line.includes(`"${brakeScope}": {`));
+      if (sectionLine >= 0) {
+        const candidateIndexes: number[] = [];
+        for (let index = sectionLine + 1; index < lines.length; index += 1) {
+          const line = lines[index];
+          if (line.startsWith("    }") && !line.includes(",")) {
+            break;
+          }
+          if (line.includes(`"${pointKey}"`)) {
+            candidateIndexes.push(index);
+          }
+        }
+        const highlightIndex = candidateIndexes[pointIndex] ?? -1;
+        if (highlightIndex >= 0) {
+          return lines.map((line, index) => ({ line, highlighted: index === highlightIndex }));
+        }
+      }
+    }
+    const bcp0PathMatch = lastChangedPath.match(
+      /^pressure_calibration\.(service_brake|emergency_brake)\.BCP0$/
+    );
+    if (bcp0PathMatch !== null) {
+      const [, brakeScope] = bcp0PathMatch;
+      const sectionLine = lines.findIndex((line) => line.includes(`"${brakeScope}": {`));
+      if (sectionLine >= 0) {
+        const highlightIndex = lines.findIndex(
+          (line, index) => index > sectionLine && line.includes("\"BCP0\"")
+        );
+        if (highlightIndex >= 0) {
+          return lines.map((line, index) => ({ line, highlighted: index === highlightIndex }));
+        }
+      }
+    }
     const parts = lastChangedPath.split(".");
     let depth = 0;
     const stack: string[] = [];
@@ -2256,20 +2295,20 @@ export function WorkbenchPage({
                   onChangeFirstPointBrakeType={(value) => {
                     setServicePointOneBrakeType(value === "FB" ? "FB" : "FSB");
                     onDirtyChange(true);
-                    setLastChangedPath("pressure_calibration.service_brake.points.brake_type");
+                    setLastChangedPath("pressure_calibration.service_brake.points[0].brake_type");
                   }}
                   onChangeSecondPointBrakeType={(value) => {
                     setServicePointTwoBrakeType(value === "FB" ? "FB" : "FSB");
                     onDirtyChange(true);
-                    setLastChangedPath("pressure_calibration.service_brake.points.brake_type");
+                    setLastChangedPath("pressure_calibration.service_brake.points[1].brake_type");
                   }}
                   onChangeFirstPointKValue={(value) => {
                     setServiceCalibrationPointOneKValue(value);
-                    setLastChangedPath("pressure_calibration.service_brake.points.k_for_code");
+                    setLastChangedPath("pressure_calibration.service_brake.points[0].k_for_code");
                   }}
                   onChangeSecondPointKValue={(value) => {
                     setServiceCalibrationPointTwoKValue(value);
-                    setLastChangedPath("pressure_calibration.service_brake.points.k_for_code");
+                    setLastChangedPath("pressure_calibration.service_brake.points[1].k_for_code");
                   }}
                 />
                 {effectiveControllerConfigType === "bogie" ? (
@@ -2301,11 +2340,11 @@ export function WorkbenchPage({
                     secondPointKValue={emergencyCalibrationPointTwoKValue}
                     onChangeFirstPointKValue={(value) => {
                       setEmergencyCalibrationPointOneKValue(value);
-                      setLastChangedPath("pressure_calibration.emergency_brake.points.k_for_code");
+                      setLastChangedPath("pressure_calibration.emergency_brake.points[0].k_for_code");
                     }}
                     onChangeSecondPointKValue={(value) => {
                       setEmergencyCalibrationPointTwoKValue(value);
-                      setLastChangedPath("pressure_calibration.emergency_brake.points.k_for_code");
+                      setLastChangedPath("pressure_calibration.emergency_brake.points[1].k_for_code");
                     }}
                   />
                 ) : (

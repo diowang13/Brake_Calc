@@ -64,12 +64,74 @@ function getFirstCalibrationKForCode(summary: Record<string, unknown> | null): n
   return typeof kForCode === "number" ? kForCode : null;
 }
 
+type InputPoint = {
+  load_group: string;
+  k_for_code: number | null;
+};
+
+function getCalibrationInputPoints(summary: Record<string, unknown> | null): InputPoint[] {
+  if (summary === null || !Array.isArray(summary.input_points)) {
+    return [];
+  }
+  return summary.input_points
+    .map((item) => {
+      if (typeof item !== "object" || item === null) {
+        return null;
+      }
+      const record = item as Record<string, unknown>;
+      return {
+        load_group: typeof record.load_group === "string" ? record.load_group : "-",
+        k_for_code: typeof record.k_for_code === "number" ? record.k_for_code : null,
+      };
+    })
+    .filter((item): item is InputPoint => item !== null);
+}
+
 function getCalibrationBcp0ForCode(summary: Record<string, unknown> | null): number | null {
   if (summary === null) {
     return null;
   }
   const bcp0 = summary.BCP0_for_code;
   return typeof bcp0 === "number" ? bcp0 : null;
+}
+
+function getCalibrationBcp0(summary: Record<string, unknown> | null): number | null {
+  if (summary === null) {
+    return null;
+  }
+  const bcp0 = summary.BCP0;
+  return typeof bcp0 === "number" ? bcp0 : null;
+}
+
+function getPressureConversionFirstEntry(
+  pressureConversion: Record<
+    string,
+    Record<string, Record<string, { k_used_for_code?: number; BCP0_used_for_code?: number }>>
+  >,
+  brakeType: string
+): { k_used_for_code: number | null; BCP0_used_for_code: number | null } {
+  const perLoad = pressureConversion[brakeType];
+  if (perLoad === undefined) {
+    return { k_used_for_code: null, BCP0_used_for_code: null };
+  }
+  for (const perController of Object.values(perLoad)) {
+    for (const value of Object.values(perController)) {
+      return {
+        k_used_for_code: typeof value.k_used_for_code === "number" ? value.k_used_for_code : null,
+        BCP0_used_for_code:
+          typeof value.BCP0_used_for_code === "number" ? value.BCP0_used_for_code : null,
+      };
+    }
+  }
+  return { k_used_for_code: null, BCP0_used_for_code: null };
+}
+
+function getCurveKRange(summary: Record<string, unknown> | null): string {
+  const points = getCalibrationCurvePoints(summary).sort((left, right) => left.force_kN - right.force_kN);
+  if (points.length < 2) {
+    return "-";
+  }
+  return `${points[0].k_for_code} -> ${points[1].k_for_code}`;
 }
 
 function formatFixed(value: number): string {
@@ -183,7 +245,15 @@ function SummaryCard({ icon, title, body }: { icon: string; title: string; body:
   );
 }
 
-function ParameterCard({ title, value, note }: { title: string; value: string; note: string }): ReactElement {
+function ParameterCard({
+  title,
+  value,
+  note,
+}: {
+  title: string;
+  value: string;
+  note?: string;
+}): ReactElement {
   return (
     <div
       style={{
@@ -195,7 +265,9 @@ function ParameterCard({ title, value, note }: { title: string; value: string; n
     >
       <div style={{ color: "#6b6259", fontSize: "13px", marginBottom: "8px" }}>{title}</div>
       <div style={{ fontFamily: "Consolas, monospace", fontSize: "18px", fontWeight: 700 }}>{value}</div>
-      <div style={{ color: "#6b6259", fontSize: "13px", marginTop: "8px", lineHeight: 1.5 }}>{note}</div>
+      {typeof note === "string" && note.trim().length > 0 ? (
+        <div style={{ color: "#6b6259", fontSize: "13px", marginTop: "8px", lineHeight: 1.5 }}>{note}</div>
+      ) : null}
     </div>
   );
 }
@@ -278,8 +350,8 @@ function renderCurveChart(
     );
   }
   const [lowPoint, highPoint] = curvePoints;
-  const width = 340;
-  const height = 220;
+  const width = 460;
+  const height = 280;
   const leftPad = 44;
   const rightPad = 10;
   const topPad = 10;
@@ -311,7 +383,7 @@ function renderCurveChart(
     >
       <strong>{title}</strong>
       <svg
-        width={width}
+        width="100%"
         height={height}
         viewBox={`0 0 ${width} ${height}`}
         role="img"
@@ -529,10 +601,14 @@ export function ResultPage({
     typeof calibrationSummary.emergency_brake === "object" && calibrationSummary.emergency_brake !== null
       ? (calibrationSummary.emergency_brake as Record<string, unknown>)
       : null;
-  const serviceCalibrationKForCode = getFirstCalibrationKForCode(serviceSummary);
-  const emergencyCalibrationKForCode = getFirstCalibrationKForCode(emergencySummary);
+  const serviceInputPoints = getCalibrationInputPoints(serviceSummary);
+  const emergencyInputPoints = getCalibrationInputPoints(emergencySummary);
   const serviceCalibrationBcp0ForCode = getCalibrationBcp0ForCode(serviceSummary);
   const emergencyCalibrationBcp0ForCode = getCalibrationBcp0ForCode(emergencySummary);
+  const serviceCalibrationBcp0 = getCalibrationBcp0(serviceSummary);
+  const emergencyCalibrationBcp0 = getCalibrationBcp0(emergencySummary);
+  const servicePressureBase = getPressureConversionFirstEntry(pressureConversion, "FSB");
+  const emergencyPressureBase = getPressureConversionFirstEntry(pressureConversion, "EB");
   const allCurvePoints = [...getCalibrationCurvePoints(serviceSummary), ...getCalibrationCurvePoints(emergencySummary)];
   const sharedDomain =
     allCurvePoints.length >= 2
@@ -549,6 +625,8 @@ export function ResultPage({
       : runtimeStatus === "failed"
         ? "最近一次运行失败，请返回配置修订后重试。"
         : "尚未运行，请先返回配置点击运行。";
+  const hasCalibrationSummary = serviceSummary !== null || emergencySummary !== null;
+  const isParkingEnabled = parkingReference !== undefined && parkingReference !== null;
 
   return (
     <div style={{ display: "grid", gap: "18px" }}>
@@ -579,7 +657,7 @@ export function ResultPage({
       <section
         style={{
           ...panelStyle,
-          borderColor: "#c7a27f",
+          border: "1px solid #c7a27f",
           background: "#fffaf4"
         }}
       >
@@ -722,8 +800,9 @@ export function ResultPage({
               <thead>
                 <tr>
                   <th style={tableHeaderStyle}>控制器</th>
-                  <th style={tableHeaderStyle}>载荷 / 指标</th>
-                  <th style={tableHeaderStyle}>数值</th>
+                  <th style={tableHeaderStyle}>载荷类型</th>
+                  <th style={tableHeaderStyle}>动态载荷 (ton)</th>
+                  <th style={tableHeaderStyle}>标准空簧 (kPa)</th>
                   {pressureBrakeTypes.map((brakeType) => (
                     <th key={`controller-${brakeType}`} style={tableHeaderStyle}>
                       {`${brakeTypeLabel(brakeType)} BCP`}
@@ -735,28 +814,31 @@ export function ResultPage({
                 {(controllerMatrixRows.length > 0 ? controllerMatrixRows : [{ controller: "-", rows: [{ load: "-", controller: "-", mass: "-", spring: "-", pressureByBrakeType: {} as Record<string, string> }] }]).map(({ controller, rows }) => {
                   const rowStyle =
                     controller.includes("trailer") ? stripedBlueCellStyle : stripedOrangeCellStyle;
-                  const controllerRowSpan = rows.length * 2;
+                  const controllerRowSpan = rows.length;
+                  const loadToneStyle = (loadGroup: string) =>
+                    loadGroup === "AW0"
+                      ? { background: "#f0ecf8" }
+                      : loadGroup === "AW2"
+                        ? { background: "#e6f1f6" }
+                        : loadGroup === "AW3"
+                          ? { background: "#f7ecde" }
+                          : {};
                   return rows.map((row, rowIndex) => (
-                    <Fragment key={`${controller}-${row.load}`}>
-                      <tr key={`${controller}-${row.load}-mass`}>
-                        {rowIndex === 0 && controller !== "-" ? (
-                          <td style={groupedTableCellStyle} rowSpan={controllerRowSpan}>
-                            {controller}
-                          </td>
-                        ) : null}
-                        <td style={rowStyle}>{`${row.load} / mass_dyn_t`}</td>
-                        <td style={rowStyle}>{`${row.mass} ton`}</td>
-                        {pressureBrakeTypes.map((brakeType) => (
-                          <td key={`${controller}-${row.load}-${brakeType}-mass`} style={rowStyle} rowSpan={2}>
-                            {row.pressureByBrakeType[brakeType] ?? "-"}
-                          </td>
-                        ))}
-                      </tr>
-                      <tr key={`${controller}-${row.load}-spring`}>
-                        <td style={rowStyle}>{`${row.load} / spring_kPa`}</td>
-                        <td style={rowStyle}>{`${row.spring} kPa`}</td>
-                      </tr>
-                    </Fragment>
+                    <tr key={`${controller}-${row.load}`}>
+                      {rowIndex === 0 && controller !== "-" ? (
+                        <td style={groupedTableCellStyle} rowSpan={controllerRowSpan}>
+                          {controller}
+                        </td>
+                      ) : null}
+                      <td style={{ ...rowStyle, ...loadToneStyle(row.load) }}>{row.load}</td>
+                      <td style={{ ...rowStyle, ...loadToneStyle(row.load) }}>{row.mass}</td>
+                      <td style={{ ...rowStyle, ...loadToneStyle(row.load) }}>{row.spring}</td>
+                      {pressureBrakeTypes.map((brakeType) => (
+                        <td key={`${controller}-${row.load}-${brakeType}`} style={{ ...rowStyle, ...loadToneStyle(row.load) }}>
+                          {row.pressureByBrakeType[brakeType] ?? "-"}
+                        </td>
+                      ))}
+                    </tr>
                   ));
                 })}
               </tbody>
@@ -770,53 +852,101 @@ export function ResultPage({
         <p style={{ margin: "0 0 16px", color: "#6b6259", lineHeight: 1.6 }}>
           左侧给出可直接交付控制器开发的参数；右侧用分段示意表达标定后的 k_for_code 曲线。
         </p>
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "18px", alignItems: "start" }}>
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1.2fr", gap: "18px", alignItems: "start" }}>
           <div style={{ display: "grid", gap: "14px" }}>
+            <div style={{ color: "#6b6259", fontSize: "13px" }}>原始计算值（流程输入基值）</div>
             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "14px" }}>
               <ParameterCard
-                title="常用制动 k_for_code"
+                title="常用制动 k_for_code（原始）"
                 value={
-                  typeof serviceCalibrationKForCode === "number"
-                    ? `${serviceCalibrationKForCode}`
+                  typeof servicePressureBase.k_used_for_code === "number"
+                    ? `${servicePressureBase.k_used_for_code}`
                     : "-"
                 }
-                note="来自 report.controller_code_params.pressure_conversion。"
               />
               <ParameterCard
-                title="常用制动 BCP0_for_code"
+                title="常用制动 BCP0_for_code（原始）"
                 value={
-                  typeof serviceCalibrationBcp0ForCode === "number"
-                    ? `${serviceCalibrationBcp0ForCode} kPa`
+                  typeof servicePressureBase.BCP0_used_for_code === "number"
+                    ? `${servicePressureBase.BCP0_used_for_code} kPa`
                     : "-"
                 }
-                note="来自 report.controller_code_params.pressure_conversion。"
               />
               <ParameterCard
-                title="紧急制动 k_for_code"
+                title="紧急制动 k_for_code（原始）"
                 value={
-                  typeof emergencyCalibrationKForCode === "number"
-                    ? `${emergencyCalibrationKForCode}`
+                  typeof emergencyPressureBase.k_used_for_code === "number"
+                    ? `${emergencyPressureBase.k_used_for_code}`
                     : "-"
                 }
-                note="来自 report.controller_code_params.pressure_conversion。"
               />
               <ParameterCard
-                title="紧急制动 BCP0_for_code"
+                title="紧急制动 BCP0_for_code（原始）"
                 value={
-                  typeof emergencyCalibrationBcp0ForCode === "number"
-                    ? `${emergencyCalibrationBcp0ForCode} kPa`
+                  typeof emergencyPressureBase.BCP0_used_for_code === "number"
+                    ? `${emergencyPressureBase.BCP0_used_for_code} kPa`
                     : "-"
                 }
-                note="来自 report.controller_code_params.pressure_conversion。"
               />
             </div>
-            <div style={{ color: "#6b6259", fontSize: "13px", marginTop: "-4px" }}>
-              原始值保留（来自 report.calibration_summary）
-            </div>
-            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px" }}>
-              {renderSegmentLines("service_brake", serviceSummary)}
-              {renderSegmentLines("emergency_brake", emergencySummary)}
-            </div>
+            {hasCalibrationSummary ? (
+              <>
+                <div style={{ color: "#6b6259", fontSize: "13px" }}>标定点值</div>
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "14px" }}>
+                  <ParameterCard
+                    title="常用制动 BCP0（标定点）"
+                    value={typeof serviceCalibrationBcp0 === "number" ? `${serviceCalibrationBcp0} kPa` : "-"}
+                  />
+                  <ParameterCard
+                    title="紧急制动 BCP0（标定点）"
+                    value={typeof emergencyCalibrationBcp0 === "number" ? `${emergencyCalibrationBcp0} kPa` : "-"}
+                  />
+                  <ParameterCard
+                    title={`常用制动试验点 1（${serviceInputPoints[0]?.load_group ?? "-"}）`}
+                    value={typeof serviceInputPoints[0]?.k_for_code === "number" ? `${serviceInputPoints[0]?.k_for_code}` : "-"}
+                  />
+                  <ParameterCard
+                    title={`常用制动试验点 2（${serviceInputPoints[1]?.load_group ?? "-"}）`}
+                    value={typeof serviceInputPoints[1]?.k_for_code === "number" ? `${serviceInputPoints[1]?.k_for_code}` : "-"}
+                  />
+                  <ParameterCard
+                    title={`紧急制动试验点 1（${emergencyInputPoints[0]?.load_group ?? "-"}）`}
+                    value={typeof emergencyInputPoints[0]?.k_for_code === "number" ? `${emergencyInputPoints[0]?.k_for_code}` : "-"}
+                  />
+                  <ParameterCard
+                    title={`紧急制动试验点 2（${emergencyInputPoints[1]?.load_group ?? "-"}）`}
+                    value={typeof emergencyInputPoints[1]?.k_for_code === "number" ? `${emergencyInputPoints[1]?.k_for_code}` : "-"}
+                  />
+                </div>
+                <div style={{ color: "#6b6259", fontSize: "13px" }}>最终生效值（标定 + 调整后）</div>
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "14px" }}>
+                  <ParameterCard
+                    title="常用制动 k_for_code"
+                    value={getCurveKRange(serviceSummary)}
+                  />
+                  <ParameterCard
+                    title="常用制动 BCP0_for_code"
+                    value={
+                      typeof serviceCalibrationBcp0ForCode === "number"
+                        ? `${serviceCalibrationBcp0ForCode} kPa`
+                        : "-"
+                    }
+                  />
+                  <ParameterCard
+                    title="紧急制动 k_for_code"
+                    value={getCurveKRange(emergencySummary)}
+                  />
+                  <ParameterCard
+                    title="紧急制动 BCP0_for_code"
+                    value={
+                      typeof emergencyCalibrationBcp0ForCode === "number"
+                        ? `${emergencyCalibrationBcp0ForCode} kPa`
+                        : "-"
+                    }
+                  />
+                </div>
+              </>
+            ) : null}
             {controllerType === "car" ? (
               <div
                 style={{
@@ -840,15 +970,25 @@ export function ResultPage({
               body="当前页面展示同一坐标轴下的 service_brake 与 emergency_brake 分段曲线。"
             />
             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px" }}>
-              {renderCurveChart("service_brake", serviceSummary, sharedDomain)}
-              {renderCurveChart("emergency_brake", emergencySummary, sharedDomain)}
+              <div style={{ display: "grid", gap: "10px" }}>
+                {renderCurveChart("service_brake", serviceSummary, sharedDomain)}
+                {renderSegmentLines("service_brake", serviceSummary)}
+              </div>
+              <div style={{ display: "grid", gap: "10px" }}>
+                {renderCurveChart("emergency_brake", emergencySummary, sharedDomain)}
+                {renderSegmentLines("emergency_brake", emergencySummary)}
+              </div>
             </div>
           </div>
         </div>
       </section>
 
       <section style={panelStyle}>
-        <h3 style={{ marginTop: 0 }}>停放校核结果</h3>
+        <h3 style={{ marginTop: 0 }}>
+          {isParkingEnabled ? "停放校核结果" : "停放校核结果（未开启）"}
+        </h3>
+        {!isParkingEnabled ? null : (
+          <>
         <p style={{ margin: "0 0 16px", color: "#6b6259", lineHeight: 1.6 }}>
           本区只展示停放制动力校核输出，输入项仍在工作台“停放校核”章节维护。
         </p>
@@ -927,6 +1067,8 @@ export function ResultPage({
             </tbody>
           </table>
         </div>
+          </>
+        )}
       </section>
     </div>
   );

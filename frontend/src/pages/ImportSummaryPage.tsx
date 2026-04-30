@@ -35,6 +35,11 @@ export function ImportSummaryPage({
 }): ReactElement {
   const canEnterWorkbench =
     projectName.trim().length > 0 && projectCode.trim().length > 0 && yamlText.trim().length > 0;
+  const missingFields = [
+    projectName.trim().length === 0 ? "项目名称" : null,
+    projectCode.trim().length === 0 ? "项目编号" : null,
+    yamlText.trim().length === 0 ? "导入 YAML 文本" : null,
+  ].filter((item): item is string => item !== null);
 
   const supplementSummary = [
     `停放校核：${supplementPresence.hasParkingBrakeCheck ? "已包含" : "未包含"}`,
@@ -65,9 +70,21 @@ export function ImportSummaryPage({
           <div style={{ display: "flex", gap: "12px", flexWrap: "wrap" }}>
             <button
               type="button"
-              style={primaryActionStyle}
+              style={
+                !canEnterWorkbench || isSubmitting
+                  ? {
+                      ...primaryActionStyle,
+                      background: "#cfc7bd",
+                      border: "1px solid #b4a99b",
+                      color: "#f6f3ef",
+                      boxShadow: "none",
+                      cursor: "not-allowed",
+                    }
+                  : primaryActionStyle
+              }
               onClick={onSaveAndViewOverview}
               disabled={!canEnterWorkbench || isSubmitting}
+              title={!canEnterWorkbench ? "请先填写项目名称与项目编号，并确认 YAML 文本不为空" : undefined}
             >
               {isSubmitting ? "保存中..." : "保存并查看总览"}
             </button>
@@ -119,6 +136,11 @@ export function ImportSummaryPage({
         </label>
         {submitError ? (
           <p style={{ margin: "10px 0 0", color: "#c64532", fontSize: "13px" }}>{submitError}</p>
+        ) : null}
+        {!canEnterWorkbench ? (
+          <p style={{ margin: "10px 0 0", color: "#8a5a35", fontSize: "13px" }}>
+            {`请先补全：${missingFields.join("、")}。`}
+          </p>
         ) : null}
       </section>
 

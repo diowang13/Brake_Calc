@@ -827,7 +827,13 @@ export function App(): ReactElement {
                 key={screen.key}
                 type="button"
                 onClick={() => navigateToScreen(screen.key)}
-                style={isActive ? primaryActionStyle : inactiveTabStyle}
+                style={
+                  isDisabled
+                    ? { ...inactiveTabStyle, background: "#ece6de", color: "#9d9388", border: "1px solid #cfc4b8", boxShadow: "none", cursor: "not-allowed" }
+                    : isActive
+                      ? primaryActionStyle
+                      : inactiveTabStyle
+                }
                 disabled={isDisabled}
               >
                 {screen.label}
