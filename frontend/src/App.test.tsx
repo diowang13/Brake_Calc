@@ -1,7 +1,183 @@
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import { vi } from "vitest";
 
 import { App } from "./App";
+
+vi.mock("./api/configClient", () => {
+  let savedConfig: Record<string, unknown> | null = null;
+  return {
+    importYaml: vi.fn(async (yamlText: string) => {
+    const hasMass = yamlText.includes("mass_params:");
+    const hasRequirement = yamlText.includes("requirement:");
+    const hasAdhesion = yamlText.includes("adhesion:");
+    const hasBrakeTypes = yamlText.includes("brake_types:");
+    const hasV0 = yamlText.includes("v0:");
+    const hasVList = yamlText.includes("V_list:");
+    const formState: Record<string, unknown> = {};
+    if (hasV0) {
+      formState.v0 = 80;
+    }
+    if (hasVList) {
+      formState.V_list = [40, 60, 80];
+    }
+    if (hasBrakeTypes) {
+      formState.brake_types = [
+        { name: "FSB", source: "kinematic" },
+        { name: "EB", source: "kinematic" },
+        { name: "FB", source: "kinematic" },
+        { name: "holding", source: "ratio_of_FSB", ratio: 0.5 },
+      ];
+    }
+    if (hasRequirement) {
+      formState.requirement = {
+        FSB: { mode: "a_mean", value: 1.0 },
+        EB: { mode: "distance", value: 205.0 },
+      };
+      formState.response_time = {
+        FSB: { t1: 0.4, impulse_rate: 0.75 },
+        EB: { t1: 0.3, t2: 1.2 },
+      };
+    }
+    if (hasAdhesion) {
+      formState.adhesion = { mu_limit: 0.15 };
+    }
+    if (hasMass) {
+      formState.mass_params = {
+        powered_bogie: { mass_static: { AW0: 15.83, AW3: 26.37 }, bogie_weight: 6.3 },
+        trailer_bogie: { mass_static: { AW0: 15.37, AW3: 25.18 }, bogie_weight: 4.1 }
+      };
+      formState.air_spring = { powered_bogie: { airspring_k: 43.69, airspring_b: 4.13 } };
+    }
+    if (yamlText.includes("controller_type: bogie")) {
+      formState.controller_type = "bogie";
+    }
+    if (yamlText.includes("controller_type: car")) {
+      formState.controller_type = "car";
+    }
+    if (yamlText.includes("vehicle_config:")) {
+      if (yamlText.includes("bogies:")) {
+        formState.vehicle_config = yamlText.includes("powered_bogie_6")
+          ? {
+              bogies: [
+                { name: "trailer_bogie_1", bogie_type: "trailer_bogie" },
+                { name: "trailer_bogie_2", bogie_type: "trailer_bogie" },
+                { name: "powered_bogie_3", bogie_type: "powered_bogie" },
+                { name: "powered_bogie_4", bogie_type: "powered_bogie" },
+                { name: "powered_bogie_5", bogie_type: "powered_bogie" },
+                { name: "powered_bogie_6", bogie_type: "powered_bogie" }
+              ]
+            }
+          : {
+              bogies: [
+                { name: "trailer_bogie_11", bogie_type: "trailer_bogie" },
+                { name: "powered_bogie_12", bogie_type: "powered_bogie" }
+              ]
+            };
+      }
+      if (yamlText.includes("cars:")) {
+        formState.vehicle_config = {
+          cars: [
+            { name: "trailer_car_11", car_type: "trailer_car" },
+            { name: "powered_car_12", car_type: "powered_car" }
+          ]
+        };
+      }
+    }
+    if (yamlText.includes("airspring_k:")) {
+      formState.air_spring = { powered_bogie: { mode: "explicit_linear", airspring_k: 43.69, airspring_b: 4.13 } };
+    }
+    if (yamlText.includes("points:")) {
+      formState.air_spring = {
+        powered_bogie: {
+          mode: "fitted_from_points",
+          points: [
+            { pressure_kpa: 101, sprung_mass_by_spring_ton: 10.1 },
+            { pressure_kpa: 202, sprung_mass_by_spring_ton: 20.2 },
+            { pressure_kpa: 303, sprung_mass_by_spring_ton: 30.3 }
+          ]
+        }
+      };
+    }
+    if (yamlText.includes("mech_params:")) {
+      formState.mech_params = {
+        cylinder_type: yamlText.includes("cylinder_type: caliper_cylinder")
+          ? "caliper_cylinder"
+          : "tread_cylinder",
+        Sc: 0.0248,
+        xi: 0.29,
+        Li: 3.4,
+        eta_i: 0.95,
+        Lo: 1.0,
+        eta_o: 1.0,
+        Fs1: 1.0,
+        Fs2: 0.25,
+        Dw: 0.84,
+        Rf: 0.12,
+      };
+    }
+    if (yamlText.includes("parking_brake_check:")) {
+      formState.parking_brake_check = {
+        enabled: yamlText.includes("parking_brake_check:\n  enabled: true"),
+        required_safety_margin: 1.2,
+        static_friction_coefficient: 0.35,
+        n_parking_cylinders_by_car: 4,
+        environment: {
+          wind_speed_max: 34.0,
+          wind_resistance_coefficient: 0.0037,
+          grade_by_load_group: { AW0: 40, AW2: 30, AW3: 40 },
+        },
+        cylinder: {
+          Fp: 7.4,
+          Fs1: 1.0,
+          Fs2: 0.25,
+          Lpi: 2.04,
+          eta_pi: 1.0,
+          Lo: 1.0,
+          eta_o: 1.0,
+        },
+      };
+    }
+    if (yamlText.includes("pressure_calibration:")) {
+      formState.pressure_calibration = {
+        enabled: yamlText.includes("pressure_calibration:\n  enabled: true"),
+        service_brake: {
+          BCP0: 25.0,
+          point_pair_mode: "aw3_aw0",
+          points: [
+            { load_group: "AW0", brake_type: "FSB", k_for_code: 1014.0 },
+            { load_group: "AW3", brake_type: "FB", k_for_code: 1204.0 },
+          ],
+        },
+      };
+    }
+    return {
+      valid: true,
+      errors: [],
+      form_state: formState
+    };
+    }),
+    loadConfig: vi.fn(async () => {
+      if (savedConfig === null) {
+        return null;
+      }
+      return savedConfig;
+    }),
+    saveConfig: vi.fn(async (payload: Record<string, unknown>) => {
+      savedConfig = {
+        project: payload.project,
+        yaml_text: payload.yaml_text,
+        form_state: payload.form_state,
+        validation_status: payload.validation_status,
+        errors: payload.errors ?? [],
+        version: 1,
+        source_input_config_id: null,
+        revision_reason: null,
+      };
+      return { input_config_id: "mock-config-id" };
+    })
+  };
+});
 
 describe("App shell", () => {
   it("renders the core frontend pages and switches between them", async () => {
@@ -24,7 +200,7 @@ describe("App shell", () => {
     await user.click(screen.getByRole("button", { name: "首页 / 项目列表" }));
     expect(screen.getByRole("button", { name: "新建项目计算" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "打开既有项目" })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "导入 YAML" })).toBeInTheDocument();
+    expect(screen.getByText("上传 YAML")).toBeInTheDocument();
     expect(screen.getAllByText("最后修改时间").length).toBeGreaterThan(0);
     expect(screen.getByText("车控")).toBeInTheDocument();
     expect(screen.getByText("架控")).toBeInTheDocument();
@@ -638,7 +814,7 @@ describe("App shell", () => {
 
     await user.click(screen.getByRole("button", { name: "导入摘要" }));
 
-    expect(screen.getByRole("heading", { level: 2, name: "导入摘要" })).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { level: 2, name: "导入摘要" })).toBeInTheDocument();
     expect(screen.getByText("是否包含停放校核 / 标定 / electric_brake 等后置内容")).toBeInTheDocument();
     expect(screen.getByText("是否存在导入警告")).toBeInTheDocument();
     expect(screen.getByText("是否可直接运行")).toBeInTheDocument();
@@ -646,8 +822,8 @@ describe("App shell", () => {
     expect(screen.getByRole("textbox", { name: "项目名称" })).toBeInTheDocument();
     expect(screen.getByRole("textbox", { name: "项目编号" })).toBeInTheDocument();
     expect(screen.getByRole("textbox", { name: "导入 YAML 文本" })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "进入工作台" })).toBeDisabled();
-    expect(screen.getByRole("button", { name: "进入工作台" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "保存并查看总览" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "保存并查看总览" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "查看总览" })).toBeInTheDocument();
   });
 
@@ -676,8 +852,10 @@ describe("App shell", () => {
     await user.click(screen.getByRole("button", { name: "导入摘要" }));
     await user.type(screen.getByRole("textbox", { name: "项目名称" }), "导入项目");
     await user.type(screen.getByRole("textbox", { name: "项目编号" }), "IMP-001");
-    await user.click(screen.getByRole("button", { name: "进入工作台" }));
-    expect(screen.getByRole("heading", { level: 2, name: "配置工作台" })).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "保存并查看总览" }));
+    expect(
+      await screen.findByRole("heading", { level: 2, name: /上海机场线制动项目|导入项目/ })
+    ).toBeInTheDocument();
   });
 
   it("uses home page entry actions to start a new project or open an existing one", async () => {
@@ -693,5 +871,589 @@ describe("App shell", () => {
     expect(
       screen.getByRole("heading", { level: 2, name: /上海机场线制动项目/ })
     ).toBeInTheDocument();
+  });
+
+  it("loads yaml content from file upload and opens import summary with prefilled text", async () => {
+    const user = userEvent.setup();
+
+    render(<App />);
+
+    const file = new File(["schema_version: 1\nv0: 120\n"], "example_input.yaml", {
+      type: "text/yaml"
+    });
+    await user.upload(screen.getByLabelText("上传 YAML 文件"), file);
+
+    expect(await screen.findByRole("heading", { level: 2, name: "导入摘要" })).toBeInTheDocument();
+    expect(screen.getByRole("textbox", { name: "导入 YAML 文本" })).toHaveValue(
+      "schema_version: 1\nv0: 120\n"
+    );
+  });
+
+  it("backfills imported yaml values into workbench load and air spring fields", async () => {
+    const user = userEvent.setup();
+
+    render(<App />);
+
+    const yamlText = [
+      "schema_version: 1",
+      "mass_params:",
+      "  powered_bogie:",
+      "    mass_static:",
+      "      AW0: 15.83",
+      "      AW3: 26.37",
+      "    bogie_weight: 6.3",
+      "  trailer_bogie:",
+      "    mass_static:",
+      "      AW0: 15.37",
+      "      AW3: 25.18",
+      "    bogie_weight: 4.1",
+      "air_spring:",
+      "  powered_bogie:",
+      "    mode: explicit_linear",
+      "    airspring_k: 43.69",
+      "    airspring_b: 4.13",
+      ""
+    ].join("\n");
+    const file = new File([yamlText], "example_input.yaml", { type: "text/yaml" });
+    await user.upload(screen.getByLabelText("上传 YAML 文件"), file);
+
+    await screen.findByRole("heading", { level: 2, name: "导入摘要" });
+    await user.type(screen.getByRole("textbox", { name: "项目名称" }), "导入项目");
+    await user.type(screen.getByRole("textbox", { name: "项目编号" }), "IMP-002");
+    await user.click(screen.getByRole("button", { name: "保存并查看总览" }));
+    expect(
+      await screen.findByRole("heading", { level: 2, name: /上海机场线制动项目|导入项目/ })
+    ).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "配置工作台" }));
+    expect(screen.getByRole("textbox", { name: "AW0 / 动车称重（整车）" })).toHaveValue("15.83");
+    expect(screen.getByRole("textbox", { name: "AW0 / 拖车称重（整车）" })).toHaveValue("15.37");
+    expect(screen.getByRole("textbox", { name: "AW3 / 动车称重（整车）" })).toHaveValue("26.37");
+    expect(screen.getByRole("textbox", { name: "AW3 / 拖车称重（整车）" })).toHaveValue("25.18");
+    expect(screen.getByRole("textbox", { name: "动车转向架重量 bogie_weight (ton)" })).toHaveValue("6.3");
+    expect(screen.getByRole("textbox", { name: "拖车转向架重量 bogie_weight (ton)" })).toHaveValue("4.1");
+
+    await user.click(screen.getByRole("button", { name: "显式线性公式" }));
+    expect(screen.getByRole("textbox", { name: "空簧线性系数 k (kPa/ton)" })).toHaveValue("43.69");
+    expect(screen.getByRole("textbox", { name: "空簧截距 b (kPa)" })).toHaveValue("4.13");
+  });
+
+  it("navigates from overview supplement cards into targeted workbench sections", async () => {
+    const user = userEvent.setup();
+
+    render(<App />);
+
+    await user.click(screen.getByRole("button", { name: "只读总览" }));
+    await user.click(screen.getAllByRole("button", { name: "点击补录" })[0]);
+    expect(screen.getByRole("heading", { level: 3, name: "停放校核" })).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "返回总览" }));
+    await user.click(screen.getAllByRole("button", { name: "点击补录" })[1]);
+    expect(screen.getByRole("heading", { level: 3, name: "标定" })).toBeInTheDocument();
+  });
+
+  it("opens workbench when clicking revise from overview", async () => {
+    const user = userEvent.setup();
+
+    render(<App />);
+    await user.click(screen.getByRole("button", { name: "只读总览" }));
+    await user.click(screen.getByRole("button", { name: "修订" }));
+
+    expect(screen.getByRole("heading", { level: 2, name: "配置工作台" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { level: 3, name: "运行基础配置 / 技术条件" })).toBeInTheDocument();
+  });
+
+  it("backfills requirement fields after revise from imported overview", async () => {
+    const user = userEvent.setup();
+
+    render(<App />);
+
+    const yamlText = [
+      "schema_version: 1",
+      "v0: 80.0",
+      "V_list: [40.0,60.0,80.0]",
+      "brake_types:",
+      "  - name: FSB",
+      "    source: kinematic",
+      "  - name: EB",
+      "    source: kinematic",
+      "  - name: FB",
+      "    source: kinematic",
+      "  - name: holding",
+      "    source: ratio_of_FSB",
+      "    ratio: 0.5",
+      "requirement:",
+      "  FSB:",
+      "    mode: a_mean",
+      "    value: 1.0",
+      "  EB:",
+      "    mode: distance",
+      "    value: 205.0",
+      "response_time:",
+      "  FSB:",
+      "    t1: 0.4",
+      "    impulse_rate: 0.75",
+      "  EB:",
+      "    t1: 0.3",
+      "    t2: 1.2",
+      "adhesion:",
+      "  mu_limit: 0.15",
+      ""
+    ].join("\n");
+    const file = new File([yamlText], "example_input.yaml", { type: "text/yaml" });
+    await user.upload(screen.getByLabelText("上传 YAML 文件"), file);
+
+    await screen.findByRole("heading", { level: 2, name: "导入摘要" });
+    await user.type(screen.getByRole("textbox", { name: "项目名称" }), "导入项目");
+    await user.type(screen.getByRole("textbox", { name: "项目编号" }), "IMP-003");
+    await user.click(screen.getByRole("button", { name: "保存并查看总览" }));
+
+    await screen.findByRole("heading", { level: 2, name: /上海机场线制动项目|导入项目/ });
+    await user.click(screen.getByRole("button", { name: "修订" }));
+
+    expect(screen.getByRole("spinbutton", { name: "最高速度 v0 (km/h)" })).toHaveValue(80);
+    expect(screen.getByRole("spinbutton", { name: "最大常用制动平均减速度要求 (m/s²)" })).toHaveValue(1);
+    expect(screen.getAllByRole("spinbutton", { name: "空走时间 t1 (s)" })[0]).toHaveValue(0.4);
+    expect(screen.getByRole("spinbutton", { name: "冲击率 impulse_rate (m/s³)" })).toHaveValue(0.75);
+    expect(screen.getByRole("spinbutton", { name: "紧急制动距离要求 (m)" })).toHaveValue(205);
+    expect(screen.getByRole("spinbutton", { name: "紧急制动响应时间 t2 (s)" })).toHaveValue(1.2);
+    expect(screen.getByRole("spinbutton", { name: "黏着利用限制 mu_limit (-)" })).toHaveValue(0.15);
+  });
+
+  it("backfills vehicle_config instances after import and revise", async () => {
+    const user = userEvent.setup();
+
+    render(<App />);
+
+    const yamlText = [
+      "schema_version: 1",
+      "controller_type: bogie",
+      "vehicle_config:",
+      "  bogies:",
+      "    - name: trailer_bogie_11",
+      "      bogie_type: trailer_bogie",
+      "    - name: powered_bogie_12",
+      "      bogie_type: powered_bogie",
+      ""
+    ].join("\n");
+    const file = new File([yamlText], "example_vehicle.yaml", { type: "text/yaml" });
+    await user.upload(screen.getByLabelText("上传 YAML 文件"), file);
+
+    await screen.findByRole("heading", { level: 2, name: "导入摘要" });
+    await user.type(screen.getByRole("textbox", { name: "项目名称" }), "车辆回填项目");
+    await user.type(screen.getByRole("textbox", { name: "项目编号" }), "IMP-VC-001");
+    await user.click(screen.getByRole("button", { name: "保存并查看总览" }));
+    await screen.findByRole("heading", { level: 2, name: /上海机场线制动项目|车辆回填项目/ });
+
+    await user.click(screen.getByRole("button", { name: "修订" }));
+    await user.click(screen.getByRole("button", { name: /^车辆与控制器配置/ }));
+
+    expect(screen.getByText(/当前 BCU 类型：/)).toBeInTheDocument();
+    expect(screen.getByRole("textbox", { name: "实例名称 1" })).toHaveValue("trailer_bogie_11");
+    expect(screen.getByRole("textbox", { name: "实例名称 2" })).toHaveValue("powered_bogie_12");
+    expect(screen.getByRole("button", { name: "实例 1 设为拖架" })).toHaveAttribute(
+      "aria-pressed",
+      "true"
+    );
+    expect(screen.getByRole("button", { name: "实例 2 设为动架" })).toHaveAttribute(
+      "aria-pressed",
+      "true"
+    );
+  });
+
+  it("infers bogie controller type from vehicle_config.bogies when controller_type is missing", async () => {
+    const user = userEvent.setup();
+
+    render(<App />);
+
+    const yamlText = [
+      "schema_version: 1",
+      "vehicle_config:",
+      "  bogies:",
+      "    - name: trailer_bogie_11",
+      "      bogie_type: trailer_bogie",
+      "    - name: powered_bogie_12",
+      "      bogie_type: powered_bogie",
+      ""
+    ].join("\n");
+    const file = new File([yamlText], "example_vehicle_no_controller_type.yaml", {
+      type: "text/yaml"
+    });
+    await user.upload(screen.getByLabelText("上传 YAML 文件"), file);
+
+    await screen.findByRole("heading", { level: 2, name: "导入摘要" });
+    await user.type(screen.getByRole("textbox", { name: "项目名称" }), "实例回填兜底项目");
+    await user.type(screen.getByRole("textbox", { name: "项目编号" }), "IMP-VC-002");
+    await user.click(screen.getByRole("button", { name: "保存并查看总览" }));
+    await screen.findByRole("heading", { level: 2, name: /上海机场线制动项目|实例回填兜底项目/ });
+
+    await user.click(screen.getByRole("button", { name: "修订" }));
+    await user.click(screen.getByRole("button", { name: /^车辆与控制器配置/ }));
+
+    expect(screen.getByText(/当前 BCU 类型：架控/)).toBeInTheDocument();
+    expect(screen.getByRole("textbox", { name: "实例名称 1" })).toHaveValue("trailer_bogie_11");
+    expect(screen.getByRole("textbox", { name: "实例名称 2" })).toHaveValue("powered_bogie_12");
+  });
+
+  it("backfills air spring fitted points from imported yaml", async () => {
+    const user = userEvent.setup();
+
+    render(<App />);
+
+    const yamlText = [
+      "schema_version: 1",
+      "air_spring:",
+      "  powered_bogie:",
+      "    mode: fitted_from_points",
+      "    points:",
+      "      - pressure_kpa: 101",
+      "        sprung_mass_by_spring_ton: 10.1",
+      "      - pressure_kpa: 202",
+      "        sprung_mass_by_spring_ton: 20.2",
+      "      - pressure_kpa: 303",
+      "        sprung_mass_by_spring_ton: 30.3",
+      ""
+    ].join("\n");
+    const file = new File([yamlText], "example_airspring.yaml", { type: "text/yaml" });
+    await user.upload(screen.getByLabelText("上传 YAML 文件"), file);
+
+    await screen.findByRole("heading", { level: 2, name: "导入摘要" });
+    await user.type(screen.getByRole("textbox", { name: "项目名称" }), "空簧回填项目");
+    await user.type(screen.getByRole("textbox", { name: "项目编号" }), "IMP-AS-001");
+    await user.click(screen.getByRole("button", { name: "保存并查看总览" }));
+    await screen.findByRole("heading", { level: 2, name: /上海机场线制动项目|空簧回填项目/ });
+
+    await user.click(screen.getByRole("button", { name: "修订" }));
+    await user.click(screen.getByRole("button", { name: /^载荷与空簧/ }));
+    expect(screen.getByRole("button", { name: "特征点拟合" })).toHaveAttribute("aria-pressed", "true");
+    const pressureInputs = screen.getAllByRole("textbox", { name: "压力 (kPa)" });
+    const massInputs = screen.getAllByRole("textbox", { name: "质量 (ton)" });
+    expect(pressureInputs[0]).toHaveValue("101");
+    expect(massInputs[0]).toHaveValue("10.1");
+    expect(pressureInputs[1]).toHaveValue("202");
+    expect(massInputs[1]).toHaveValue("20.2");
+    expect(pressureInputs[2]).toHaveValue("303");
+    expect(massInputs[2]).toHaveValue("30.3");
+  });
+
+  it("backfills mech_params and switches to caliper fields from imported yaml", async () => {
+    const user = userEvent.setup();
+
+    render(<App />);
+
+    const yamlText = [
+      "schema_version: 1",
+      "mech_params:",
+      "  cylinder_type: caliper_cylinder",
+      "  Sc: 0.0248",
+      "  xi: 0.29",
+      "  Li: 3.4",
+      "  eta_i: 0.95",
+      "  Lo: 1.0",
+      "  eta_o: 1.0",
+      "  Fs1: 1.0",
+      "  Fs2: 0.25",
+      "  Dw: 0.84",
+      "  Rf: 0.12",
+      ""
+    ].join("\n");
+    const file = new File([yamlText], "example_mech.yaml", { type: "text/yaml" });
+    await user.upload(screen.getByLabelText("上传 YAML 文件"), file);
+
+    await screen.findByRole("heading", { level: 2, name: "导入摘要" });
+    await user.type(screen.getByRole("textbox", { name: "项目名称" }), "机械参数回填项目");
+    await user.type(screen.getByRole("textbox", { name: "项目编号" }), "IMP-MP-001");
+    await user.click(screen.getByRole("button", { name: "保存并查看总览" }));
+    await screen.findByRole("heading", { level: 2, name: /上海机场线制动项目|机械参数回填项目/ });
+
+    await user.click(screen.getByRole("button", { name: "修订" }));
+    await user.click(screen.getByRole("button", { name: /^基础制动机械参数/ }));
+    expect(screen.getByRole("button", { name: "制动夹钳 caliper_cylinder" })).toHaveAttribute(
+      "aria-pressed",
+      "true"
+    );
+    expect(screen.getByRole("textbox", { name: "活塞有效面积 Sc (m²)" })).toHaveValue("0.0248");
+    expect(screen.getByRole("textbox", { name: "摩擦系数 xi (-)" })).toHaveValue("0.29");
+    expect(screen.getByRole("textbox", { name: "单元内部倍率 Li (-)" })).toHaveValue("3.4");
+    expect(screen.getByRole("textbox", { name: "单元内部效率 eta_i (-)" })).toHaveValue("0.95");
+    expect(screen.getByRole("textbox", { name: "外部倍率 Lo (-)" })).toHaveValue("1");
+    expect(screen.getByRole("textbox", { name: "外部效率 eta_o (-)" })).toHaveValue("1");
+    expect(screen.getByRole("textbox", { name: "单元复位力 Fs1 (kN)" })).toHaveValue("1");
+    expect(screen.getByRole("textbox", { name: "单元复位力 Fs2 (kN)" })).toHaveValue("0.25");
+    expect(screen.getByRole("textbox", { name: "轮径 Dw (m)" })).toHaveValue("0.84");
+    expect(screen.getByRole("textbox", { name: "摩擦半径 Rf (m)" })).toHaveValue("0.12");
+  });
+
+  it("shows YAML and form_state mismatch warning when key exists only in YAML text", async () => {
+    const user = userEvent.setup();
+
+    render(<App />);
+
+    const yamlText = [
+      "schema_version: 1",
+      "controller_type: BOGIE",
+      "vehicle_config:",
+      "  bogies:",
+      "    - name: trailer_bogie_1",
+      "      bogie_type: trailer_bogie",
+      ""
+    ].join("\n");
+    const file = new File([yamlText], "example_mismatch.yaml", { type: "text/yaml" });
+    await user.upload(screen.getByLabelText("上传 YAML 文件"), file);
+
+    await screen.findByRole("heading", { level: 2, name: "导入摘要" });
+    await user.type(screen.getByRole("textbox", { name: "项目名称" }), "差异告警项目");
+    await user.type(screen.getByRole("textbox", { name: "项目编号" }), "IMP-DIFF-001");
+    await user.click(screen.getByRole("button", { name: "保存并查看总览" }));
+    await screen.findByRole("heading", { level: 2, name: /上海机场线制动项目|差异告警项目/ });
+
+    await user.click(screen.getByRole("button", { name: "修订" }));
+    expect(screen.getByText("YAML / form_state 不一致")).toBeInTheDocument();
+    expect(
+      screen.getByText(/字段 controller_type 在 YAML 中存在，但未进入 form_state/)
+    ).toBeInTheDocument();
+  });
+
+  it("uses imported vehicle_config as baseline instead of initializer target counts", async () => {
+    const user = userEvent.setup();
+
+    render(<App />);
+
+    const yamlText = [
+      "schema_version: 1",
+      "controller_type: bogie",
+      "vehicle_config:",
+      "  bogies:",
+      "    - name: trailer_bogie_1",
+      "      bogie_type: trailer_bogie",
+      "    - name: trailer_bogie_2",
+      "      bogie_type: trailer_bogie",
+      "    - name: powered_bogie_3",
+      "      bogie_type: powered_bogie",
+      "    - name: powered_bogie_4",
+      "      bogie_type: powered_bogie",
+      "    - name: powered_bogie_5",
+      "      bogie_type: powered_bogie",
+      "    - name: powered_bogie_6",
+      "      bogie_type: powered_bogie",
+      ""
+    ].join("\n");
+    const file = new File([yamlText], "example_import_baseline.yaml", { type: "text/yaml" });
+    await user.upload(screen.getByLabelText("上传 YAML 文件"), file);
+
+    await screen.findByRole("heading", { level: 2, name: "导入摘要" });
+    await user.type(screen.getByRole("textbox", { name: "项目名称" }), "导入基准项目");
+    await user.type(screen.getByRole("textbox", { name: "项目编号" }), "IMP-BASE-001");
+    await user.click(screen.getByRole("button", { name: "保存并查看总览" }));
+    await screen.findByRole("heading", { level: 2, name: /上海机场线制动项目|导入基准项目/ });
+
+    await user.click(screen.getByRole("button", { name: "修订" }));
+    await user.click(screen.getByRole("button", { name: /^车辆与控制器配置/ }));
+
+    expect(screen.getByText("导入基准编组")).toBeInTheDocument();
+    expect(screen.getAllByText("动架 4").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("拖架 2").length).toBeGreaterThan(0);
+    expect(screen.getByText(/编组校核通过/)).toBeInTheDocument();
+  });
+
+  it("backfills parking_brake_check fields from imported yaml", async () => {
+    const user = userEvent.setup();
+
+    render(<App />);
+
+    const yamlText = [
+      "schema_version: 1",
+      "parking_brake_check:",
+      "  enabled: true",
+      "  required_safety_margin: 1.2",
+      "  static_friction_coefficient: 0.35",
+      "  n_parking_cylinders_by_car: 4",
+      "  environment:",
+      "    wind_speed_max: 34.0",
+      "    wind_resistance_coefficient: 0.0037",
+      "    grade_by_load_group:",
+      "      AW0: 40",
+      "      AW2: 30",
+      "      AW3: 40",
+      "  cylinder:",
+      "    Fp: 7.4",
+      "    Fs1: 1.0",
+      "    Fs2: 0.25",
+      "    Lpi: 2.04",
+      "    eta_pi: 1.0",
+      "    Lo: 1.0",
+      "    eta_o: 1.0",
+      ""
+    ].join("\n");
+    const file = new File([yamlText], "example_parking.yaml", { type: "text/yaml" });
+    await user.upload(screen.getByLabelText("上传 YAML 文件"), file);
+
+    await screen.findByRole("heading", { level: 2, name: "导入摘要" });
+    await user.type(screen.getByRole("textbox", { name: "项目名称" }), "停放回填项目");
+    await user.type(screen.getByRole("textbox", { name: "项目编号" }), "IMP-PB-001");
+    await user.click(screen.getByRole("button", { name: "保存并查看总览" }));
+    await screen.findByRole("heading", { level: 2, name: /上海机场线制动项目|停放回填项目/ });
+
+    await user.click(screen.getByRole("button", { name: "修订" }));
+    await user.click(screen.getByRole("button", { name: /^停放校核/ }));
+
+    expect(screen.getByText("当前状态：已补充停放校核")).toBeInTheDocument();
+    expect(screen.getByRole("textbox", { name: "要求安全系数 required_safety_margin (-)" })).toHaveValue("1.2");
+    expect(screen.getByRole("textbox", { name: "静摩擦系数 xi0 / static_friction_coefficient (-)" })).toHaveValue("0.35");
+    expect(screen.getByRole("textbox", { name: "每车停放缸数量 n_parking_cylinders_by_car (-)" })).toHaveValue("4");
+    expect(screen.getByRole("textbox", { name: "最大风速 wind_speed_max (m/s)" })).toHaveValue("34");
+    expect(screen.getByRole("textbox", { name: "风阻系数 wind_resistance_coefficient (-)" })).toHaveValue("0.0037");
+    expect(screen.getByRole("textbox", { name: "AW0 坡度 grade_by_load_group.AW0 (‰)" })).toHaveValue("40");
+    expect(screen.getByRole("textbox", { name: "AW2 坡度 grade_by_load_group.AW2 (‰)" })).toHaveValue("30");
+    expect(screen.getByRole("textbox", { name: "AW3 坡度 grade_by_load_group.AW3 (‰)" })).toHaveValue("40");
+    expect(screen.getByRole("textbox", { name: "停放弹簧输出力 Fp (kN)" })).toHaveValue("7.4");
+    expect(screen.getByRole("textbox", { name: "单元复位力 Fs1 (kN)" })).toHaveValue("1");
+    expect(screen.getByRole("textbox", { name: "单元复位力 Fs2 (kN)" })).toHaveValue("0.25");
+    expect(screen.getByRole("textbox", { name: "停放缸内部倍率 Lpi (-)" })).toHaveValue("2.04");
+    expect(screen.getByRole("textbox", { name: "停放缸内部效率 eta_pi (-)" })).toHaveValue("1");
+    expect(screen.getByRole("textbox", { name: "执行机构外部倍率 Lo (-)" })).toHaveValue("1");
+    expect(screen.getByRole("textbox", { name: "执行机构外部效率 eta_o (-)" })).toHaveValue("1");
+  });
+
+  it("keeps calibration status off when pressure_calibration.enabled is false after import", async () => {
+    const user = userEvent.setup();
+
+    render(<App />);
+
+    const yamlText = [
+      "schema_version: 1",
+      "pressure_calibration:",
+      "  enabled: false",
+      "  service_brake:",
+      "    BCP0: 25.0",
+      "    point_pair_mode: aw3_aw0",
+      "    points:",
+      "      - load_group: AW0",
+      "        brake_type: FSB",
+      "        k_for_code: 1014.0",
+      "      - load_group: AW3",
+      "        brake_type: FB",
+      "        k_for_code: 1204.0",
+      ""
+    ].join("\n");
+    const file = new File([yamlText], "example_calibration_disabled.yaml", { type: "text/yaml" });
+    await user.upload(screen.getByLabelText("上传 YAML 文件"), file);
+
+    await screen.findByRole("heading", { level: 2, name: "导入摘要" });
+    await user.type(screen.getByRole("textbox", { name: "项目名称" }), "标定状态项目");
+    await user.type(screen.getByRole("textbox", { name: "项目编号" }), "IMP-CAL-001");
+    await user.click(screen.getByRole("button", { name: "保存并查看总览" }));
+    await screen.findByRole("heading", { level: 2, name: /上海机场线制动项目|标定状态项目/ });
+
+    await user.click(screen.getByRole("button", { name: "修订" }));
+    await user.click(screen.getByRole("button", { name: /^标定/ }));
+    expect(screen.getByText("当前状态：未配置")).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "启用 pressure_calibration" }));
+    expect(screen.getByText("当前状态：已配置")).toBeInTheDocument();
+  });
+
+  it("disables wizard entry after import while keeping home entry available", async () => {
+    const user = userEvent.setup();
+
+    render(<App />);
+
+    const file = new File(["schema_version: 1\nv0: 80\n"], "example_disable_wizard.yaml", {
+      type: "text/yaml"
+    });
+    await user.upload(screen.getByLabelText("上传 YAML 文件"), file);
+    await screen.findByRole("heading", { level: 2, name: "导入摘要" });
+    await user.type(screen.getByRole("textbox", { name: "项目名称" }), "禁用初始化项目");
+    await user.type(screen.getByRole("textbox", { name: "项目编号" }), "IMP-DISABLE-001");
+    await user.click(screen.getByRole("button", { name: "保存并查看总览" }));
+    await screen.findByRole("heading", { level: 2, name: /上海机场线制动项目|禁用初始化项目/ });
+
+    expect(screen.getByRole("button", { name: "新建初始化" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "首页 / 项目列表" })).toBeEnabled();
+  });
+
+  it("allows toggling parking enabled state after importing disabled parking section", async () => {
+    const user = userEvent.setup();
+
+    render(<App />);
+
+    const yamlText = [
+      "schema_version: 1",
+      "parking_brake_check:",
+      "  enabled: false",
+      "  required_safety_margin: 1.2",
+      "  static_friction_coefficient: 0.35",
+      "  n_parking_cylinders_by_car: 4",
+      ""
+    ].join("\n");
+    const file = new File([yamlText], "example_parking_disabled.yaml", { type: "text/yaml" });
+    await user.upload(screen.getByLabelText("上传 YAML 文件"), file);
+    await screen.findByRole("heading", { level: 2, name: "导入摘要" });
+    await user.type(screen.getByRole("textbox", { name: "项目名称" }), "停放开关项目");
+    await user.type(screen.getByRole("textbox", { name: "项目编号" }), "IMP-PARK-002");
+    await user.click(screen.getByRole("button", { name: "保存并查看总览" }));
+    await screen.findByRole("heading", { level: 2, name: /上海机场线制动项目|停放开关项目/ });
+
+    await user.click(screen.getByRole("button", { name: "修订" }));
+    await user.click(screen.getByRole("button", { name: /^停放校核/ }));
+    expect(screen.getByText("当前状态：未补充停放校核")).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "启用 parking_brake_check" }));
+    expect(screen.getByText("当前状态：已补充停放校核")).toBeInTheDocument();
+  });
+
+  it("prompts before leaving workbench with unsaved changes and respects cancel or confirm", async () => {
+    const user = userEvent.setup();
+    const confirmSpy = vi.spyOn(window, "confirm");
+    confirmSpy.mockReturnValueOnce(false).mockReturnValueOnce(true);
+
+    render(<App />);
+    await user.click(screen.getByRole("button", { name: "配置工作台" }));
+    await user.click(screen.getByRole("button", { name: /^运行基础配置 \/ 技术条件/ }));
+    await user.clear(screen.getByRole("spinbutton", { name: "最高速度 v0 (km/h)" }));
+    await user.type(screen.getByRole("spinbutton", { name: "最高速度 v0 (km/h)" }), "81");
+
+    await user.click(screen.getByRole("button", { name: "首页 / 项目列表" }));
+    expect(confirmSpy).toHaveBeenCalled();
+    expect(screen.getByRole("heading", { level: 2, name: "配置工作台" })).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "首页 / 项目列表" }));
+    expect(screen.getByRole("button", { name: "新建项目计算" })).toBeInTheDocument();
+
+    confirmSpy.mockRestore();
+  });
+
+  it("updates JSON live, highlights last changed path, and refreshes YAML text after save", async () => {
+    const user = userEvent.setup();
+
+    render(<App />);
+
+    const yamlText = [
+      "schema_version: 1",
+      "v0: 80",
+      "pressure_calibration:",
+      "  enabled: false",
+      "parking_brake_check:",
+      "  enabled: false",
+      ""
+    ].join("\n");
+    const file = new File([yamlText], "example_live_json.yaml", { type: "text/yaml" });
+    await user.upload(screen.getByLabelText("上传 YAML 文件"), file);
+    await screen.findByRole("heading", { level: 2, name: "导入摘要" });
+    await user.type(screen.getByRole("textbox", { name: "项目名称" }), "联动项目");
+    await user.type(screen.getByRole("textbox", { name: "项目编号" }), "IMP-LIVE-001");
+    await user.click(screen.getByRole("button", { name: "保存并查看总览" }));
+    await screen.findByRole("heading", { level: 2, name: /上海机场线制动项目|联动项目/ });
+
+    await user.click(screen.getByRole("button", { name: "修订" }));
+    await user.click(screen.getByRole("button", { name: /^标定/ }));
+    await user.click(screen.getByRole("button", { name: "启用 pressure_calibration" }));
+
+    const highlighted = screen.getByTestId("last-changed-path");
+    expect(highlighted).toHaveTextContent("\"enabled\": true");
+    expect(highlighted).toHaveStyle({ color: "rgb(198, 69, 50)" });
+
+    await user.click(screen.getByRole("button", { name: "保存" }));
+    await user.click(screen.getByRole("button", { name: "YAML" }));
+    expect(screen.getAllByText(/pressure_calibration:/).length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/enabled: true/).length).toBeGreaterThan(0);
   });
 });

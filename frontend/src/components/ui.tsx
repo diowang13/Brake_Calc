@@ -72,7 +72,15 @@ export function InfoCard({ title, body }: { title: string; body: string }): Reac
   );
 }
 
-export function SupplementCard({ title, body }: { title: string; body: string }): ReactElement {
+export function SupplementCard({
+  title,
+  body,
+  onClick,
+}: {
+  title: string;
+  body: string;
+  onClick?: () => void;
+}): ReactElement {
   return (
     <div
       style={{
@@ -89,7 +97,7 @@ export function SupplementCard({ title, body }: { title: string; body: string })
         <p style={{ margin: 0, color: "#6b6259", lineHeight: 1.6 }}>{body}</p>
       </div>
       <div>
-        <button type="button" style={secondaryActionStyle}>
+        <button type="button" style={secondaryActionStyle} onClick={onClick}>
           点击补录
         </button>
       </div>
@@ -254,7 +262,21 @@ export function SelectFieldBlock({
   );
 }
 
-export function PointRow({ index, unitLabel }: { index: number; unitLabel: string }): ReactElement {
+export function PointRow({
+  index,
+  unitLabel,
+  pressureValue,
+  massValue,
+  onChangePressure,
+  onChangeMass,
+}: {
+  index: number;
+  unitLabel: string;
+  pressureValue?: string;
+  massValue?: string;
+  onChangePressure?: (value: string) => void;
+  onChangeMass?: (value: string) => void;
+}): ReactElement {
   return (
     <div
       style={{
@@ -266,8 +288,8 @@ export function PointRow({ index, unitLabel }: { index: number; unitLabel: strin
     >
       <h4 style={{ margin: "0 0 12px" }}>{`特征点 ${index}`}</h4>
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px" }}>
-        <FieldBlock label="压力 (kPa)" />
-        <FieldBlock label={unitLabel} />
+        <FieldBlock label="压力 (kPa)" value={pressureValue} onChange={onChangePressure} />
+        <FieldBlock label={unitLabel} value={massValue} onChange={onChangeMass} />
       </div>
     </div>
   );
@@ -491,12 +513,36 @@ export function ProjectRow({
   );
 }
 
-export function ActiveInfoTabs(): ReactElement {
+export function ActiveInfoTabs({
+  activeTab,
+  onChangeTab,
+}: {
+  activeTab: "description" | "errors" | "yaml";
+  onChangeTab: (tab: "description" | "errors" | "yaml") => void;
+}): ReactElement {
   return (
     <div style={{ display: "flex", gap: "8px", marginBottom: "14px", flexWrap: "wrap" }}>
-      <span style={activeTabStyle}>说明</span>
-      <span style={inactiveTabStyle}>错误</span>
-      <span style={inactiveTabStyle}>YAML</span>
+      <button
+        type="button"
+        style={activeTab === "description" ? activeTabStyle : inactiveTabStyle}
+        onClick={() => onChangeTab("description")}
+      >
+        说明
+      </button>
+      <button
+        type="button"
+        style={activeTab === "errors" ? activeTabStyle : inactiveTabStyle}
+        onClick={() => onChangeTab("errors")}
+      >
+        错误
+      </button>
+      <button
+        type="button"
+        style={activeTab === "yaml" ? activeTabStyle : inactiveTabStyle}
+        onClick={() => onChangeTab("yaml")}
+      >
+        YAML
+      </button>
     </div>
   );
 }

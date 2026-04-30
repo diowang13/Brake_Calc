@@ -14,7 +14,7 @@ import {
   shellStyle
 } from "./app/styles";
 import { screens, type ScreenKey } from "./app/screens";
-import type { LoadConfigResult } from "./contracts/config";
+import type { ImportYamlResult, LoadConfigResult, SupplementPresence } from "./contracts/config";
 import type { Report } from "./contracts/report";
 import { HomePage } from "./pages/HomePage";
 import { ImportSummaryPage } from "./pages/ImportSummaryPage";
@@ -174,6 +174,55 @@ function getDefaultBogieRows(): BogieControllerRow[] {
   ];
 }
 
+function toRecord(value: unknown): Record<string, unknown> | null {
+  return typeof value === "object" && value !== null ? (value as Record<string, unknown>) : null;
+}
+
+function toYamlScalar(value: unknown): string {
+  if (typeof value === "string") {
+    return value;
+  }
+  if (typeof value === "number" || typeof value === "boolean") {
+    return String(value);
+  }
+  if (value === null || value === undefined) {
+    return "null";
+  }
+  return String(value);
+}
+
+function serializeYaml(value: unknown, indent = 0): string[] {
+  const pad = " ".repeat(indent);
+  if (Array.isArray(value)) {
+    if (value.length === 0) {
+      return [`${pad}[]`];
+    }
+    return value.flatMap((item) => {
+      if (typeof item === "object" && item !== null) {
+        const child = serializeYaml(item, indent + 2);
+        const [first, ...rest] = child;
+        return [`${pad}- ${first.trimStart()}`, ...rest];
+      }
+      return [`${pad}- ${toYamlScalar(item)}`];
+    });
+  }
+  if (typeof value === "object" && value !== null) {
+    const entries = Object.entries(value as Record<string, unknown>).filter(
+      ([, entryValue]) => entryValue !== undefined
+    );
+    if (entries.length === 0) {
+      return [`${pad}{}`];
+    }
+    return entries.flatMap(([key, entryValue]) => {
+      if (typeof entryValue === "object" && entryValue !== null) {
+        return [`${pad}${key}:`, ...serializeYaml(entryValue, indent + 2)];
+      }
+      return [`${pad}${key}: ${toYamlScalar(entryValue)}`];
+    });
+  }
+  return [`${pad}${toYamlScalar(value)}`];
+}
+
 export function App(): ReactElement {
   const [activeScreen, setActiveScreen] = useState<ScreenKey>("home");
   const [loadInputMode, setLoadInputMode] = useState<"car" | "bogie">("car");
@@ -209,12 +258,148 @@ export function App(): ReactElement {
   const [importProjectName, setImportProjectName] = useState("");
   const [importProjectCode, setImportProjectCode] = useState("");
   const [importYamlText, setImportYamlText] = useState("schema_version: 1\nv0: 80\n");
+  const [importResult, setImportResult] = useState<ImportYamlResult | null>(null);
+  const [hasImportedConfig, setHasImportedConfig] = useState(false);
+  const [hasUnsavedWorkbenchChanges, setHasUnsavedWorkbenchChanges] = useState(false);
+  const [importSubmitError, setImportSubmitError] = useState<string | null>(null);
+  const [isImportSubmitting, setIsImportSubmitting] = useState(false);
+  const [yamlSupplementPresence, setYamlSupplementPresence] = useState<SupplementPresence>({
+    hasParkingBrakeCheck: false,
+    hasPressureCalibration: false,
+    hasElectricBrake: false,
+  });
+
+  const applyImportedVehicleConfig = (formState: Record<string, unknown> | null): void => {
+    if (formState === null) {
+      return;
+    }
+    const controllerType = formState.controller_type;
+    if (controllerType === "car" || controllerType === "bogie") {
+      setControllerConfigType(controllerType);
+    }
+    const vehicleConfig = toRecord(formState.vehicle_config);
+    if (vehicleConfig === null) {
+      return;
+    }
+    const cars = Array.isArray(vehicleConfig.cars) ? vehicleConfig.cars : null;
+    const bogies = Array.isArray(vehicleConfig.bogies) ? vehicleConfig.bogies : null;
+    if (controllerType !== "car" && controllerType !== "bogie") {
+      if (bogies !== null && bogies.length > 0) {
+        setControllerConfigType("bogie");
+      } else if (cars !== null && cars.length > 0) {
+        setControllerConfigType("car");
+      }
+    }
+    if (cars !== null) {
+      const rows = cars
+        .map((item) => toRecord(item))
+        .filter((item) => item !== null)
+        .map((item) => ({
+          name: String(item.name ?? ""),
+          type:
+            item.car_type === "powered_car" || item.car_type === "trailer_car"
+              ? item.car_type
+              : null,
+        }))
+        .filter((item): item is CarControllerRow => item.type !== null);
+      if (rows.length > 0) {
+        setCarControllerRows(rows);
+      }
+    }
+    if (bogies !== null) {
+      const rows = bogies
+        .map((item) => toRecord(item))
+        .filter((item) => item !== null)
+        .map((item) => ({
+          name: String(item.name ?? ""),
+          type:
+            item.bogie_type === "powered_bogie" || item.bogie_type === "trailer_bogie"
+              ? item.bogie_type
+              : null,
+        }))
+        .filter((item): item is BogieControllerRow => item.type !== null);
+      if (rows.length > 0) {
+        setBogieControllerRows(rows);
+      }
+    }
+  };
   const currentScreen = screens.find((screen) => screen.key === activeScreen) ?? screens[0];
 
-  const handleEnterWorkbenchFromImportSummary = async (): Promise<void> => {
+  const parseEnabledFromYaml = (yamlText: string, sectionName: string): boolean | null => {
+    const lines = yamlText.split(/\r?\n/);
+    let inSection = false;
+    let sectionIndent = 0;
+    for (const line of lines) {
+      const sectionMatch = line.match(/^(\s*)([A-Za-z0-9_]+)\s*:\s*$/);
+      if (sectionMatch !== null) {
+        const indent = sectionMatch[1].length;
+        const key = sectionMatch[2];
+        if (key === sectionName) {
+          inSection = true;
+          sectionIndent = indent;
+          continue;
+        }
+        if (inSection && indent <= sectionIndent) {
+          return null;
+        }
+      }
+      if (!inSection) {
+        continue;
+      }
+      if (line.trim().length === 0) {
+        continue;
+      }
+      const enabledMatch = line.match(/^\s*enabled\s*:\s*(true|false)\s*$/i);
+      if (enabledMatch !== null) {
+        return enabledMatch[1].toLowerCase() === "true";
+      }
+      if (/^\S/.test(line) || line.match(/^(\s*)[A-Za-z0-9_]+\s*:\s*$/)?.[1].length === sectionIndent) {
+        return null;
+      }
+    }
+    return null;
+  };
+
+  const deriveSupplementPresenceFromYaml = (yamlText: string): SupplementPresence => ({
+    hasParkingBrakeCheck: parseEnabledFromYaml(yamlText, "parking_brake_check") ?? false,
+    hasPressureCalibration: parseEnabledFromYaml(yamlText, "pressure_calibration") ?? false,
+    hasElectricBrake: parseEnabledFromYaml(yamlText, "electric_brake") ?? false,
+  });
+
+  const deriveSupplementPresence = (formState: Record<string, unknown> | null): SupplementPresence => {
+    const parking =
+      typeof formState?.parking_brake_check === "object" &&
+      formState?.parking_brake_check !== null &&
+      typeof (formState.parking_brake_check as { enabled?: unknown }).enabled === "boolean" &&
+      (formState.parking_brake_check as { enabled: boolean }).enabled;
+    const calibration =
+      typeof formState?.pressure_calibration === "object" &&
+      formState?.pressure_calibration !== null &&
+      typeof (formState.pressure_calibration as { enabled?: unknown }).enabled === "boolean" &&
+      (formState.pressure_calibration as { enabled: boolean }).enabled;
+    const electric =
+      typeof formState?.electric_brake === "object" &&
+      formState?.electric_brake !== null &&
+      typeof (formState.electric_brake as { enabled?: unknown }).enabled === "boolean" &&
+      (formState.electric_brake as { enabled: boolean }).enabled;
+    return {
+      hasParkingBrakeCheck: parking,
+      hasPressureCalibration: calibration,
+      hasElectricBrake: electric,
+    };
+  };
+
+  const handleSaveAndViewOverviewFromImportSummary = async (): Promise<void> => {
+    setIsImportSubmitting(true);
+    setImportSubmitError(null);
     try {
       const now = new Date().toISOString();
       const imported = await importYaml(importYamlText);
+      setImportResult(imported);
+      if (imported.form_state === null) {
+        setImportSubmitError("导入失败：后端未返回可回填的 form_state，请检查 YAML 或后端服务状态。");
+        return;
+      }
       const saved = await saveConfig({
         project: {
           project_name: importProjectName,
@@ -229,8 +414,17 @@ export function App(): ReactElement {
         created_at: now,
       });
       setActiveInputConfigId(saved.input_config_id);
-    } catch {}
-    setActiveScreen("workbench");
+      const loaded = await loadConfig(saved.input_config_id);
+      setOverviewData(loaded);
+      applyImportedVehicleConfig(loaded.form_state);
+      setHasImportedConfig(true);
+      setActiveScreen("overview");
+    } catch (error) {
+      const detail = error instanceof Error ? error.message : "unknown_error";
+      setImportSubmitError(`保存失败：${detail}`);
+    } finally {
+      setIsImportSubmitting(false);
+    }
   };
 
   useEffect(() => {
@@ -245,6 +439,7 @@ export function App(): ReactElement {
       .then((result) => {
         if (!isCancelled) {
           setOverviewData(result);
+          applyImportedVehicleConfig(result.form_state);
         }
       })
       .catch(() => {
@@ -303,7 +498,30 @@ export function App(): ReactElement {
         : generateBogieRows(nextPoweredCount, nextTrailerCount)
     );
     setActiveWorkbenchSection("requirements");
+    setHasImportedConfig(false);
+    setHasUnsavedWorkbenchChanges(false);
     setActiveScreen("workbench");
+  };
+
+  const handleOpenWorkbenchSectionFromOverview = (section: WorkbenchSectionKey): void => {
+    setActiveWorkbenchSection(section);
+    setHasImportedConfig(true);
+    setHasUnsavedWorkbenchChanges(false);
+    setActiveScreen("workbench");
+  };
+
+  const navigateToScreen = (screen: ScreenKey): void => {
+    if (screen === activeScreen) {
+      return;
+    }
+    if (activeScreen === "workbench" && hasUnsavedWorkbenchChanges) {
+      const shouldLeave = window.confirm("当前有未保存改动，确认离开吗？");
+      if (!shouldLeave) {
+        return;
+      }
+      setHasUnsavedWorkbenchChanges(false);
+    }
+    setActiveScreen(screen);
   };
 
   const pageContent = (() => {
@@ -312,6 +530,15 @@ export function App(): ReactElement {
         <HomePage
           onCreateProject={() => setActiveScreen("wizard")}
           onOpenProject={() => setActiveScreen("overview")}
+          onImportYamlFile={(yamlText) => {
+            setImportYamlText(yamlText);
+            setYamlSupplementPresence(deriveSupplementPresenceFromYaml(yamlText));
+            setImportSubmitError(null);
+            importYaml(yamlText)
+              .then((result) => setImportResult(result))
+              .catch(() => setImportResult(null));
+            setActiveScreen("import-summary");
+          }}
         />
       );
     }
@@ -338,7 +565,15 @@ export function App(): ReactElement {
     }
 
     if (activeScreen === "overview") {
-      return <OverviewPage onViewResult={() => setActiveScreen("result")} overviewData={overviewData} />;
+      return (
+        <OverviewPage
+          onViewResult={() => setActiveScreen("result")}
+          onRevise={() => handleOpenWorkbenchSectionFromOverview("requirements")}
+          onSupplementParking={() => handleOpenWorkbenchSectionFromOverview("parking")}
+          onSupplementCalibration={() => handleOpenWorkbenchSectionFromOverview("calibration")}
+          overviewData={overviewData}
+        />
+      );
     }
 
     if (activeScreen === "workbench") {
@@ -367,7 +602,25 @@ export function App(): ReactElement {
           onChangeSection={setActiveWorkbenchSection}
           onChangeCarControllerRows={setCarControllerRows}
           onChangeBogieControllerRows={setBogieControllerRows}
-          onBackToOverview={() => setActiveScreen("overview")}
+          onBackToOverview={() => navigateToScreen("overview")}
+          onDirtyChange={setHasUnsavedWorkbenchChanges}
+          onSaveDraft={(draft) => {
+            const yamlLines = serializeYaml(draft);
+            setImportYamlText(`${yamlLines.join("\n")}\n`);
+            setOverviewData((current) =>
+              current === null
+                ? current
+                : {
+                    ...current,
+                    form_state: draft,
+                    yaml_text: `${yamlLines.join("\n")}\n`,
+                  }
+            );
+          }}
+          importedYamlText={importYamlText}
+          importedFormState={overviewData?.form_state ?? importResult?.form_state ?? null}
+          importedErrors={overviewData?.errors ?? importResult?.errors ?? []}
+          hasImportedConfig={hasImportedConfig}
         />
       );
     }
@@ -387,14 +640,27 @@ export function App(): ReactElement {
     if (activeScreen === "import-summary") {
       return (
         <ImportSummaryPage
-          onEnterWorkbench={handleEnterWorkbenchFromImportSummary}
+          onSaveAndViewOverview={handleSaveAndViewOverviewFromImportSummary}
           onViewOverview={() => setActiveScreen("overview")}
           projectName={importProjectName}
           projectCode={importProjectCode}
           onChangeProjectName={setImportProjectName}
           onChangeProjectCode={setImportProjectCode}
           yamlText={importYamlText}
-          onChangeYamlText={setImportYamlText}
+          onChangeYamlText={(yamlText) => {
+            setImportYamlText(yamlText);
+            setYamlSupplementPresence(deriveSupplementPresenceFromYaml(yamlText));
+            setImportSubmitError(null);
+          }}
+          importValid={importResult?.valid ?? null}
+          importErrors={importResult?.errors ?? []}
+          supplementPresence={
+            importResult?.form_state !== null && importResult?.form_state !== undefined
+              ? deriveSupplementPresence(importResult.form_state)
+              : yamlSupplementPresence
+          }
+          submitError={importSubmitError}
+          isSubmitting={isImportSubmitting}
         />
       );
     }
@@ -440,13 +706,15 @@ export function App(): ReactElement {
         >
           {screens.map((screen) => {
             const isActive = screen.key === activeScreen;
+            const isDisabled = screen.key === "wizard" && hasImportedConfig;
 
             return (
               <button
                 key={screen.key}
                 type="button"
-                onClick={() => setActiveScreen(screen.key)}
+                onClick={() => navigateToScreen(screen.key)}
                 style={isActive ? primaryActionStyle : inactiveTabStyle}
+                disabled={isDisabled}
               >
                 {screen.label}
               </button>

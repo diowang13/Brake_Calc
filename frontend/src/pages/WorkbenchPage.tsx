@@ -1,4 +1,4 @@
-import { useMemo, useState, type ReactElement } from "react";
+import { useEffect, useMemo, useState, type ReactElement } from "react";
 
 import {
   ghostActionStyle,
@@ -86,6 +86,7 @@ export type WorkbenchSectionKey =
   | "electric";
 
 type CalibrationMode = "aw3_aw0" | "aw3_aw2";
+type ValidationErrorItem = { path: string; message: string };
 
 export function WorkbenchPage({
   loadInputMode,
@@ -111,7 +112,13 @@ export function WorkbenchPage({
   onChangeSection,
   onChangeCarControllerRows,
   onChangeBogieControllerRows,
-  onBackToOverview
+  onBackToOverview,
+  onDirtyChange,
+  onSaveDraft,
+  importedYamlText,
+  importedFormState,
+  importedErrors,
+  hasImportedConfig,
 }: {
   loadInputMode: "car" | "bogie";
   controllerConfigType: "car" | "bogie";
@@ -137,7 +144,38 @@ export function WorkbenchPage({
   onChangeCarControllerRows: (rows: CarControllerRow[]) => void;
   onChangeBogieControllerRows: (rows: BogieControllerRow[]) => void;
   onBackToOverview: () => void;
+  onDirtyChange: (dirty: boolean) => void;
+  onSaveDraft: (draft: Record<string, unknown>) => void;
+  importedYamlText: string;
+  importedFormState: Record<string, unknown> | null;
+  importedErrors: ValidationErrorItem[];
+  hasImportedConfig: boolean;
 }): ReactElement {
+  const toRecord = (value: unknown): Record<string, unknown> | null =>
+    typeof value === "object" && value !== null ? (value as Record<string, unknown>) : null;
+  const getNestedStringText = (root: unknown, path: string[]): string => {
+    let cursor: unknown = root;
+    for (const key of path) {
+      const record = toRecord(cursor);
+      if (record === null || !(key in record)) {
+        return "";
+      }
+      cursor = record[key];
+    }
+    return typeof cursor === "string" || typeof cursor === "number" ? String(cursor) : "";
+  };
+  const getNestedNumberText = (root: unknown, path: string[]): string => {
+    let cursor: unknown = root;
+    for (const key of path) {
+      const record = toRecord(cursor);
+      if (record === null || !(key in record)) {
+        return "";
+      }
+      cursor = record[key];
+    }
+    return typeof cursor === "number" ? String(cursor) : "";
+  };
+
   const [v0Value, setV0Value] = useState("");
   const [fsbMeanValue, setFsbMeanValue] = useState("");
   const [fsbT1Value, setFsbT1Value] = useState("");
@@ -160,6 +198,298 @@ export function WorkbenchPage({
   const [emergencyCalibrationMode, setEmergencyCalibrationMode] = useState<CalibrationMode>("aw3_aw0");
   const [servicePointOneBrakeType, setServicePointOneBrakeType] = useState<"FSB" | "FB">("FSB");
   const [servicePointTwoBrakeType, setServicePointTwoBrakeType] = useState<"FSB" | "FB">("FB");
+  const [massAw0PoweredValue, setMassAw0PoweredValue] = useState("");
+  const [massAw0TrailerValue, setMassAw0TrailerValue] = useState("");
+  const [massAw3PoweredValue, setMassAw3PoweredValue] = useState("");
+  const [massAw3TrailerValue, setMassAw3TrailerValue] = useState("");
+  const [bogieWeightPoweredValue, setBogieWeightPoweredValue] = useState("");
+  const [bogieWeightTrailerValue, setBogieWeightTrailerValue] = useState("");
+  const [airSpringKValue, setAirSpringKValue] = useState("");
+  const [airSpringBValue, setAirSpringBValue] = useState("");
+  const [airSpringPoint1PressureValue, setAirSpringPoint1PressureValue] = useState("");
+  const [airSpringPoint1MassValue, setAirSpringPoint1MassValue] = useState("");
+  const [airSpringPoint2PressureValue, setAirSpringPoint2PressureValue] = useState("");
+  const [airSpringPoint2MassValue, setAirSpringPoint2MassValue] = useState("");
+  const [airSpringPoint3PressureValue, setAirSpringPoint3PressureValue] = useState("");
+  const [airSpringPoint3MassValue, setAirSpringPoint3MassValue] = useState("");
+  const [mechScValue, setMechScValue] = useState("");
+  const [mechXiValue, setMechXiValue] = useState("");
+  const [mechLiValue, setMechLiValue] = useState("");
+  const [mechEtaIValue, setMechEtaIValue] = useState("");
+  const [mechLoValue, setMechLoValue] = useState("");
+  const [mechEtaOValue, setMechEtaOValue] = useState("");
+  const [mechFs1Value, setMechFs1Value] = useState("");
+  const [mechFs2Value, setMechFs2Value] = useState("");
+  const [mechDwValue, setMechDwValue] = useState("");
+  const [mechRfValue, setMechRfValue] = useState("");
+  const [parkingEnabled, setParkingEnabled] = useState(false);
+  const [parkingRequiredSafetyMarginValue, setParkingRequiredSafetyMarginValue] = useState("");
+  const [parkingStaticFrictionCoefficientValue, setParkingStaticFrictionCoefficientValue] = useState("");
+  const [parkingCylindersByCarValue, setParkingCylindersByCarValue] = useState("");
+  const [parkingWindSpeedMaxValue, setParkingWindSpeedMaxValue] = useState("");
+  const [parkingWindResistanceCoefficientValue, setParkingWindResistanceCoefficientValue] = useState("");
+  const [parkingGradeAw0Value, setParkingGradeAw0Value] = useState("");
+  const [parkingGradeAw2Value, setParkingGradeAw2Value] = useState("");
+  const [parkingGradeAw3Value, setParkingGradeAw3Value] = useState("");
+  const [parkingFpValue, setParkingFpValue] = useState("");
+  const [parkingFs1Value, setParkingFs1Value] = useState("");
+  const [parkingFs2Value, setParkingFs2Value] = useState("");
+  const [parkingLpiValue, setParkingLpiValue] = useState("");
+  const [parkingEtaPiValue, setParkingEtaPiValue] = useState("");
+  const [parkingLoValue, setParkingLoValue] = useState("");
+  const [parkingEtaOValue, setParkingEtaOValue] = useState("");
+  const [pressureCalibrationEnabled, setPressureCalibrationEnabled] = useState(false);
+  const [lastChangedPath, setLastChangedPath] = useState<string | null>(null);
+  const [activeInfoTab, setActiveInfoTab] = useState<"description" | "errors" | "yaml">(
+    hasImportedConfig ? "yaml" : "description"
+  );
+
+  const sectionErrorPrefixes: Record<WorkbenchSectionKey, string[]> = {
+    requirements: ["v0", "V_list", "requirement", "response_time", "brake_types", "adhesion"],
+    "vehicle-config": ["vehicle_config", "controller_type", "n_bogies_by_controller", "n_springs_by_controller", "n_cylinders_by_controller"],
+    "load-air-spring": ["mass_params", "air_spring", "load_groups"],
+    "base-brake": ["mech_params"],
+    parking: ["parking_brake_check"],
+    calibration: ["pressure_calibration"],
+    electric: ["electric_brake"],
+  };
+
+  const getSectionErrors = (section: WorkbenchSectionKey): ValidationErrorItem[] => {
+    const prefixes = sectionErrorPrefixes[section];
+    return importedErrors.filter((error) => prefixes.some((prefix) => error.path.startsWith(prefix)));
+  };
+
+  const getStatusLabel = (section: WorkbenchSectionKey): string => {
+    const errors = getSectionErrors(section);
+    if (errors.length > 0) {
+      return `${errors.length} 项错误`;
+    }
+    const root = importedFormState;
+    const has = (path: string[]): boolean => getNestedStringText(root, path).trim().length > 0;
+    const hasObject = (path: string[]): boolean => {
+      let cursor: unknown = root;
+      for (const key of path) {
+        const record = toRecord(cursor);
+        if (record === null || !(key in record)) return false;
+        cursor = record[key];
+      }
+      return typeof cursor === "object" && cursor !== null;
+    };
+    const isEnabled = (path: string[]): boolean => {
+      let cursor: unknown = root;
+      for (const key of path) {
+        const record = toRecord(cursor);
+        if (record === null || !(key in record)) return false;
+        cursor = record[key];
+      }
+      return typeof cursor === "boolean" && cursor;
+    };
+
+    if (section === "requirements") {
+      return has(["v0"]) && has(["requirement", "FSB", "value"]) && has(["requirement", "EB", "value"])
+        ? "已补充"
+        : "待完善";
+    }
+    if (section === "vehicle-config") return hasObject(["vehicle_config"]) ? "已补充" : "待完善";
+    if (section === "load-air-spring")
+      return hasObject(["mass_params"]) && hasObject(["air_spring"]) ? "已补充" : "待完善";
+    if (section === "base-brake") return hasObject(["mech_params"]) ? "已补充" : "待完善";
+    if (section === "parking") return isEnabled(["parking_brake_check", "enabled"]) ? "已补充" : "未补充";
+    if (section === "calibration")
+      return isEnabled(["pressure_calibration", "enabled"]) ? "已补充" : "未补充";
+    return isEnabled(["electric_brake", "enabled"]) ? "已补充" : "未补充";
+  };
+
+  const sectionDescriptionMap: Record<WorkbenchSectionKey, string> = {
+    requirements: "本章用于确认主制动技术条件：速度、FSB/EB目标、响应时间、全局黏着限制。",
+    "vehicle-config": "本章用于确认车辆与控制器实例映射关系，确保编组口径一致。",
+    "load-air-spring": "本章用于确认载荷质量、转向架重量与空簧特性输入口径。",
+    "base-brake": "本章用于确认基础机械参数与制动缸模型口径。",
+    parking: "本章用于补录停放校核配置与环境条件。",
+    calibration: "本章用于补录压力标定点与模式。",
+    electric: "本章用于补录电制动特性（V1不参与主制动计算）。",
+  };
+
+  useEffect(() => {
+    if (importedFormState === null) {
+      return;
+    }
+    setV0Value(getNestedStringText(importedFormState, ["v0"]));
+    setFsbMeanValue(getNestedStringText(importedFormState, ["requirement", "FSB", "value"]));
+    setFsbT1Value(getNestedStringText(importedFormState, ["response_time", "FSB", "t1"]));
+    setFsbImpulseRateValue(
+      getNestedStringText(importedFormState, ["response_time", "FSB", "impulse_rate"])
+    );
+    const ebMode = getNestedStringText(importedFormState, ["requirement", "EB", "mode"]);
+    if (ebMode === "a_mean" || ebMode === "distance") {
+      onChangeEmergencyRequirementMode(ebMode);
+    }
+    setEbMeanValue(
+      ebMode === "a_mean" ? getNestedStringText(importedFormState, ["requirement", "EB", "value"]) : ""
+    );
+    setEbDistanceValue(
+      ebMode === "distance"
+        ? getNestedStringText(importedFormState, ["requirement", "EB", "value"])
+        : ""
+    );
+    setEbT1Value(getNestedStringText(importedFormState, ["response_time", "EB", "t1"]));
+    setEbT2Value(getNestedStringText(importedFormState, ["response_time", "EB", "t2"]));
+    setMuLimitValue(getNestedStringText(importedFormState, ["adhesion", "mu_limit"]));
+    const allocation = getNestedStringText(importedFormState, ["allocation_strategy"]);
+    if (allocation === "equal_wear" || allocation === "equal_adhesion") {
+      setAllocationStrategy(allocation);
+    }
+    const vListRaw = toRecord(importedFormState)?.V_list;
+    if (Array.isArray(vListRaw)) {
+      const v0 = getNestedStringText(importedFormState, ["v0"]);
+      const speeds = vListRaw
+        .filter((item) => typeof item === "number" || typeof item === "string")
+        .map((item) => String(item))
+        .filter((value) => value !== v0);
+      setSpeedChecks(speeds);
+    }
+    const brakeTypesRaw = toRecord(importedFormState)?.brake_types;
+    if (Array.isArray(brakeTypesRaw)) {
+      const ratios = brakeTypesRaw
+        .map((item) => toRecord(item))
+        .filter((item) => item !== null)
+        .filter((item) => item.source === "ratio_of_FSB")
+        .map((item) => {
+          const ratioValue = item.ratio;
+          const ratioPercent =
+            typeof ratioValue === "number" ? String(Math.round(ratioValue * 100)) : "50";
+          return { name: String(item.name ?? "holding"), ratioPercent };
+        });
+      if (ratios.length > 0) {
+        setRatioBrakes(ratios);
+      }
+      const hasFb = brakeTypesRaw
+        .map((item) => toRecord(item))
+        .some((item) => item !== null && String(item.name ?? "") === "FB");
+      onChangeFastBrakeEnabled(hasFb);
+    }
+    setMassAw0PoweredValue(
+      getNestedNumberText(importedFormState, ["mass_params", "powered_bogie", "mass_static", "AW0"])
+    );
+    setMassAw0TrailerValue(
+      getNestedNumberText(importedFormState, ["mass_params", "trailer_bogie", "mass_static", "AW0"])
+    );
+    setMassAw3PoweredValue(
+      getNestedNumberText(importedFormState, ["mass_params", "powered_bogie", "mass_static", "AW3"])
+    );
+    setMassAw3TrailerValue(
+      getNestedNumberText(importedFormState, ["mass_params", "trailer_bogie", "mass_static", "AW3"])
+    );
+    setBogieWeightPoweredValue(
+      getNestedNumberText(importedFormState, ["mass_params", "powered_bogie", "bogie_weight"])
+    );
+    setBogieWeightTrailerValue(
+      getNestedNumberText(importedFormState, ["mass_params", "trailer_bogie", "bogie_weight"])
+    );
+    setAirSpringKValue(
+      getNestedNumberText(importedFormState, ["air_spring", "powered_bogie", "airspring_k"])
+    );
+    setAirSpringBValue(
+      getNestedNumberText(importedFormState, ["air_spring", "powered_bogie", "airspring_b"])
+    );
+    const airSpringRoot = toRecord(importedFormState.air_spring);
+    const airSpringByType =
+      toRecord(airSpringRoot?.powered_bogie) ?? toRecord(airSpringRoot?.trailer_bogie);
+    const airSpringMode = airSpringByType?.mode;
+    if (airSpringMode === "fitted_from_points" || airSpringMode === "explicit_linear") {
+      onChangeAirSpringInputMode(airSpringMode);
+    }
+    const pointsRaw = Array.isArray(airSpringByType?.points) ? airSpringByType.points : [];
+    const normalizePoint = (point: unknown): { pressure: string; mass: string } => {
+      if (Array.isArray(point)) {
+        const pressure = typeof point[0] === "number" || typeof point[0] === "string" ? String(point[0]) : "";
+        const mass = typeof point[1] === "number" || typeof point[1] === "string" ? String(point[1]) : "";
+        return { pressure, mass };
+      }
+      const record = toRecord(point);
+      if (record !== null) {
+        const pressureValue = record.pressure_kpa;
+        const massValue = record.sprung_mass_by_spring_ton;
+        return {
+          pressure:
+            typeof pressureValue === "number" || typeof pressureValue === "string"
+              ? String(pressureValue)
+              : "",
+          mass: typeof massValue === "number" || typeof massValue === "string" ? String(massValue) : "",
+        };
+      }
+      return { pressure: "", mass: "" };
+    };
+    const point1 = normalizePoint(pointsRaw[0]);
+    const point2 = normalizePoint(pointsRaw[1]);
+    const point3 = normalizePoint(pointsRaw[2]);
+    setAirSpringPoint1PressureValue(point1.pressure);
+    setAirSpringPoint1MassValue(point1.mass);
+    setAirSpringPoint2PressureValue(point2.pressure);
+    setAirSpringPoint2MassValue(point2.mass);
+    setAirSpringPoint3PressureValue(point3.pressure);
+    setAirSpringPoint3MassValue(point3.mass);
+    const mechParams = toRecord(importedFormState.mech_params);
+    const cylinderType = mechParams?.cylinder_type;
+    if (cylinderType === "tread_cylinder" || cylinderType === "caliper_cylinder") {
+      onChangeBaseBrakeCylinderType(cylinderType);
+    }
+    setMechScValue(getNestedStringText(importedFormState, ["mech_params", "Sc"]));
+    setMechXiValue(getNestedStringText(importedFormState, ["mech_params", "xi"]));
+    setMechLiValue(getNestedStringText(importedFormState, ["mech_params", "Li"]));
+    setMechEtaIValue(getNestedStringText(importedFormState, ["mech_params", "eta_i"]));
+    setMechLoValue(getNestedStringText(importedFormState, ["mech_params", "Lo"]));
+    setMechEtaOValue(getNestedStringText(importedFormState, ["mech_params", "eta_o"]));
+    setMechFs1Value(getNestedStringText(importedFormState, ["mech_params", "Fs1"]));
+    setMechFs2Value(getNestedStringText(importedFormState, ["mech_params", "Fs2"]));
+    setMechDwValue(getNestedStringText(importedFormState, ["mech_params", "Dw"]));
+    setMechRfValue(getNestedStringText(importedFormState, ["mech_params", "Rf"]));
+    const parking = toRecord(importedFormState.parking_brake_check);
+    setParkingEnabled(parking?.enabled === true);
+    setParkingRequiredSafetyMarginValue(
+      getNestedStringText(importedFormState, ["parking_brake_check", "required_safety_margin"])
+    );
+    setParkingStaticFrictionCoefficientValue(
+      getNestedStringText(importedFormState, ["parking_brake_check", "static_friction_coefficient"])
+    );
+    setParkingCylindersByCarValue(
+      getNestedStringText(importedFormState, ["parking_brake_check", "n_parking_cylinders_by_car"])
+    );
+    setParkingWindSpeedMaxValue(
+      getNestedStringText(importedFormState, ["parking_brake_check", "environment", "wind_speed_max"])
+    );
+    setParkingWindResistanceCoefficientValue(
+      getNestedStringText(importedFormState, [
+        "parking_brake_check",
+        "environment",
+        "wind_resistance_coefficient",
+      ])
+    );
+    setParkingGradeAw0Value(
+      getNestedStringText(importedFormState, ["parking_brake_check", "environment", "grade_by_load_group", "AW0"])
+    );
+    setParkingGradeAw2Value(
+      getNestedStringText(importedFormState, ["parking_brake_check", "environment", "grade_by_load_group", "AW2"])
+    );
+    setParkingGradeAw3Value(
+      getNestedStringText(importedFormState, ["parking_brake_check", "environment", "grade_by_load_group", "AW3"])
+    );
+    setParkingFpValue(getNestedStringText(importedFormState, ["parking_brake_check", "cylinder", "Fp"]));
+    setParkingFs1Value(getNestedStringText(importedFormState, ["parking_brake_check", "cylinder", "Fs1"]));
+    setParkingFs2Value(getNestedStringText(importedFormState, ["parking_brake_check", "cylinder", "Fs2"]));
+    setParkingLpiValue(getNestedStringText(importedFormState, ["parking_brake_check", "cylinder", "Lpi"]));
+    setParkingEtaPiValue(getNestedStringText(importedFormState, ["parking_brake_check", "cylinder", "eta_pi"]));
+    setParkingLoValue(getNestedStringText(importedFormState, ["parking_brake_check", "cylinder", "Lo"]));
+    setParkingEtaOValue(getNestedStringText(importedFormState, ["parking_brake_check", "cylinder", "eta_o"]));
+    const pressureCalibration = toRecord(importedFormState.pressure_calibration);
+    setPressureCalibrationEnabled(pressureCalibration?.enabled === true);
+  }, [
+    importedFormState,
+    onChangeAirSpringInputMode,
+    onChangeBaseBrakeCylinderType,
+    onChangeEmergencyRequirementMode,
+    onChangeFastBrakeEnabled,
+  ]);
 
   const compactSpeedBlockStyle = {
     width: "25%",
@@ -265,6 +595,12 @@ export function WorkbenchPage({
   const shouldShowFieldFeedback = (fieldKey: string): boolean => submitAttempted || touchedFields[fieldKey] === true;
   const handleAttemptSubmit = (): void => {
     setSubmitAttempted(true);
+    onDirtyChange(false);
+  };
+  const handleSave = (): void => {
+    setSubmitAttempted(true);
+    onSaveDraft(liveFormState);
+    onDirtyChange(false);
   };
 
   const updateSpeedCheck = (index: number, value: string): void => {
@@ -296,11 +632,450 @@ export function WorkbenchPage({
     });
   };
 
+  const yamlFormStateMismatchMessages = useMemo(() => {
+    const root = toRecord(importedFormState);
+    const hasTopLevelYamlKey = (key: string): boolean => {
+      const pattern = new RegExp(`(^|\\n)\\s*${key}\\s*:`, "m");
+      return pattern.test(importedYamlText);
+    };
+    const checks: Array<{ key: string; label: string }> = [
+      { key: "controller_type", label: "controller_type" },
+      { key: "vehicle_config", label: "vehicle_config" },
+      { key: "air_spring", label: "air_spring" },
+      { key: "mech_params", label: "mech_params" },
+    ];
+    return checks
+      .filter((item) => hasTopLevelYamlKey(item.key) && (root === null || !(item.key in root)))
+      .map(
+        (item) =>
+          `字段 ${item.label} 在 YAML 中存在，但未进入 form_state。请检查导入校验/归一化链路或当前版本数据来源。`
+      );
+  }, [importedFormState, importedYamlText]);
+
+  const inferPathFromAriaLabel = (label: string): string | null => {
+    const exactMap: Record<string, string> = {
+      "最高速度 v0 (km/h)": "v0",
+      "最大常用制动平均减速度要求 (m/s²)": "requirement.FSB.value",
+      "冲击率 impulse_rate (m/s³)": "response_time.FSB.impulse_rate",
+      "紧急制动平均减速度要求 (m/s²)": "requirement.EB.value",
+      "紧急制动距离要求 (m)": "requirement.EB.value",
+      "紧急制动响应时间 t2 (s)": "response_time.EB.t2",
+      "黏着利用限制 mu_limit (-)": "adhesion.mu_limit",
+      "AW0 / 动车称重（整车）": "mass_params.powered_bogie.mass_static.AW0",
+      "AW0 / 拖车称重（整车）": "mass_params.trailer_bogie.mass_static.AW0",
+      "AW3 / 动车称重（整车）": "mass_params.powered_bogie.mass_static.AW3",
+      "AW3 / 拖车称重（整车）": "mass_params.trailer_bogie.mass_static.AW3",
+      "动车转向架重量 bogie_weight (ton)": "mass_params.powered_bogie.bogie_weight",
+      "拖车转向架重量 bogie_weight (ton)": "mass_params.trailer_bogie.bogie_weight",
+      "空簧线性系数 k (kPa/ton)": "air_spring.powered_bogie.airspring_k",
+      "空簧截距 b (kPa)": "air_spring.powered_bogie.airspring_b",
+      "活塞有效面积 Sc (m²)": "mech_params.Sc",
+      "摩擦系数 xi (-)": "mech_params.xi",
+      "单元内部倍率 Li (-)": "mech_params.Li",
+      "单元内部效率 eta_i (-)": "mech_params.eta_i",
+      "外部倍率 Lo (-)": "mech_params.Lo",
+      "外部效率 eta_o (-)": "mech_params.eta_o",
+      "单元复位力 Fs1 (kN)":
+        activeSection === "parking" ? "parking_brake_check.cylinder.Fs1" : "mech_params.Fs1",
+      "单元复位力 Fs2 (kN)":
+        activeSection === "parking" ? "parking_brake_check.cylinder.Fs2" : "mech_params.Fs2",
+      "轮径 Dw (m)": "mech_params.Dw",
+      "摩擦半径 Rf (m)": "mech_params.Rf",
+      "要求安全系数 required_safety_margin (-)": "parking_brake_check.required_safety_margin",
+      "静摩擦系数 xi0 / static_friction_coefficient (-)": "parking_brake_check.static_friction_coefficient",
+      "每车停放缸数量 n_parking_cylinders_by_car (-)": "parking_brake_check.n_parking_cylinders_by_car",
+      "最大风速 wind_speed_max (m/s)": "parking_brake_check.environment.wind_speed_max",
+      "风阻系数 wind_resistance_coefficient (-)": "parking_brake_check.environment.wind_resistance_coefficient",
+      "AW0 坡度 grade_by_load_group.AW0 (‰)": "parking_brake_check.environment.grade_by_load_group.AW0",
+      "AW2 坡度 grade_by_load_group.AW2 (‰)": "parking_brake_check.environment.grade_by_load_group.AW2",
+      "AW3 坡度 grade_by_load_group.AW3 (‰)": "parking_brake_check.environment.grade_by_load_group.AW3",
+      "停放弹簧输出力 Fp (kN)": "parking_brake_check.cylinder.Fp",
+      "停放缸内部倍率 Lpi (-)": "parking_brake_check.cylinder.Lpi",
+      "停放缸内部效率 eta_pi (-)": "parking_brake_check.cylinder.eta_pi",
+      "执行机构外部倍率 Lo (-)":
+        activeSection === "parking" ? "parking_brake_check.cylinder.Lo" : "mech_params.Lo",
+      "执行机构外部效率 eta_o (-)": "parking_brake_check.cylinder.eta_o",
+    };
+    if (label in exactMap) {
+      return exactMap[label];
+    }
+    if (label.startsWith("待校核速度 ")) {
+      return "V_list";
+    }
+    if (label === "压力 (kPa)") {
+      return "air_spring.powered_bogie.points";
+    }
+    if (label === "质量 (ton)" || label === "质量 (kN)") {
+      return "air_spring.powered_bogie.points";
+    }
+    if (label.startsWith("制动类型代号")) {
+      return "brake_types";
+    }
+    if (label.startsWith("相对最大常用制动比例")) {
+      return "brake_types";
+    }
+    if (label.startsWith("实例名称 ")) {
+      return controllerConfigType === "car" ? "vehicle_config.cars" : "vehicle_config.bogies";
+    }
+    if (label === "制动类型") {
+      return "pressure_calibration.service_brake.points";
+    }
+    return null;
+  };
+
+  const liveFormState = useMemo<Record<string, unknown>>(() => {
+    const root = toRecord(importedFormState) ?? {};
+    const toNumberOrUndefined = (value: string): number | undefined =>
+      value.trim() === "" ? undefined : Number(value);
+    const v0Number = toNumberOrUndefined(v0Value);
+    const extraSpeeds = speedChecks
+      .map((value) => toNumberOrUndefined(value))
+      .filter((value): value is number => value !== undefined);
+    const vList = v0Number === undefined ? extraSpeeds : [...extraSpeeds, v0Number];
+    const requirementEbValue =
+      emergencyRequirementMode === "a_mean"
+        ? toNumberOrUndefined(ebMeanValue)
+        : toNumberOrUndefined(ebDistanceValue);
+    const ratioBrakeTypes = ratioBrakes
+      .map((item) => ({
+        name: item.name.trim(),
+        source: "ratio_of_FSB" as const,
+        ratio: toNumberOrUndefined(item.ratioPercent) === undefined ? undefined : Number(item.ratioPercent) / 100,
+      }))
+      .filter((item) => item.name.length > 0 && item.ratio !== undefined);
+    const airSpringPoints = [
+      [toNumberOrUndefined(airSpringPoint1PressureValue), toNumberOrUndefined(airSpringPoint1MassValue)],
+      [toNumberOrUndefined(airSpringPoint2PressureValue), toNumberOrUndefined(airSpringPoint2MassValue)],
+      [toNumberOrUndefined(airSpringPoint3PressureValue), toNumberOrUndefined(airSpringPoint3MassValue)],
+    ]
+      .filter((point) => point[0] !== undefined && point[1] !== undefined)
+      .map((point) => ({
+        pressure_kpa: point[0] as number,
+        sprung_mass_by_spring_ton: point[1] as number,
+      }));
+    return {
+      ...root,
+      v0: v0Number ?? root.v0,
+      V_list: vList.length > 0 ? vList : root.V_list,
+      allocation_strategy: allocationStrategy,
+      brake_types: [
+        { name: "FSB", source: "kinematic" },
+        { name: "EB", source: "kinematic" },
+        ...(fastBrakeEnabled ? [{ name: "FB", source: "kinematic" as const }] : []),
+        ...ratioBrakeTypes,
+      ],
+      requirement: {
+        FSB: {
+          mode: "a_mean",
+          value: toNumberOrUndefined(fsbMeanValue),
+        },
+        EB: {
+          mode: emergencyRequirementMode,
+          value: requirementEbValue,
+        },
+      },
+      response_time: {
+        FSB: {
+          t1: toNumberOrUndefined(fsbT1Value),
+          impulse_rate: toNumberOrUndefined(fsbImpulseRateValue),
+        },
+        EB: {
+          t1: toNumberOrUndefined(ebT1Value),
+          t2: toNumberOrUndefined(ebT2Value),
+        },
+      },
+      adhesion: {
+        ...(toRecord(root.adhesion) ?? {}),
+        mu_limit: toNumberOrUndefined(muLimitValue),
+      },
+      mass_params: {
+        ...(toRecord(root.mass_params) ?? {}),
+        powered_bogie: {
+          ...(toRecord(toRecord(root.mass_params)?.powered_bogie) ?? {}),
+          mass_static: {
+            ...(toRecord(toRecord(toRecord(root.mass_params)?.powered_bogie)?.mass_static) ?? {}),
+            AW0: toNumberOrUndefined(massAw0PoweredValue),
+            AW3: toNumberOrUndefined(massAw3PoweredValue),
+          },
+          bogie_weight: toNumberOrUndefined(bogieWeightPoweredValue),
+        },
+        trailer_bogie: {
+          ...(toRecord(toRecord(root.mass_params)?.trailer_bogie) ?? {}),
+          mass_static: {
+            ...(toRecord(toRecord(toRecord(root.mass_params)?.trailer_bogie)?.mass_static) ?? {}),
+            AW0: toNumberOrUndefined(massAw0TrailerValue),
+            AW3: toNumberOrUndefined(massAw3TrailerValue),
+          },
+          bogie_weight: toNumberOrUndefined(bogieWeightTrailerValue),
+        },
+      },
+      air_spring: {
+        ...(toRecord(root.air_spring) ?? {}),
+        powered_bogie: {
+          ...(toRecord(toRecord(root.air_spring)?.powered_bogie) ?? {}),
+          mode: airSpringInputMode,
+          airspring_k: toNumberOrUndefined(airSpringKValue),
+          airspring_b: toNumberOrUndefined(airSpringBValue),
+          points: airSpringPoints,
+        },
+      },
+      mech_params: {
+        ...(toRecord(root.mech_params) ?? {}),
+        cylinder_type: baseBrakeCylinderType,
+        Sc: toNumberOrUndefined(mechScValue),
+        xi: toNumberOrUndefined(mechXiValue),
+        Li: toNumberOrUndefined(mechLiValue),
+        eta_i: toNumberOrUndefined(mechEtaIValue),
+        Lo: toNumberOrUndefined(mechLoValue),
+        eta_o: toNumberOrUndefined(mechEtaOValue),
+        Fs1: toNumberOrUndefined(mechFs1Value),
+        Fs2: toNumberOrUndefined(mechFs2Value),
+        Dw: toNumberOrUndefined(mechDwValue),
+        Rf: toNumberOrUndefined(mechRfValue),
+      },
+      pressure_calibration: {
+        ...(toRecord(root.pressure_calibration) ?? {}),
+        enabled: pressureCalibrationEnabled,
+      },
+      parking_brake_check: {
+        ...(toRecord(root.parking_brake_check) ?? {}),
+        enabled: parkingEnabled,
+        required_safety_margin:
+          parkingRequiredSafetyMarginValue.trim() === ""
+            ? undefined
+            : Number(parkingRequiredSafetyMarginValue),
+        static_friction_coefficient:
+          parkingStaticFrictionCoefficientValue.trim() === ""
+            ? undefined
+            : Number(parkingStaticFrictionCoefficientValue),
+        n_parking_cylinders_by_car:
+          parkingCylindersByCarValue.trim() === "" ? undefined : Number(parkingCylindersByCarValue),
+        environment: {
+          ...(toRecord(toRecord(root.parking_brake_check)?.environment) ?? {}),
+          wind_speed_max: toNumberOrUndefined(parkingWindSpeedMaxValue),
+          wind_resistance_coefficient: toNumberOrUndefined(parkingWindResistanceCoefficientValue),
+          grade_by_load_group: {
+            ...(toRecord(toRecord(toRecord(root.parking_brake_check)?.environment)?.grade_by_load_group) ?? {}),
+            AW0: toNumberOrUndefined(parkingGradeAw0Value),
+            AW2: toNumberOrUndefined(parkingGradeAw2Value),
+            AW3: toNumberOrUndefined(parkingGradeAw3Value),
+          },
+        },
+        cylinder: {
+          ...(toRecord(toRecord(root.parking_brake_check)?.cylinder) ?? {}),
+          Fp: toNumberOrUndefined(parkingFpValue),
+          Fs1: toNumberOrUndefined(parkingFs1Value),
+          Fs2: toNumberOrUndefined(parkingFs2Value),
+          Lpi: toNumberOrUndefined(parkingLpiValue),
+          eta_pi: toNumberOrUndefined(parkingEtaPiValue),
+          Lo: toNumberOrUndefined(parkingLoValue),
+          eta_o: toNumberOrUndefined(parkingEtaOValue),
+        },
+      },
+    };
+  }, [
+    airSpringBValue,
+    airSpringInputMode,
+    airSpringKValue,
+    airSpringPoint1MassValue,
+    airSpringPoint1PressureValue,
+    airSpringPoint2MassValue,
+    airSpringPoint2PressureValue,
+    airSpringPoint3MassValue,
+    airSpringPoint3PressureValue,
+    allocationStrategy,
+    baseBrakeCylinderType,
+    bogieWeightPoweredValue,
+    bogieWeightTrailerValue,
+    ebDistanceValue,
+    ebMeanValue,
+    ebT1Value,
+    ebT2Value,
+    emergencyRequirementMode,
+    fastBrakeEnabled,
+    fsbImpulseRateValue,
+    fsbMeanValue,
+    fsbT1Value,
+    importedFormState,
+    massAw0PoweredValue,
+    massAw0TrailerValue,
+    massAw3PoweredValue,
+    massAw3TrailerValue,
+    mechDwValue,
+    mechEtaIValue,
+    mechEtaOValue,
+    mechFs1Value,
+    mechFs2Value,
+    mechLiValue,
+    mechLoValue,
+    mechRfValue,
+    mechScValue,
+    mechXiValue,
+    muLimitValue,
+    parkingCylindersByCarValue,
+    parkingEnabled,
+    parkingEtaOValue,
+    parkingEtaPiValue,
+    parkingFpValue,
+    parkingFs1Value,
+    parkingFs2Value,
+    parkingGradeAw0Value,
+    parkingGradeAw2Value,
+    parkingGradeAw3Value,
+    parkingLpiValue,
+    parkingLoValue,
+    parkingRequiredSafetyMarginValue,
+    parkingStaticFrictionCoefficientValue,
+    parkingWindResistanceCoefficientValue,
+    parkingWindSpeedMaxValue,
+    pressureCalibrationEnabled,
+    ratioBrakes,
+    speedChecks,
+    v0Value,
+  ]);
+
+  const highlightedJson = useMemo(() => {
+    const lines = JSON.stringify(liveFormState, null, 2).split("\n");
+    if (lastChangedPath === null) {
+      return lines.map((line) => ({ line, highlighted: false }));
+    }
+    const parts = lastChangedPath.split(".");
+    let depth = 0;
+    const stack: string[] = [];
+    let highlightIndex = -1;
+
+    for (let index = 0; index < lines.length; index += 1) {
+      const line = lines[index];
+      const trimmed = line.trim();
+
+      if (trimmed === "}" || trimmed === "}," || trimmed === "]" || trimmed === "],") {
+        while (stack.length > depth) {
+          stack.pop();
+        }
+        depth = Math.max(depth - 1, 0);
+        continue;
+      }
+
+      const keyMatch = trimmed.match(/^"([^"]+)":\s*(.*)$/);
+      if (keyMatch === null) {
+        continue;
+      }
+      const key = keyMatch[1];
+      const valuePortion = keyMatch[2];
+      const currentPath = [...stack.slice(0, depth), key];
+
+      if (currentPath.join(".") === lastChangedPath) {
+        highlightIndex = index;
+        break;
+      }
+
+      const opensObject = valuePortion === "{" || valuePortion === "[";
+      if (opensObject) {
+        stack[depth] = key;
+        depth += 1;
+      }
+    }
+
+    if (highlightIndex < 0) {
+      const fallbackKey = parts[parts.length - 1];
+      const fallbackPattern = `"${fallbackKey}"`;
+      highlightIndex = lines.findIndex((line) => line.includes(fallbackPattern));
+    }
+    return lines.map((line, index) => ({ line, highlighted: index === highlightIndex }));
+  }, [lastChangedPath, liveFormState]);
+
+  const highlightedLineIndex = useMemo(() => {
+    const index = highlightedJson.findIndex((item) => item.highlighted);
+    return index >= 0 ? index : null;
+  }, [highlightedJson]);
+
+  useEffect(() => {
+    if (highlightedLineIndex === null) {
+      return;
+    }
+    const target = document.querySelector(`[data-json-line="${highlightedLineIndex}"]`);
+    if (target instanceof HTMLElement && typeof target.scrollIntoView === "function") {
+      target.scrollIntoView({ block: "center", behavior: "smooth" });
+    }
+  }, [highlightedLineIndex]);
+
+  const effectiveControllerConfigType = useMemo<"car" | "bogie">(() => {
+    const root = toRecord(importedFormState);
+    const rawType = root?.controller_type;
+    if (rawType === "car" || rawType === "bogie") {
+      return rawType;
+    }
+    const vehicleConfig = toRecord(root?.vehicle_config);
+    if (Array.isArray(vehicleConfig?.bogies) && (vehicleConfig.bogies as unknown[]).length > 0) {
+      return "bogie";
+    }
+    if (Array.isArray(vehicleConfig?.cars) && (vehicleConfig.cars as unknown[]).length > 0) {
+      return "car";
+    }
+    return controllerConfigType;
+  }, [controllerConfigType, importedFormState]);
+
+  const importedTargetSummary = useMemo(() => {
+    if (!hasImportedConfig) {
+      return null;
+    }
+    const root = toRecord(importedFormState);
+    if (root === null) {
+      return null;
+    }
+    const vehicleConfig = toRecord(root.vehicle_config);
+    if (vehicleConfig === null) {
+      return null;
+    }
+    if (effectiveControllerConfigType === "car") {
+      const cars = Array.isArray(vehicleConfig.cars) ? vehicleConfig.cars : [];
+      let targetPowered = 0;
+      let targetTrailer = 0;
+      cars
+        .map((item) => toRecord(item))
+        .filter((item) => item !== null)
+        .forEach((item) => {
+          if (item.car_type === "powered_car") {
+            targetPowered += 1;
+          } else if (item.car_type === "trailer_car") {
+            targetTrailer += 1;
+          }
+        });
+      if (targetPowered === 0 && targetTrailer === 0) {
+        return null;
+      }
+      return {
+        targetPowered,
+        targetTrailer,
+      };
+    }
+    const bogies = Array.isArray(vehicleConfig.bogies) ? vehicleConfig.bogies : [];
+    let targetPowered = 0;
+    let targetTrailer = 0;
+    bogies
+      .map((item) => toRecord(item))
+      .filter((item) => item !== null)
+      .forEach((item) => {
+        if (item.bogie_type === "powered_bogie") {
+          targetPowered += 1;
+        } else if (item.bogie_type === "trailer_bogie") {
+          targetTrailer += 1;
+        }
+      });
+    if (targetPowered === 0 && targetTrailer === 0) {
+      return null;
+    }
+    return {
+      targetPowered,
+      targetTrailer,
+    };
+  }, [effectiveControllerConfigType, hasImportedConfig, importedFormState]);
+
   const vehicleCountSummary =
-    controllerConfigType === "car"
+    effectiveControllerConfigType === "car"
       ? {
-          targetPowered: targetPoweredCount,
-          targetTrailer: targetTrailerCount,
+          targetPowered: importedTargetSummary?.targetPowered ?? targetPoweredCount,
+          targetTrailer: importedTargetSummary?.targetTrailer ?? targetTrailerCount,
           currentPowered: carControllerRows.filter((row) => row.type === "powered_car").length,
           currentTrailer: carControllerRows.filter((row) => row.type === "trailer_car").length,
           poweredLabel: "动车",
@@ -308,8 +1083,10 @@ export function WorkbenchPage({
           scopeLabel: "车控：每个控制器对应 1 辆车 / 2 个转向架 / 4 个空簧 / 8 个制动缸"
         }
       : {
-          targetPowered: targetPoweredCount * 2 + targetMixedCount,
-          targetTrailer: targetTrailerCount * 2 + targetMixedCount,
+          targetPowered:
+            importedTargetSummary?.targetPowered ?? targetPoweredCount * 2 + targetMixedCount,
+          targetTrailer:
+            importedTargetSummary?.targetTrailer ?? targetTrailerCount * 2 + targetMixedCount,
           currentPowered: bogieControllerRows.filter((row) => row.type === "powered_bogie").length,
           currentTrailer: bogieControllerRows.filter((row) => row.type === "trailer_bogie").length,
           poweredLabel: "动架",
@@ -349,7 +1126,20 @@ export function WorkbenchPage({
   };
 
   return (
-    <div style={{ display: "grid", gap: "18px" }}>
+    <div
+      style={{ display: "grid", gap: "18px" }}
+      onChangeCapture={(event) => {
+        onDirtyChange(true);
+        const target = event.target as HTMLElement;
+        const label = target.getAttribute("aria-label");
+        if (typeof label === "string") {
+          const path = inferPathFromAriaLabel(label);
+          if (path !== null) {
+            setLastChangedPath(path);
+          }
+        }
+      }}
+    >
       <section style={panelStyle}>
         <div style={{ display: "flex", justifyContent: "space-between", gap: "16px" }}>
           <div>
@@ -365,7 +1155,7 @@ export function WorkbenchPage({
             <button type="button" style={ghostActionStyle}>
               下载 YAML
             </button>
-            <button type="button" style={secondaryActionStyle} onClick={handleAttemptSubmit}>
+            <button type="button" style={secondaryActionStyle} onClick={handleSave}>
               保存
             </button>
             <button type="button" style={primaryActionStyle} onClick={handleAttemptSubmit}>
@@ -388,25 +1178,25 @@ export function WorkbenchPage({
             items={[
               {
                 label: "运行基础配置 / 技术条件",
-                status: "已完成",
+                status: getStatusLabel("requirements"),
                 active: activeSection === "requirements",
                 onSelect: () => onChangeSection("requirements")
               },
               {
                 label: "车辆与控制器配置",
-                status: "待验收",
+                status: getStatusLabel("vehicle-config"),
                 active: activeSection === "vehicle-config",
                 onSelect: () => onChangeSection("vehicle-config")
               },
               {
                 label: "载荷与空簧",
-                status: "2 项待确认",
+                status: getStatusLabel("load-air-spring"),
                 active: activeSection === "load-air-spring",
                 onSelect: () => onChangeSection("load-air-spring")
               },
               {
                 label: "基础制动机械参数",
-                status: "1 项错误",
+                status: getStatusLabel("base-brake"),
                 active: activeSection === "base-brake",
                 onSelect: () => onChangeSection("base-brake")
               }
@@ -417,13 +1207,13 @@ export function WorkbenchPage({
             items={[
               {
                 label: "停放校核",
-                status: "未开始",
+                status: getStatusLabel("parking"),
                 active: activeSection === "parking",
                 onSelect: () => onChangeSection("parking")
               },
               {
                 label: "标定",
-                status: "未开始",
+                status: getStatusLabel("calibration"),
                 active: activeSection === "calibration",
                 onSelect: () => onChangeSection("calibration")
               }
@@ -452,7 +1242,10 @@ export function WorkbenchPage({
                     <FieldBlock
                       label="最大常用制动平均减速度要求 (m/s²)"
                       value={fsbMeanValue}
-                      onChange={setFsbMeanValue}
+                      onChange={(value) => {
+                        setFsbMeanValue(value);
+                        setLastChangedPath("requirement.FSB.value");
+                      }}
                       onBlur={() => markTouched("fsbMean")}
                       placeholder="例如 1.00"
                       inputMode="decimal"
@@ -461,7 +1254,10 @@ export function WorkbenchPage({
                     <FieldBlock
                       label="空走时间 t1 (s)"
                       value={fsbT1Value}
-                      onChange={setFsbT1Value}
+                      onChange={(value) => {
+                        setFsbT1Value(value);
+                        setLastChangedPath("response_time.FSB.t1");
+                      }}
                       onBlur={() => markTouched("fsbT1")}
                       placeholder="例如 0.70"
                       inputMode="decimal"
@@ -470,7 +1266,10 @@ export function WorkbenchPage({
                     <FieldBlock
                       label="冲击率 impulse_rate (m/s³)"
                       value={fsbImpulseRateValue}
-                      onChange={setFsbImpulseRateValue}
+                      onChange={(value) => {
+                        setFsbImpulseRateValue(value);
+                        setLastChangedPath("response_time.FSB.impulse_rate");
+                      }}
                       onBlur={() => markTouched("fsbImpulseRate")}
                       placeholder="例如 0.75"
                       inputMode="decimal"
@@ -497,7 +1296,10 @@ export function WorkbenchPage({
                     <FieldBlock
                       label="最高速度 v0 (km/h)"
                       value={v0Value}
-                      onChange={setV0Value}
+                      onChange={(value) => {
+                        setV0Value(value);
+                        setLastChangedPath("v0");
+                      }}
                       onBlur={() => markTouched("v0")}
                       placeholder="例如 120"
                       inputMode="numeric"
@@ -513,7 +1315,10 @@ export function WorkbenchPage({
                         <FieldBlock
                           label={`待校核速度 ${index + 1} (km/h)`}
                           value={value}
-                          onChange={(nextValue) => updateSpeedCheck(index, nextValue)}
+                          onChange={(nextValue) => {
+                            updateSpeedCheck(index, nextValue);
+                            setLastChangedPath("V_list");
+                          }}
                           onBlur={() => markTouched(`speed-${index}`)}
                           placeholder="例如 80"
                           inputMode="numeric"
@@ -551,12 +1356,18 @@ export function WorkbenchPage({
                     <TogglePill
                       label="按平均减速度录入"
                       active={emergencyRequirementMode === "a_mean"}
-                      onClick={() => onChangeEmergencyRequirementMode("a_mean")}
+                      onClick={() => {
+                        onChangeEmergencyRequirementMode("a_mean");
+                        setLastChangedPath("requirement.EB.mode");
+                      }}
                     />
                     <TogglePill
                       label="按制动距离录入"
                       active={emergencyRequirementMode === "distance"}
-                      onClick={() => onChangeEmergencyRequirementMode("distance")}
+                      onClick={() => {
+                        onChangeEmergencyRequirementMode("distance");
+                        setLastChangedPath("requirement.EB.mode");
+                      }}
                     />
                   </div>
                   <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px" }}>
@@ -567,7 +1378,14 @@ export function WorkbenchPage({
                           : "紧急制动距离要求 (m)"
                       }
                       value={emergencyRequirementMode === "a_mean" ? ebMeanValue : ebDistanceValue}
-                      onChange={emergencyRequirementMode === "a_mean" ? setEbMeanValue : setEbDistanceValue}
+                      onChange={(value) => {
+                        if (emergencyRequirementMode === "a_mean") {
+                          setEbMeanValue(value);
+                        } else {
+                          setEbDistanceValue(value);
+                        }
+                        setLastChangedPath("requirement.EB.value");
+                      }}
                       onBlur={() => markTouched("ebModeValue")}
                       placeholder={emergencyRequirementMode === "a_mean" ? "例如 1.10" : "例如 320"}
                       inputMode="decimal"
@@ -576,7 +1394,10 @@ export function WorkbenchPage({
                     <FieldBlock
                       label="空走时间 t1 (s)"
                       value={ebT1Value}
-                      onChange={setEbT1Value}
+                      onChange={(value) => {
+                        setEbT1Value(value);
+                        setLastChangedPath("response_time.EB.t1");
+                      }}
                       onBlur={() => markTouched("ebT1")}
                       placeholder="例如 0.40"
                       inputMode="decimal"
@@ -585,7 +1406,10 @@ export function WorkbenchPage({
                     <FieldBlock
                       label="紧急制动响应时间 t2 (s)"
                       value={ebT2Value}
-                      onChange={setEbT2Value}
+                      onChange={(value) => {
+                        setEbT2Value(value);
+                        setLastChangedPath("response_time.EB.t2");
+                      }}
                       onBlur={() => markTouched("ebT2")}
                       placeholder="例如 0.80"
                       inputMode="decimal"
@@ -744,7 +1568,7 @@ export function WorkbenchPage({
               <section style={panelStyle}>
                 <h4 style={{ marginTop: 0 }}>控制器实例列表</h4>
                 <p style={{ margin: "0 0 16px", color: "#6b6259", lineHeight: 1.6 }}>
-                  当前 BCU 类型：{controllerConfigType === "car" ? "车控" : "架控"}。这里仅调整实例名称和动/拖类型；控制器数量来自初始化编组，调整后需要核对总数。
+                  当前 BCU 类型：{effectiveControllerConfigType === "car" ? "车控" : "架控"}。这里仅调整实例名称和动/拖类型；控制器数量来自初始化编组，调整后需要核对总数。
                 </p>
                 <p style={{ margin: "0 0 16px", color: "#6b6259", lineHeight: 1.6 }}>
                   {vehicleCountSummary.scopeLabel}
@@ -758,7 +1582,7 @@ export function WorkbenchPage({
                   }}
                 >
                   <CountCard
-                    title="目标编组"
+                    title={hasImportedConfig ? "导入基准编组" : "目标编组"}
                     poweredLabel={vehicleCountSummary.poweredLabel}
                     poweredCount={vehicleCountSummary.targetPowered}
                     trailerLabel={vehicleCountSummary.trailerLabel}
@@ -771,7 +1595,7 @@ export function WorkbenchPage({
                     trailerLabel={vehicleCountSummary.trailerLabel}
                     trailerCount={vehicleCountSummary.currentTrailer}
                     tone={vehicleCountMatches ? "neutral" : "danger"}
-                    emphasizeCounts={controllerConfigType === "bogie" && hasMixedBogieVehicles}
+                    emphasizeCounts={effectiveControllerConfigType === "bogie" && hasMixedBogieVehicles}
                   />
                   <div
                     style={{
@@ -801,7 +1625,7 @@ export function WorkbenchPage({
                   </div>
                 </div>
                 <div style={{ display: "grid", gap: "12px" }}>
-                  {controllerConfigType === "car"
+                  {effectiveControllerConfigType === "car"
                     ? carControllerRows.map((row, index) => (
                         <div
                           key={`car-controller-${index}`}
@@ -905,10 +1729,26 @@ export function WorkbenchPage({
                   />
                 </div>
                 <div style={{ display: "grid", gap: "12px" }}>
-                  <FieldBlock label={`AW0 / ${loadInputMode === "car" ? "动车称重（整车）" : "动架称重"}`} />
-                  <FieldBlock label={`AW0 / ${loadInputMode === "car" ? "拖车称重（整车）" : "拖架称重"}`} />
-                  <FieldBlock label={`AW3 / ${loadInputMode === "car" ? "动车称重（整车）" : "动架称重"}`} />
-                  <FieldBlock label={`AW3 / ${loadInputMode === "car" ? "拖车称重（整车）" : "拖架称重"}`} />
+                  <FieldBlock
+                    label={`AW0 / ${loadInputMode === "car" ? "动车称重（整车）" : "动架称重"}`}
+                    value={massAw0PoweredValue}
+                    onChange={setMassAw0PoweredValue}
+                  />
+                  <FieldBlock
+                    label={`AW0 / ${loadInputMode === "car" ? "拖车称重（整车）" : "拖架称重"}`}
+                    value={massAw0TrailerValue}
+                    onChange={setMassAw0TrailerValue}
+                  />
+                  <FieldBlock
+                    label={`AW3 / ${loadInputMode === "car" ? "动车称重（整车）" : "动架称重"}`}
+                    value={massAw3PoweredValue}
+                    onChange={setMassAw3PoweredValue}
+                  />
+                  <FieldBlock
+                    label={`AW3 / ${loadInputMode === "car" ? "拖车称重（整车）" : "拖架称重"}`}
+                    value={massAw3TrailerValue}
+                    onChange={setMassAw3TrailerValue}
+                  />
                 </div>
               </section>
 
@@ -918,8 +1758,16 @@ export function WorkbenchPage({
                   `bogie_weight` 始终按单个转向架口径录入，本区同时承担车辆称重口径和架称重口径的关系说明。
                 </p>
                 <div style={{ display: "grid", gap: "12px" }}>
-                  <FieldBlock label="动车转向架重量 bogie_weight (ton)" />
-                  <FieldBlock label="拖车转向架重量 bogie_weight (ton)" />
+                  <FieldBlock
+                    label="动车转向架重量 bogie_weight (ton)"
+                    value={bogieWeightPoweredValue}
+                    onChange={setBogieWeightPoweredValue}
+                  />
+                  <FieldBlock
+                    label="拖车转向架重量 bogie_weight (ton)"
+                    value={bogieWeightTrailerValue}
+                    onChange={setBogieWeightTrailerValue}
+                  />
                 </div>
               </section>
 
@@ -972,9 +1820,30 @@ export function WorkbenchPage({
                 </div>
                 {airSpringInputMode === "fitted_from_points" ? (
                   <div style={{ display: "grid", gap: "12px" }}>
-                    <PointRow unitLabel={airSpringMassUnit === "ton" ? "质量 (ton)" : "质量 (kN)"} index={1} />
-                    <PointRow unitLabel={airSpringMassUnit === "ton" ? "质量 (ton)" : "质量 (kN)"} index={2} />
-                    <PointRow unitLabel={airSpringMassUnit === "ton" ? "质量 (ton)" : "质量 (kN)"} index={3} />
+                    <PointRow
+                      unitLabel={airSpringMassUnit === "ton" ? "质量 (ton)" : "质量 (kN)"}
+                      index={1}
+                      pressureValue={airSpringPoint1PressureValue}
+                      massValue={airSpringPoint1MassValue}
+                      onChangePressure={setAirSpringPoint1PressureValue}
+                      onChangeMass={setAirSpringPoint1MassValue}
+                    />
+                    <PointRow
+                      unitLabel={airSpringMassUnit === "ton" ? "质量 (ton)" : "质量 (kN)"}
+                      index={2}
+                      pressureValue={airSpringPoint2PressureValue}
+                      massValue={airSpringPoint2MassValue}
+                      onChangePressure={setAirSpringPoint2PressureValue}
+                      onChangeMass={setAirSpringPoint2MassValue}
+                    />
+                    <PointRow
+                      unitLabel={airSpringMassUnit === "ton" ? "质量 (ton)" : "质量 (kN)"}
+                      index={3}
+                      pressureValue={airSpringPoint3PressureValue}
+                      massValue={airSpringPoint3MassValue}
+                      onChangePressure={setAirSpringPoint3PressureValue}
+                      onChangeMass={setAirSpringPoint3MassValue}
+                    />
                   </div>
                 ) : (
                   <div style={{ display: "grid", gap: "16px" }}>
@@ -992,8 +1861,16 @@ export function WorkbenchPage({
                       </p>
                     </div>
                     <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px" }}>
-                      <FieldBlock label="空簧线性系数 k (kPa/ton)" />
-                      <FieldBlock label="空簧截距 b (kPa)" />
+                      <FieldBlock
+                        label="空簧线性系数 k (kPa/ton)"
+                        value={airSpringKValue}
+                        onChange={setAirSpringKValue}
+                      />
+                      <FieldBlock
+                        label="空簧截距 b (kPa)"
+                        value={airSpringBValue}
+                        onChange={setAirSpringBValue}
+                      />
                     </div>
                   </div>
                 )}
@@ -1044,14 +1921,14 @@ export function WorkbenchPage({
                     />
                   </div>
                   <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px" }}>
-                    <FieldBlock label="活塞有效面积 Sc (m²)" />
-                    <FieldBlock label="摩擦系数 xi (-)" />
-                    <FieldBlock label="单元内部倍率 Li (-)" />
-                    <FieldBlock label="单元内部效率 eta_i (-)" />
-                    <FieldBlock label="外部倍率 Lo (-)" />
-                    <FieldBlock label="外部效率 eta_o (-)" />
-                    <FieldBlock label="单元复位力 Fs1 (kN)" />
-                    <FieldBlock label="单元复位力 Fs2 (kN)" />
+                    <FieldBlock label="活塞有效面积 Sc (m²)" value={mechScValue} onChange={setMechScValue} />
+                    <FieldBlock label="摩擦系数 xi (-)" value={mechXiValue} onChange={setMechXiValue} />
+                    <FieldBlock label="单元内部倍率 Li (-)" value={mechLiValue} onChange={setMechLiValue} />
+                    <FieldBlock label="单元内部效率 eta_i (-)" value={mechEtaIValue} onChange={setMechEtaIValue} />
+                    <FieldBlock label="外部倍率 Lo (-)" value={mechLoValue} onChange={setMechLoValue} />
+                    <FieldBlock label="外部效率 eta_o (-)" value={mechEtaOValue} onChange={setMechEtaOValue} />
+                    <FieldBlock label="单元复位力 Fs1 (kN)" value={mechFs1Value} onChange={setMechFs1Value} />
+                    <FieldBlock label="单元复位力 Fs2 (kN)" value={mechFs2Value} onChange={setMechFs2Value} />
                   </div>
                 </div>
 
@@ -1066,8 +1943,8 @@ export function WorkbenchPage({
                   >
                     <h4 style={{ margin: "0 0 12px" }}>夹钳制动几何参数</h4>
                     <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px" }}>
-                      <FieldBlock label="轮径 Dw (m)" />
-                      <FieldBlock label="摩擦半径 Rf (m)" />
+                      <FieldBlock label="轮径 Dw (m)" value={mechDwValue} onChange={setMechDwValue} />
+                      <FieldBlock label="摩擦半径 Rf (m)" value={mechRfValue} onChange={setMechRfValue} />
                     </div>
                   </div>
                 ) : null}
@@ -1081,8 +1958,35 @@ export function WorkbenchPage({
               <p style={{ margin: "0 0 16px", color: "#6b6259", lineHeight: 1.6 }}>
                 本章作为后置补录章节，只录入 `parking_brake_check` 输入。`F_N_PB`、`F_PB` 和整列汇总结果在结果页查看。
               </p>
+              <div style={{ display: "flex", gap: "10px", flexWrap: "wrap", marginBottom: "16px" }}>
+                <TogglePill
+                  label="启用 parking_brake_check"
+                  active={parkingEnabled}
+                  onClick={() => {
+                    setParkingEnabled(true);
+                    onDirtyChange(true);
+                    setLastChangedPath("parking_brake_check.enabled");
+                  }}
+                />
+                <TogglePill
+                  label="停用 parking_brake_check"
+                  active={!parkingEnabled}
+                  onClick={() => {
+                    setParkingEnabled(false);
+                    onDirtyChange(true);
+                    setLastChangedPath("parking_brake_check.enabled");
+                  }}
+                />
+              </div>
               <div style={{ display: "grid", gridTemplateColumns: "repeat(2, 1fr)", gap: "14px", marginBottom: "16px" }}>
-                <InfoCard title="当前状态：未补充停放校核" body="当前版本尚未录入线路坡度和停放参数，运行结果中仅保留待补录状态。" />
+                <InfoCard
+                  title={parkingEnabled ? "当前状态：已补充停放校核" : "当前状态：未补充停放校核"}
+                  body={
+                    parkingEnabled
+                      ? "当前版本已录入停放校核配置与参数，运行后可在结果页查看校核结果。"
+                      : "当前版本尚未录入线路坡度和停放参数，运行结果中仅保留待补录状态。"
+                  }
+                />
                 <InfoCard title="补录提示" body="先补校核配置和环境条件，再确认停放缸输入参数，完成后重新运行并在结果页查看校核结果。" />
               </div>
               <div style={{ display: "grid", gap: "16px" }}>
@@ -1096,9 +2000,21 @@ export function WorkbenchPage({
                 >
                   <h4 style={{ margin: "0 0 12px" }}>校核配置</h4>
                   <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px" }}>
-                    <FieldBlock label="要求安全系数 required_safety_margin (-)" />
-                    <FieldBlock label="静摩擦系数 xi0 / static_friction_coefficient (-)" />
-                    <FieldBlock label="每车停放缸数量 n_parking_cylinders_by_car (-)" />
+                    <FieldBlock
+                      label="要求安全系数 required_safety_margin (-)"
+                      value={parkingRequiredSafetyMarginValue}
+                      onChange={setParkingRequiredSafetyMarginValue}
+                    />
+                    <FieldBlock
+                      label="静摩擦系数 xi0 / static_friction_coefficient (-)"
+                      value={parkingStaticFrictionCoefficientValue}
+                      onChange={setParkingStaticFrictionCoefficientValue}
+                    />
+                    <FieldBlock
+                      label="每车停放缸数量 n_parking_cylinders_by_car (-)"
+                      value={parkingCylindersByCarValue}
+                      onChange={setParkingCylindersByCarValue}
+                    />
                   </div>
                 </div>
 
@@ -1112,11 +2028,31 @@ export function WorkbenchPage({
                 >
                   <h4 style={{ margin: "0 0 12px" }}>环境条件</h4>
                   <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px" }}>
-                    <FieldBlock label="最大风速 wind_speed_max (m/s)" />
-                    <FieldBlock label="风阻系数 wind_resistance_coefficient (-)" />
-                    <FieldBlock label="AW0 坡度 grade_by_load_group.AW0 (‰)" />
-                    <FieldBlock label="AW2 坡度 grade_by_load_group.AW2 (‰)" />
-                    <FieldBlock label="AW3 坡度 grade_by_load_group.AW3 (‰)" />
+                    <FieldBlock
+                      label="最大风速 wind_speed_max (m/s)"
+                      value={parkingWindSpeedMaxValue}
+                      onChange={setParkingWindSpeedMaxValue}
+                    />
+                    <FieldBlock
+                      label="风阻系数 wind_resistance_coefficient (-)"
+                      value={parkingWindResistanceCoefficientValue}
+                      onChange={setParkingWindResistanceCoefficientValue}
+                    />
+                    <FieldBlock
+                      label="AW0 坡度 grade_by_load_group.AW0 (‰)"
+                      value={parkingGradeAw0Value}
+                      onChange={setParkingGradeAw0Value}
+                    />
+                    <FieldBlock
+                      label="AW2 坡度 grade_by_load_group.AW2 (‰)"
+                      value={parkingGradeAw2Value}
+                      onChange={setParkingGradeAw2Value}
+                    />
+                    <FieldBlock
+                      label="AW3 坡度 grade_by_load_group.AW3 (‰)"
+                      value={parkingGradeAw3Value}
+                      onChange={setParkingGradeAw3Value}
+                    />
                   </div>
                 </div>
 
@@ -1130,13 +2066,13 @@ export function WorkbenchPage({
                 >
                   <h4 style={{ margin: "0 0 12px" }}>停放缸参数</h4>
                   <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px" }}>
-                    <FieldBlock label="停放弹簧输出力 Fp (kN)" />
-                    <FieldBlock label="单元复位力 Fs1 (kN)" />
-                    <FieldBlock label="单元复位力 Fs2 (kN)" />
-                    <FieldBlock label="停放缸内部倍率 Lpi (-)" />
-                    <FieldBlock label="停放缸内部效率 eta_pi (-)" />
-                    <FieldBlock label="执行机构外部倍率 Lo (-)" />
-                    <FieldBlock label="执行机构外部效率 eta_o (-)" />
+                    <FieldBlock label="停放弹簧输出力 Fp (kN)" value={parkingFpValue} onChange={setParkingFpValue} />
+                    <FieldBlock label="单元复位力 Fs1 (kN)" value={parkingFs1Value} onChange={setParkingFs1Value} />
+                    <FieldBlock label="单元复位力 Fs2 (kN)" value={parkingFs2Value} onChange={setParkingFs2Value} />
+                    <FieldBlock label="停放缸内部倍率 Lpi (-)" value={parkingLpiValue} onChange={setParkingLpiValue} />
+                    <FieldBlock label="停放缸内部效率 eta_pi (-)" value={parkingEtaPiValue} onChange={setParkingEtaPiValue} />
+                    <FieldBlock label="执行机构外部倍率 Lo (-)" value={parkingLoValue} onChange={setParkingLoValue} />
+                    <FieldBlock label="执行机构外部效率 eta_o (-)" value={parkingEtaOValue} onChange={setParkingEtaOValue} />
                   </div>
                 </div>
               </div>
@@ -1149,10 +2085,30 @@ export function WorkbenchPage({
               <p style={{ margin: "0 0 16px", color: "#6b6259", lineHeight: 1.6 }}>
                 本页录入的是试验点驱动的实设系数，不是直接录入完整 k(f) 分段曲线。
               </p>
+              <div style={{ display: "flex", gap: "10px", flexWrap: "wrap", marginBottom: "16px" }}>
+                <TogglePill
+                  label="启用 pressure_calibration"
+                  active={pressureCalibrationEnabled}
+                  onClick={() => {
+                    setPressureCalibrationEnabled(true);
+                    onDirtyChange(true);
+                    setLastChangedPath("pressure_calibration.enabled");
+                  }}
+                />
+                <TogglePill
+                  label="停用 pressure_calibration"
+                  active={!pressureCalibrationEnabled}
+                  onClick={() => {
+                    setPressureCalibrationEnabled(false);
+                    onDirtyChange(true);
+                    setLastChangedPath("pressure_calibration.enabled");
+                  }}
+                />
+              </div>
               <div style={{ display: "grid", gap: "16px" }}>
                 <CalibrationConfigCard
                   title="常用控制系数标定"
-                  status="当前状态：未配置"
+                  status={pressureCalibrationEnabled ? "当前状态：已配置" : "当前状态：未配置"}
                   summary="常用与快速制动共用同一组 pressure_calibration.service_brake；先选择当前点对模式，再补录两条试验点。"
                   mode={serviceCalibrationMode}
                   onChangeMode={setServiceCalibrationMode}
@@ -1169,10 +2125,10 @@ export function WorkbenchPage({
                     setServicePointTwoBrakeType(value === "FB" ? "FB" : "FSB")
                   }
                 />
-                {controllerConfigType === "bogie" ? (
+                {effectiveControllerConfigType === "bogie" ? (
                   <CalibrationConfigCard
                     title="紧急控制系数标定"
-                    status="当前状态：未配置"
+                    status={pressureCalibrationEnabled ? "当前状态：已配置" : "当前状态：未配置"}
                     summary="紧急制动标定仅用于架控项目，对应 pressure_calibration.emergency_brake；每个试验点的 brake_type 固定为 EB。"
                     mode={emergencyCalibrationMode}
                     onChangeMode={setEmergencyCalibrationMode}
@@ -1257,11 +2213,77 @@ export function WorkbenchPage({
 
         <aside style={panelStyle}>
           <h3 style={{ marginTop: 0 }}>说明</h3>
-          <ActiveInfoTabs />
-          <div style={{ display: "grid", gap: "12px" }}>
-            <InfoCard title="当前章节说明" body="优先确认车辆称重和转向架参数的口径关系，再继续空簧特性输入。" />
-            <InfoCard title="待确认项" body="1. 录入口径切换；2. ton / kN 辅助换算；3. 基础机械参数错误回填。" />
-          </div>
+          <ActiveInfoTabs activeTab={activeInfoTab} onChangeTab={setActiveInfoTab} />
+          {activeInfoTab === "description" ? (
+            <div style={{ display: "grid", gap: "12px" }}>
+              <InfoCard title="当前章节说明" body={sectionDescriptionMap[activeSection]} />
+              <InfoCard title="待确认项" body={`当前章节状态：${getStatusLabel(activeSection)}。`} />
+            </div>
+          ) : null}
+          {activeInfoTab === "errors" ? (
+            getSectionErrors(activeSection).length > 0 ? (
+              <div style={{ display: "grid", gap: "8px" }}>
+                {getSectionErrors(activeSection).map((error, index) => (
+                  <InfoCard key={`${error.path}-${index}`} title={error.path} body={error.message} />
+                ))}
+              </div>
+            ) : (
+              <InfoCard title="错误" body="当前章节暂无校验错误。" />
+            )
+          ) : null}
+          {activeInfoTab === "yaml" ? (
+            <div style={{ display: "grid", gap: "12px" }}>
+              <InfoCard title="导入配置回显" body={hasImportedConfig ? "已显示导入 YAML 与 form_state。" : "当前没有导入配置，显示默认内容。"} />
+              {yamlFormStateMismatchMessages.length > 0 ? (
+                <div style={{ display: "grid", gap: "8px" }}>
+                  {yamlFormStateMismatchMessages.map((message, index) => (
+                    <InfoCard key={`yaml-form-mismatch-${index}`} title="YAML / form_state 不一致" body={message} />
+                  ))}
+                </div>
+              ) : null}
+              <div
+                style={{
+                  border: "1px solid #d5c9ba",
+                  borderRadius: "12px",
+                  background: "#fff",
+                  padding: "12px",
+                  fontFamily: "Consolas, monospace",
+                  fontSize: "12px",
+                  whiteSpace: "pre-wrap",
+                  wordBreak: "break-word",
+                  maxHeight: "220px",
+                  overflowY: "auto",
+                }}
+              >
+                {importedYamlText}
+              </div>
+              <div
+                style={{
+                  border: "1px solid #d5c9ba",
+                  borderRadius: "12px",
+                  background: "#fff",
+                  padding: "12px",
+                  fontFamily: "Consolas, monospace",
+                  fontSize: "12px",
+                  whiteSpace: "pre-wrap",
+                  wordBreak: "break-word",
+                  maxHeight: "220px",
+                  overflowY: "auto",
+                }}
+              >
+                {highlightedJson.map((item, index) => (
+                  <div
+                    key={`json-line-${index}`}
+                    data-json-line={index}
+                    data-testid={item.highlighted ? "last-changed-path" : undefined}
+                    style={item.highlighted ? { color: "#c64532", fontWeight: 700 } : undefined}
+                  >
+                    {item.line}
+                  </div>
+                ))}
+              </div>
+            </div>
+          ) : null}
         </aside>
       </div>
     </div>

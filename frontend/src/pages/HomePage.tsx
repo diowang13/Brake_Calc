@@ -1,4 +1,4 @@
-import type { ReactElement } from "react";
+import type { ChangeEvent, ReactElement } from "react";
 
 import {
   ghostActionStyle,
@@ -10,11 +10,27 @@ import { FieldBlock, ProjectRow } from "../components/ui";
 
 export function HomePage({
   onCreateProject,
-  onOpenProject
+  onOpenProject,
+  onImportYamlFile
 }: {
   onCreateProject: () => void;
   onOpenProject: () => void;
+  onImportYamlFile: (yamlText: string) => void;
 }): ReactElement {
+  const handleImportYamlFile = (event: ChangeEvent<HTMLInputElement>): void => {
+    const file = event.target.files?.[0];
+    if (file === undefined) {
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = () => {
+      const content = typeof reader.result === "string" ? reader.result : "";
+      onImportYamlFile(content);
+    };
+    reader.readAsText(file);
+    event.target.value = "";
+  };
+
   return (
     <div style={{ display: "grid", gap: "20px" }}>
       <section
@@ -58,9 +74,16 @@ export function HomePage({
         >
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
             <strong>列表筛选</strong>
-            <button type="button" style={ghostActionStyle}>
-              导入 YAML
-            </button>
+            <label style={{ ...ghostActionStyle, cursor: "pointer", display: "inline-block" }}>
+              上传 YAML
+              <input
+                type="file"
+                accept=".yaml,.yml,text/yaml,text/x-yaml"
+                aria-label="上传 YAML 文件"
+                onChange={handleImportYamlFile}
+                style={{ display: "none" }}
+              />
+            </label>
           </div>
           <FieldBlock label="项目名称 / 编号搜索" />
           <FieldBlock label="BCU 类型筛选" />

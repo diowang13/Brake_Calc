@@ -2,9 +2,10 @@ import type { ReactElement } from "react";
 
 import { panelStyle, primaryActionStyle, secondaryActionStyle } from "../app/styles";
 import { InfoCard } from "../components/ui";
+import type { SupplementPresence, ValidationErrorItem } from "../contracts/config";
 
 export function ImportSummaryPage({
-  onEnterWorkbench,
+  onSaveAndViewOverview,
   onViewOverview,
   projectName,
   projectCode,
@@ -12,8 +13,13 @@ export function ImportSummaryPage({
   onChangeProjectCode,
   yamlText,
   onChangeYamlText,
+  importValid,
+  importErrors,
+  supplementPresence,
+  submitError,
+  isSubmitting,
 }: {
-  onEnterWorkbench: () => void;
+  onSaveAndViewOverview: () => void;
   onViewOverview: () => void;
   projectName: string;
   projectCode: string;
@@ -21,9 +27,30 @@ export function ImportSummaryPage({
   onChangeProjectCode: (value: string) => void;
   yamlText: string;
   onChangeYamlText: (value: string) => void;
+  importValid: boolean | null;
+  importErrors: ValidationErrorItem[];
+  supplementPresence: SupplementPresence;
+  submitError: string | null;
+  isSubmitting: boolean;
 }): ReactElement {
   const canEnterWorkbench =
     projectName.trim().length > 0 && projectCode.trim().length > 0 && yamlText.trim().length > 0;
+
+  const supplementSummary = [
+    `停放校核：${supplementPresence.hasParkingBrakeCheck ? "已包含" : "未包含"}`,
+    `标定：${supplementPresence.hasPressureCalibration ? "已包含" : "未包含"}`,
+    `electric_brake：${supplementPresence.hasElectricBrake ? "已包含" : "未包含"}`,
+  ].join("，");
+  const warningSummary =
+    importErrors.length > 0
+      ? `存在 ${importErrors.length} 条导入警告：${importErrors[0]?.message ?? ""}`
+      : "无导入警告。";
+  const runnableSummary =
+    importValid === null
+      ? "尚未执行导入校验。"
+      : importValid
+        ? "当前可直接运行主制动计算。"
+        : "当前不可直接运行，请先修正导入错误。";
 
   return (
     <div style={{ display: "grid", gap: "18px" }}>
@@ -39,10 +66,10 @@ export function ImportSummaryPage({
             <button
               type="button"
               style={primaryActionStyle}
-              onClick={onEnterWorkbench}
-              disabled={!canEnterWorkbench}
+              onClick={onSaveAndViewOverview}
+              disabled={!canEnterWorkbench || isSubmitting}
             >
-              进入工作台
+              {isSubmitting ? "保存中..." : "保存并查看总览"}
             </button>
             <button type="button" style={secondaryActionStyle} onClick={onViewOverview}>
               查看总览
@@ -90,15 +117,18 @@ export function ImportSummaryPage({
             }}
           />
         </label>
+        {submitError ? (
+          <p style={{ margin: "10px 0 0", color: "#c64532", fontSize: "13px" }}>{submitError}</p>
+        ) : null}
       </section>
 
       <section style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: "14px" }}>
         <InfoCard
           title="是否包含停放校核 / 标定 / electric_brake 等后置内容"
-          body="当前已识别到：包含标定、未包含停放校核、包含 electric_brake 特性输入。"
+          body={`当前已识别到：${supplementSummary}。`}
         />
-        <InfoCard title="是否存在导入警告" body="存在 1 条导入警告：AW2 质量参数缺失，将按 V1 fallback 规则处理。" />
-        <InfoCard title="是否可直接运行" body="当前可直接运行主制动计算，但建议先补停放校核再完成整体验收。" />
+        <InfoCard title="是否存在导入警告" body={warningSummary} />
+        <InfoCard title="是否可直接运行" body={runnableSummary} />
       </section>
     </div>
   );

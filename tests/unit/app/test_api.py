@@ -20,7 +20,10 @@ class FakeValidationService:
 
 
 class FakeConfigService:
+    last_saved_request: object | None = None
+
     def save_config(self, request: object) -> object:
+        self.last_saved_request = request
         return type(
             "SaveResult",
             (),
@@ -139,3 +142,34 @@ def test_api_save_load_import_download_and_run_map_service_results() -> None:
     assert imported["form_state"]["schema_version"] == 1
     assert downloaded["filename"] == "LINE-001_input_20260425_1234.yaml"
     assert run_response["status"] == "succeeded"
+    assert config_service.last_saved_request is not None
+    last_errors = getattr(config_service.last_saved_request, "errors")
+    assert len(last_errors) == 0
+
+
+def test_api_save_converts_error_dicts_to_validation_items() -> None:
+    config_service = FakeConfigService()
+
+    save_config(
+        {
+            "project": {
+                "project_name": "Line 1",
+                "project_code": "LINE-001",
+                "email": None,
+                "note": "",
+            },
+            "yaml_text": "schema_version: 1\n",
+            "form_state": {"schema_version": 1},
+            "validation_status": "invalid",
+            "errors": [{"path": "v0", "message": "field required"}],
+            "created_at": "2026-04-25T12:34:56Z",
+        },
+        config_service=config_service,
+    )
+
+    assert config_service.last_saved_request is not None
+    last_errors = getattr(config_service.last_saved_request, "errors")
+    assert len(last_errors) == 1
+    first = last_errors[0]
+    assert getattr(first, "path") == "v0"
+    assert getattr(first, "message") == "field required"

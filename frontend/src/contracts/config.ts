@@ -46,3 +46,9 @@ export type ImportYamlResult = {
   inputs: Record<string, unknown> | null;
   form_state: Record<string, unknown> | null;
 };
+
+export type SupplementPresence = {
+  hasParkingBrakeCheck: boolean;
+  hasPressureCalibration: boolean;
+  hasElectricBrake: boolean;
+};

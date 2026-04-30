@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from brake_calc.app.schemas import ProjectPayload, SaveConfigRequest
+from brake_calc.app.schemas import ProjectPayload, SaveConfigRequest, ValidationErrorItem
 
 
 def _serialize(obj: object) -> dict[str, object]:
@@ -41,6 +41,22 @@ def save_config(request: dict[str, object], *, config_service: object) -> dict[s
     assert isinstance(form_state, dict)
     errors = request.get("errors", [])
     assert isinstance(errors, list)
+    normalized_errors: list[ValidationErrorItem] = []
+    for item in errors:
+        if isinstance(item, ValidationErrorItem):
+            normalized_errors.append(item)
+            continue
+        if isinstance(item, dict):
+            normalized_errors.append(
+                ValidationErrorItem(
+                    path=str(item.get("path", "")),
+                    message=str(item.get("message", "")),
+                )
+            )
+            continue
+        normalized_errors.append(
+            ValidationErrorItem(path="", message=str(item))
+        )
     result = config_service.save_config(  # type: ignore[attr-defined]
         SaveConfigRequest(
             project=ProjectPayload(
@@ -52,7 +68,7 @@ def save_config(request: dict[str, object], *, config_service: object) -> dict[s
             yaml_text=str(request["yaml_text"]),
             form_state=form_state,
             validation_status=str(request.get("validation_status", "not_validated")),
-            errors=errors,
+            errors=normalized_errors,
             created_at=str(request["created_at"]),
             source_input_config_id=(
                 None

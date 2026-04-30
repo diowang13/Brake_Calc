@@ -81,7 +81,7 @@ mech_params:
   Fs1: 1.0
   Fs2: 0.25
 pressure_calibration:
-  enabled: true
+  enabled: false
   service_brake:
     BCP0: 25.0
     point_pair_mode: aw3_aw2
