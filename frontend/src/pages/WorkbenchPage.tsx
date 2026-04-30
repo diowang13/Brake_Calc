@@ -115,10 +115,13 @@ export function WorkbenchPage({
   onBackToOverview,
   onDirtyChange,
   onSaveDraft,
+  onRunDraft,
   importedYamlText,
   importedFormState,
   importedErrors,
   hasImportedConfig,
+  yamlChangedLineIndexes,
+  yamlChangedPaths,
 }: {
   loadInputMode: "car" | "bogie";
   controllerConfigType: "car" | "bogie";
@@ -146,10 +149,13 @@ export function WorkbenchPage({
   onBackToOverview: () => void;
   onDirtyChange: (dirty: boolean) => void;
   onSaveDraft: (draft: Record<string, unknown>) => void;
+  onRunDraft: (draft: Record<string, unknown>) => void;
   importedYamlText: string;
   importedFormState: Record<string, unknown> | null;
   importedErrors: ValidationErrorItem[];
   hasImportedConfig: boolean;
+  yamlChangedLineIndexes: number[];
+  yamlChangedPaths: string[];
 }): ReactElement {
   const toRecord = (value: unknown): Record<string, unknown> | null =>
     typeof value === "object" && value !== null ? (value as Record<string, unknown>) : null;
@@ -239,6 +245,12 @@ export function WorkbenchPage({
   const [parkingLoValue, setParkingLoValue] = useState("");
   const [parkingEtaOValue, setParkingEtaOValue] = useState("");
   const [pressureCalibrationEnabled, setPressureCalibrationEnabled] = useState(false);
+  const [serviceCalibrationBcp0Value, setServiceCalibrationBcp0Value] = useState("");
+  const [serviceCalibrationPointOneKValue, setServiceCalibrationPointOneKValue] = useState("");
+  const [serviceCalibrationPointTwoKValue, setServiceCalibrationPointTwoKValue] = useState("");
+  const [emergencyCalibrationBcp0Value, setEmergencyCalibrationBcp0Value] = useState("");
+  const [emergencyCalibrationPointOneKValue, setEmergencyCalibrationPointOneKValue] = useState("");
+  const [emergencyCalibrationPointTwoKValue, setEmergencyCalibrationPointTwoKValue] = useState("");
   const [lastChangedPath, setLastChangedPath] = useState<string | null>(null);
   const [activeInfoTab, setActiveInfoTab] = useState<"description" | "errors" | "yaml">(
     hasImportedConfig ? "yaml" : "description"
@@ -483,6 +495,49 @@ export function WorkbenchPage({
     setParkingEtaOValue(getNestedStringText(importedFormState, ["parking_brake_check", "cylinder", "eta_o"]));
     const pressureCalibration = toRecord(importedFormState.pressure_calibration);
     setPressureCalibrationEnabled(pressureCalibration?.enabled === true);
+    const serviceBrake = toRecord(pressureCalibration?.service_brake);
+    const emergencyBrake = toRecord(pressureCalibration?.emergency_brake);
+    const serviceMode = serviceBrake?.point_pair_mode;
+    const serviceModeForLookup: CalibrationMode = serviceMode === "aw3_aw2" ? "aw3_aw2" : "aw3_aw0";
+    if (serviceMode === "aw3_aw0" || serviceMode === "aw3_aw2") {
+      setServiceCalibrationMode(serviceMode);
+    }
+    const emergencyMode = emergencyBrake?.point_pair_mode;
+    const emergencyModeForLookup: CalibrationMode =
+      emergencyMode === "aw3_aw2" ? "aw3_aw2" : "aw3_aw0";
+    if (emergencyMode === "aw3_aw0" || emergencyMode === "aw3_aw2") {
+      setEmergencyCalibrationMode(emergencyMode);
+    }
+    setServiceCalibrationBcp0Value(getNestedStringText(importedFormState, ["pressure_calibration", "service_brake", "BCP0"]));
+    setEmergencyCalibrationBcp0Value(getNestedStringText(importedFormState, ["pressure_calibration", "emergency_brake", "BCP0"]));
+    const servicePoints = Array.isArray(serviceBrake?.points) ? serviceBrake.points : [];
+    const emergencyPoints = Array.isArray(emergencyBrake?.points) ? emergencyBrake.points : [];
+    const servicePointOne = toRecord(servicePoints.find((point) => toRecord(point)?.load_group === "AW3")) ?? toRecord(servicePoints[0]);
+    const servicePointTwo = toRecord(
+      servicePoints.find((point) => toRecord(point)?.load_group === (serviceModeForLookup === "aw3_aw0" ? "AW0" : "AW2"))
+    ) ?? toRecord(servicePoints.find((point) => toRecord(point)?.load_group !== "AW3")) ?? toRecord(servicePoints[1]);
+    const emergencyPointOne = toRecord(emergencyPoints.find((point) => toRecord(point)?.load_group === "AW3")) ?? toRecord(emergencyPoints[0]);
+    const emergencyPointTwo = toRecord(
+      emergencyPoints.find((point) => toRecord(point)?.load_group === (emergencyModeForLookup === "aw3_aw0" ? "AW0" : "AW2"))
+    ) ?? toRecord(emergencyPoints.find((point) => toRecord(point)?.load_group !== "AW3")) ?? toRecord(emergencyPoints[1]);
+    if (servicePointOne?.brake_type === "FSB" || servicePointOne?.brake_type === "FB") {
+      setServicePointOneBrakeType(servicePointOne.brake_type);
+    }
+    if (servicePointTwo?.brake_type === "FSB" || servicePointTwo?.brake_type === "FB") {
+      setServicePointTwoBrakeType(servicePointTwo.brake_type);
+    }
+    setServiceCalibrationPointOneKValue(
+      typeof servicePointOne?.k_for_code === "number" ? String(servicePointOne.k_for_code) : ""
+    );
+    setServiceCalibrationPointTwoKValue(
+      typeof servicePointTwo?.k_for_code === "number" ? String(servicePointTwo.k_for_code) : ""
+    );
+    setEmergencyCalibrationPointOneKValue(
+      typeof emergencyPointOne?.k_for_code === "number" ? String(emergencyPointOne.k_for_code) : ""
+    );
+    setEmergencyCalibrationPointTwoKValue(
+      typeof emergencyPointTwo?.k_for_code === "number" ? String(emergencyPointTwo.k_for_code) : ""
+    );
   }, [
     importedFormState,
     onChangeAirSpringInputMode,
@@ -602,6 +657,11 @@ export function WorkbenchPage({
     onSaveDraft(liveFormState);
     onDirtyChange(false);
   };
+  const handleRun = (): void => {
+    setSubmitAttempted(true);
+    onRunDraft(liveFormState);
+    onDirtyChange(false);
+  };
 
   const updateSpeedCheck = (index: number, value: string): void => {
     setSpeedChecks((current) => current.map((item, itemIndex) => (itemIndex === index ? value : item)));
@@ -695,6 +755,12 @@ export function WorkbenchPage({
       "执行机构外部倍率 Lo (-)":
         activeSection === "parking" ? "parking_brake_check.cylinder.Lo" : "mech_params.Lo",
       "执行机构外部效率 eta_o (-)": "parking_brake_check.cylinder.eta_o",
+      "常用实设出闸压力 BCP0 (kPa)": "pressure_calibration.service_brake.BCP0",
+      "常用试验点1 k_for_code": "pressure_calibration.service_brake.points.k_for_code",
+      "常用试验点2 k_for_code": "pressure_calibration.service_brake.points.k_for_code",
+      "紧急实设出闸压力 BCP0 (kPa)": "pressure_calibration.emergency_brake.BCP0",
+      "紧急试验点1 k_for_code": "pressure_calibration.emergency_brake.points.k_for_code",
+      "紧急试验点2 k_for_code": "pressure_calibration.emergency_brake.points.k_for_code",
     };
     if (label in exactMap) {
       return exactMap[label];
@@ -816,7 +882,14 @@ export function WorkbenchPage({
           mode: airSpringInputMode,
           airspring_k: toNumberOrUndefined(airSpringKValue),
           airspring_b: toNumberOrUndefined(airSpringBValue),
-          points: airSpringPoints,
+          points: airSpringInputMode === "fitted_from_points" ? airSpringPoints : undefined,
+        },
+        trailer_bogie: {
+          ...(toRecord(toRecord(root.air_spring)?.trailer_bogie) ?? {}),
+          mode: airSpringInputMode,
+          airspring_k: toNumberOrUndefined(airSpringKValue),
+          airspring_b: toNumberOrUndefined(airSpringBValue),
+          points: airSpringInputMode === "fitted_from_points" ? airSpringPoints : undefined,
         },
       },
       mech_params: {
@@ -836,6 +909,43 @@ export function WorkbenchPage({
       pressure_calibration: {
         ...(toRecord(root.pressure_calibration) ?? {}),
         enabled: pressureCalibrationEnabled,
+        service_brake: {
+          ...(toRecord(toRecord(root.pressure_calibration)?.service_brake) ?? {}),
+          BCP0: toNumberOrUndefined(serviceCalibrationBcp0Value),
+          point_pair_mode: serviceCalibrationMode,
+          points: [
+            {
+              load_group: "AW3",
+              brake_type: servicePointOneBrakeType,
+              k_for_code: toNumberOrUndefined(serviceCalibrationPointOneKValue),
+            },
+            {
+              load_group: serviceCalibrationMode === "aw3_aw0" ? "AW0" : "AW2",
+              brake_type: servicePointTwoBrakeType,
+              k_for_code: toNumberOrUndefined(serviceCalibrationPointTwoKValue),
+            },
+          ],
+        },
+        emergency_brake:
+          controllerConfigType === "bogie"
+            ? {
+                ...(toRecord(toRecord(root.pressure_calibration)?.emergency_brake) ?? {}),
+                BCP0: toNumberOrUndefined(emergencyCalibrationBcp0Value),
+                point_pair_mode: emergencyCalibrationMode,
+                points: [
+                  {
+                    load_group: "AW3",
+                    brake_type: "EB",
+                    k_for_code: toNumberOrUndefined(emergencyCalibrationPointOneKValue),
+                  },
+                  {
+                    load_group: emergencyCalibrationMode === "aw3_aw0" ? "AW0" : "AW2",
+                    brake_type: "EB",
+                    k_for_code: toNumberOrUndefined(emergencyCalibrationPointTwoKValue),
+                  },
+                ],
+              }
+            : (toRecord(toRecord(root.pressure_calibration)?.emergency_brake) ?? undefined),
       },
       parking_brake_check: {
         ...(toRecord(root.parking_brake_check) ?? {}),
@@ -887,7 +997,12 @@ export function WorkbenchPage({
     baseBrakeCylinderType,
     bogieWeightPoweredValue,
     bogieWeightTrailerValue,
+    controllerConfigType,
     ebDistanceValue,
+    emergencyCalibrationBcp0Value,
+    emergencyCalibrationMode,
+    emergencyCalibrationPointOneKValue,
+    emergencyCalibrationPointTwoKValue,
     ebMeanValue,
     ebT1Value,
     ebT2Value,
@@ -930,6 +1045,12 @@ export function WorkbenchPage({
     parkingWindSpeedMaxValue,
     pressureCalibrationEnabled,
     ratioBrakes,
+    serviceCalibrationBcp0Value,
+    serviceCalibrationMode,
+    serviceCalibrationPointOneKValue,
+    serviceCalibrationPointTwoKValue,
+    servicePointOneBrakeType,
+    servicePointTwoBrakeType,
     speedChecks,
     v0Value,
   ]);
@@ -1158,7 +1279,7 @@ export function WorkbenchPage({
             <button type="button" style={secondaryActionStyle} onClick={handleSave}>
               保存
             </button>
-            <button type="button" style={primaryActionStyle} onClick={handleAttemptSubmit}>
+            <button type="button" style={primaryActionStyle} onClick={handleRun}>
               运行
             </button>
           </div>
@@ -2111,19 +2232,45 @@ export function WorkbenchPage({
                   status={pressureCalibrationEnabled ? "当前状态：已配置" : "当前状态：未配置"}
                   summary="常用与快速制动共用同一组 pressure_calibration.service_brake；先选择当前点对模式，再补录两条试验点。"
                   mode={serviceCalibrationMode}
-                  onChangeMode={setServiceCalibrationMode}
+                  onChangeMode={(mode) => {
+                    setServiceCalibrationMode(mode);
+                    onDirtyChange(true);
+                    setLastChangedPath("pressure_calibration.service_brake.point_pair_mode");
+                  }}
                   pressureLabel="实设出闸压力"
+                  pressureAriaLabel="常用实设出闸压力 BCP0 (kPa)"
+                  pressureValue={serviceCalibrationBcp0Value}
+                  onChangePressureValue={(value) => {
+                    setServiceCalibrationBcp0Value(value);
+                    setLastChangedPath("pressure_calibration.service_brake.BCP0");
+                  }}
                   showBrakeTypeSelect={true}
                   firstPointLoadGroup="AW3"
                   secondPointLoadGroup={serviceCalibrationMode === "aw3_aw0" ? "AW0" : "AW2"}
                   firstPointBrakeType={servicePointOneBrakeType}
                   secondPointBrakeType={servicePointTwoBrakeType}
-                  onChangeFirstPointBrakeType={(value) =>
-                    setServicePointOneBrakeType(value === "FB" ? "FB" : "FSB")
-                  }
-                  onChangeSecondPointBrakeType={(value) =>
-                    setServicePointTwoBrakeType(value === "FB" ? "FB" : "FSB")
-                  }
+                  firstPointKAriaLabel="常用试验点1 k_for_code"
+                  secondPointKAriaLabel="常用试验点2 k_for_code"
+                  firstPointKValue={serviceCalibrationPointOneKValue}
+                  secondPointKValue={serviceCalibrationPointTwoKValue}
+                  onChangeFirstPointBrakeType={(value) => {
+                    setServicePointOneBrakeType(value === "FB" ? "FB" : "FSB");
+                    onDirtyChange(true);
+                    setLastChangedPath("pressure_calibration.service_brake.points.brake_type");
+                  }}
+                  onChangeSecondPointBrakeType={(value) => {
+                    setServicePointTwoBrakeType(value === "FB" ? "FB" : "FSB");
+                    onDirtyChange(true);
+                    setLastChangedPath("pressure_calibration.service_brake.points.brake_type");
+                  }}
+                  onChangeFirstPointKValue={(value) => {
+                    setServiceCalibrationPointOneKValue(value);
+                    setLastChangedPath("pressure_calibration.service_brake.points.k_for_code");
+                  }}
+                  onChangeSecondPointKValue={(value) => {
+                    setServiceCalibrationPointTwoKValue(value);
+                    setLastChangedPath("pressure_calibration.service_brake.points.k_for_code");
+                  }}
                 />
                 {effectiveControllerConfigType === "bogie" ? (
                   <CalibrationConfigCard
@@ -2131,13 +2278,35 @@ export function WorkbenchPage({
                     status={pressureCalibrationEnabled ? "当前状态：已配置" : "当前状态：未配置"}
                     summary="紧急制动标定仅用于架控项目，对应 pressure_calibration.emergency_brake；每个试验点的 brake_type 固定为 EB。"
                     mode={emergencyCalibrationMode}
-                    onChangeMode={setEmergencyCalibrationMode}
+                    onChangeMode={(mode) => {
+                      setEmergencyCalibrationMode(mode);
+                      onDirtyChange(true);
+                      setLastChangedPath("pressure_calibration.emergency_brake.point_pair_mode");
+                    }}
                     pressureLabel="实设出闸压力"
+                    pressureAriaLabel="紧急实设出闸压力 BCP0 (kPa)"
+                    pressureValue={emergencyCalibrationBcp0Value}
+                    onChangePressureValue={(value) => {
+                      setEmergencyCalibrationBcp0Value(value);
+                      setLastChangedPath("pressure_calibration.emergency_brake.BCP0");
+                    }}
                     showBrakeTypeSelect={false}
                     firstPointLoadGroup="AW3"
                     secondPointLoadGroup={emergencyCalibrationMode === "aw3_aw0" ? "AW0" : "AW2"}
                     firstPointBrakeType="EB"
                     secondPointBrakeType="EB"
+                    firstPointKAriaLabel="紧急试验点1 k_for_code"
+                    secondPointKAriaLabel="紧急试验点2 k_for_code"
+                    firstPointKValue={emergencyCalibrationPointOneKValue}
+                    secondPointKValue={emergencyCalibrationPointTwoKValue}
+                    onChangeFirstPointKValue={(value) => {
+                      setEmergencyCalibrationPointOneKValue(value);
+                      setLastChangedPath("pressure_calibration.emergency_brake.points.k_for_code");
+                    }}
+                    onChangeSecondPointKValue={(value) => {
+                      setEmergencyCalibrationPointTwoKValue(value);
+                      setLastChangedPath("pressure_calibration.emergency_brake.points.k_for_code");
+                    }}
                   />
                 ) : (
                   <InfoCard
@@ -2255,7 +2424,18 @@ export function WorkbenchPage({
                   overflowY: "auto",
                 }}
               >
-                {importedYamlText}
+                {importedYamlText.split(/\r?\n/).map((line, index) => (
+                  <div
+                    key={`yaml-line-${index}`}
+                    style={
+                      yamlChangedLineIndexes.includes(index)
+                        ? { color: "#c64532", fontWeight: 700 }
+                        : undefined
+                    }
+                  >
+                    {line}
+                  </div>
+                ))}
               </div>
               <div
                 style={{

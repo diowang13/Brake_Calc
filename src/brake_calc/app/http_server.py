@@ -7,11 +7,18 @@ from typing import Any
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 
-from brake_calc.app.api import import_yaml, load_config, save_config
-from brake_calc.app.services import ConfigService, ValidationService, YamlImportService
+from datetime import datetime, timezone
+
+from brake_calc.app.api import import_yaml, load_config, run_config, save_config
+from brake_calc.app.services import CalculationService, ConfigService, ValidationService, YamlImportService
+from brake_calc.workflow.runner import run_workflow
 from brake_calc.storage.db import connect_sqlite
 from brake_calc.storage.migrations import initialize_database
-from brake_calc.storage.repositories import InputConfigRepository, ProjectRepository
+from brake_calc.storage.repositories import (
+    CalculationRunRepository,
+    InputConfigRepository,
+    ProjectRepository,
+)
 
 
 def _get_database_path() -> Path:
@@ -32,6 +39,20 @@ def _build_config_service(db_path: Path) -> tuple[ConfigService, object]:
 
 def _build_import_service() -> YamlImportService:
     return YamlImportService(validation_service=ValidationService())
+
+
+def _build_calculation_service(db_path: Path) -> tuple[CalculationService, object]:
+    connection = connect_sqlite(db_path)
+    return (
+        CalculationService(
+            input_config_repository=InputConfigRepository(connection),
+            calculation_run_repository=CalculationRunRepository(connection),
+            validation_service=ValidationService(),
+            run_workflow_fn=run_workflow,
+            project_repository=ProjectRepository(connection),
+        ),
+        connection,
+    )
 
 
 app = FastAPI(title="brake-calc API", version="0.1.0")
@@ -85,6 +106,32 @@ def load_config_route(input_config_id: str) -> dict[str, object]:
         return load_config(input_config_id, config_service=config_service)
     except AssertionError as exc:
         raise HTTPException(status_code=404, detail="input_config_not_found") from exc
+    except Exception as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    finally:
+        connection.close()
+
+
+@app.post("/api/configs/{input_config_id}/run")
+def run_config_route(input_config_id: str) -> dict[str, object]:
+    db_path = _get_database_path()
+    calculation_service, connection = _build_calculation_service(db_path)
+    try:
+        now = datetime.now(timezone.utc).isoformat()
+        return run_config(
+            input_config_id,
+            {
+                "triggered_by": "frontend",
+                "created_at": now,
+                "started_at": now,
+                "finished_at": now,
+            },
+            calculation_service=calculation_service,
+        )
+    except LookupError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
     except Exception as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     finally:

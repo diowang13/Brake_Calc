@@ -1,4 +1,4 @@
-import { Fragment, type CSSProperties, type ReactElement } from "react";
+import { Fragment, type ReactElement } from "react";
 import type { Report } from "../contracts/report";
 
 import {
@@ -14,44 +14,131 @@ import {
 } from "../app/styles";
 import { TogglePill } from "../components/ui";
 
-const brakeGroups = [
-  { key: "fsb", label: "最大常用制动" },
-  { key: "eb", label: "紧急制动" },
-  { key: "fb", label: "快速制动" }
-] as const;
+const BRAKE_TYPE_PRIORITY = ["FSB", "EB", "FB"] as const;
 
-const performanceRows = [
-  {
-    speed: "80 km/h",
-    fsb: ["1.02", "0.96", "214 m"],
-    eb: ["1.15", "1.07", "198 m"],
-    fb: ["1.08", "1.01", "206 m"]
-  },
-  {
-    speed: "100 km/h",
-    fsb: ["1.02", "0.96", "332 m"],
-    eb: ["1.15", "1.07", "306 m"],
-    fb: ["1.08", "1.01", "319 m"]
-  },
-  {
-    speed: "120 km/h",
-    fsb: ["1.01", "0.95", "468 m"],
-    eb: ["1.14", "1.06", "438 m"],
-    fb: ["1.07", "1.00", "452 m"]
+function brakeTypeLabel(brakeType: string): string {
+  if (brakeType === "FSB") {
+    return "最大常用制动";
   }
-] as const;
+  if (brakeType === "EB") {
+    return "紧急制动";
+  }
+  if (brakeType === "FB") {
+    return "快速制动";
+  }
+  return brakeType;
+}
 
-const matrixRows = [
-  { load: "AW0", controller: "拖架 1", mass: "31.24", spring: "245", fsb: "68", fb: "72", eb: "75" },
-  { load: "AW0", controller: "动架 2", mass: "34.18", spring: "263", fsb: "70", fb: "74", eb: "78" },
-  { load: "AW3", controller: "拖架 1", mass: "43.86", spring: "352", fsb: "83", fb: "88", eb: "92" },
-  { load: "AW3", controller: "动架 2", mass: "47.12", spring: "376", fsb: "86", fb: "90", eb: "95" }
-] as const;
+function loadGroupSortKey(loadGroup: string): number {
+  if (loadGroup === "AW0") {
+    return 0;
+  }
+  if (loadGroup === "AW2") {
+    return 1;
+  }
+  if (loadGroup === "AW3") {
+    return 2;
+  }
+  return 999;
+}
 
-const controllerMatrixRows = [matrixRows[0], matrixRows[2], matrixRows[1], matrixRows[3]] as const;
+function controllerSortKey(controller: string): [number, number, string] {
+  const trailerPriority = controller.includes("trailer") ? 0 : 1;
+  const suffix = Number.parseInt(controller.match(/(\d+)$/)?.[1] ?? "99999", 10);
+  return [trailerPriority, Number.isNaN(suffix) ? 99999 : suffix, controller];
+}
+
+function getFirstCalibrationKForCode(summary: Record<string, unknown> | null): number | null {
+  if (summary === null) {
+    return null;
+  }
+  const inputPoints = summary.input_points;
+  if (!Array.isArray(inputPoints) || inputPoints.length === 0) {
+    return null;
+  }
+  const firstPoint = inputPoints[0];
+  if (typeof firstPoint !== "object" || firstPoint === null) {
+    return null;
+  }
+  const kForCode = (firstPoint as Record<string, unknown>).k_for_code;
+  return typeof kForCode === "number" ? kForCode : null;
+}
+
+function getCalibrationBcp0ForCode(summary: Record<string, unknown> | null): number | null {
+  if (summary === null) {
+    return null;
+  }
+  const bcp0 = summary.BCP0_for_code;
+  return typeof bcp0 === "number" ? bcp0 : null;
+}
 
 function formatFixed(value: number): string {
   return value.toFixed(2);
+}
+
+function formatOptional(value: number | undefined, fractionDigits = 2): string {
+  if (typeof value !== "number" || Number.isNaN(value)) {
+    return "-";
+  }
+  return value.toFixed(fractionDigits);
+}
+
+type CalibrationCurvePoint = {
+  label: string;
+  force_kN: number;
+  k_for_code: number;
+};
+
+function getCalibrationCurvePoints(summary: Record<string, unknown> | null): CalibrationCurvePoint[] {
+  if (summary === null || !Array.isArray(summary.curve_points)) {
+    return [];
+  }
+  return summary.curve_points
+    .map((item) => {
+      if (typeof item !== "object" || item === null) {
+        return null;
+      }
+      const record = item as Record<string, unknown>;
+      return {
+        label: typeof record.label === "string" ? record.label : "",
+        force_kN: typeof record.force_kN === "number" ? record.force_kN : Number.NaN,
+        k_for_code: typeof record.k_for_code === "number" ? record.k_for_code : Number.NaN,
+      };
+    })
+    .filter(
+      (item): item is CalibrationCurvePoint =>
+        item !== null &&
+        item.label.length > 0 &&
+        Number.isFinite(item.force_kN) &&
+        Number.isFinite(item.k_for_code)
+    );
+}
+
+function getLinearFormula(summary: Record<string, unknown> | null): string | null {
+  if (summary === null || typeof summary.linear_formula_for_code !== "string") {
+    return null;
+  }
+  return summary.linear_formula_for_code;
+}
+
+function hasMeaningfulSpeedCheck(
+  perSpeed: Record<string, { beta_used?: number; requirement_a_mean?: number; theoretical_distance_m?: number }>
+): boolean {
+  return Object.values(perSpeed).some(
+    (value) =>
+      typeof value.beta_used === "number" ||
+      typeof value.requirement_a_mean === "number" ||
+      typeof value.theoretical_distance_m === "number"
+  );
+}
+
+function hasMeaningfulPressureEntries(
+  pressureByLoad: Record<string, Record<string, Record<string, number>>>,
+  brakeType: string
+): boolean {
+  return Object.values(pressureByLoad).some((perBrakeType) =>
+    Object.values(perBrakeType[brakeType] ?? {}).some((value) => typeof value === "number")
+  );
 }
 
 function SummaryCard({ icon, title, body }: { icon: string; title: string; body: string }): ReactElement {
@@ -113,72 +200,162 @@ function ParameterCard({ title, value, note }: { title: string; value: string; n
   );
 }
 
-function FormulaBlock({ title, lines }: { title: string; lines: string[] }): ReactElement {
+function InfoSummary({ title, body }: { title: string; body: string }): ReactElement {
   return (
     <div
       style={{
         border: "1px dashed #c7a27f",
         borderRadius: "14px",
         padding: "14px",
-        background: "#fffaf4"
+        background: "#fffaf4",
       }}
     >
-      <h4 style={{ margin: "0 0 10px" }}>{title}</h4>
-      <div style={{ display: "grid", gap: "6px", fontFamily: "Consolas, monospace", fontSize: "14px" }}>
-        {lines.map((line) => (
-          <div key={line}>{line}</div>
-        ))}
+      <h4 style={{ margin: "0 0 8px" }}>{title}</h4>
+      <p style={{ margin: 0, color: "#6b6259", lineHeight: 1.6 }}>{body}</p>
+    </div>
+  );
+}
+
+function renderCalibrationSummaryLine(
+  title: string,
+  summary: Record<string, unknown> | null
+): ReactElement {
+  const bcp0ForCode = getCalibrationBcp0ForCode(summary);
+  const kForCode = getFirstCalibrationKForCode(summary);
+  return (
+    <div style={{ color: "#6b6259", lineHeight: 1.6 }}>
+      <strong>{title}</strong>
+      {`: BCP0_for_code: ${typeof bcp0ForCode === "number" ? bcp0ForCode : "-"}, k_for_code: ${
+        typeof kForCode === "number" ? kForCode : "-"
+      }`}
+    </div>
+  );
+}
+
+function renderSegmentLines(title: string, summary: Record<string, unknown> | null): ReactElement {
+  const curvePoints = getCalibrationCurvePoints(summary).sort((left, right) => left.force_kN - right.force_kN);
+  const formula = getLinearFormula(summary);
+  if (curvePoints.length < 2) {
+    return <div style={{ color: "#6b6259" }}>{`${title}: -`}</div>;
+  }
+  const [lowPoint, highPoint] = curvePoints;
+  return (
+    <div
+      style={{
+        border: "1px solid #d5c9ba",
+        borderRadius: "12px",
+        padding: "10px 12px",
+        background: "#fff",
+        display: "grid",
+        gap: "4px",
+      }}
+    >
+      <strong>{title}</strong>
+      <div style={{ color: "#6b6259", fontSize: "13px", fontFamily: "Consolas, monospace" }}>
+        {`f < ${lowPoint.force_kN.toFixed(2)}: ${lowPoint.k_for_code}`}
+      </div>
+      <div style={{ color: "#6b6259", fontSize: "13px", fontFamily: "Consolas, monospace" }}>
+        {`${lowPoint.force_kN.toFixed(2)} <= f <= ${highPoint.force_kN.toFixed(2)}: ${formula ?? "-"}`}
+      </div>
+      <div style={{ color: "#6b6259", fontSize: "13px", fontFamily: "Consolas, monospace" }}>
+        {`f > ${highPoint.force_kN.toFixed(2)}: ${highPoint.k_for_code}`}
       </div>
     </div>
   );
 }
 
-function CurveSketch({ title, color }: { title: string; color: string }): ReactElement {
-  const lineStyle: CSSProperties = {
-    height: "3px",
-    background: color,
-    alignSelf: "center"
-  };
+function renderCurveChart(
+  title: string,
+  summary: Record<string, unknown> | null,
+  domain: { minX: number; maxX: number; minY: number; maxY: number }
+): ReactElement {
+  const curvePoints = getCalibrationCurvePoints(summary).sort((left, right) => left.force_kN - right.force_kN);
+  if (curvePoints.length < 2) {
+    return (
+      <div style={{ border: "1px dashed #d5c9ba", borderRadius: "8px", padding: "20px", color: "#6b6259" }}>
+        {`${title}: 未提供标定分段点`}
+      </div>
+    );
+  }
+  const [lowPoint, highPoint] = curvePoints;
+  const width = 340;
+  const height = 220;
+  const leftPad = 44;
+  const rightPad = 10;
+  const topPad = 10;
+  const bottomPad = 30;
+  const plotWidth = width - leftPad - rightPad;
+  const plotHeight = height - topPad - bottomPad;
+  const mapX = (x: number): number => leftPad + ((x - domain.minX) / (domain.maxX - domain.minX || 1)) * plotWidth;
+  const mapY = (y: number): number =>
+    topPad + plotHeight - ((y - domain.minY) / (domain.maxY - domain.minY || 1)) * plotHeight;
+  const path = [
+    `M ${mapX(domain.minX)} ${mapY(lowPoint.k_for_code)}`,
+    `L ${mapX(lowPoint.force_kN)} ${mapY(lowPoint.k_for_code)}`,
+    `L ${mapX(highPoint.force_kN)} ${mapY(highPoint.k_for_code)}`,
+    `L ${mapX(domain.maxX)} ${mapY(highPoint.k_for_code)}`,
+  ].join(" ");
+  const ticksX = Array.from({ length: 5 }, (_, index) => domain.minX + ((domain.maxX - domain.minX) * index) / 4);
+  const ticksY = Array.from({ length: 5 }, (_, index) => domain.minY + ((domain.maxY - domain.minY) * index) / 4);
 
   return (
     <div
       style={{
         border: "1px solid #d5c9ba",
         borderRadius: "14px",
-        padding: "14px",
-        background:
-          "linear-gradient(#efe4d7 1px, transparent 1px), linear-gradient(90deg, #efe4d7 1px, transparent 1px), #fff",
-        backgroundSize: "36px 36px"
+        padding: "12px",
+        background: "#fff",
+        display: "grid",
+        gap: "8px",
       }}
     >
-      <h4 style={{ margin: "0 0 14px" }}>{title}</h4>
-      <div
-        aria-label={title}
-        style={{
-          height: "112px",
-          display: "grid",
-          gridTemplateColumns: "1fr 1.2fr 1fr",
-          alignItems: "center",
-          gap: "0"
-        }}
+      <strong>{title}</strong>
+      <svg
+        width={width}
+        height={height}
+        viewBox={`0 0 ${width} ${height}`}
+        role="img"
+        aria-label={`${title} 分段曲线示意`}
+        style={{ border: "1px dashed #d5c9ba", borderRadius: "8px", background: "#fffaf4" }}
       >
-        <div style={lineStyle} />
-        <div
-          style={{
-            height: "3px",
-            background: color,
-            transform: "rotate(9deg)",
-            transformOrigin: "center"
-          }}
-        />
-        <div style={lineStyle} />
-      </div>
-      <div style={{ color: "#6b6259", fontSize: "13px" }}>低段常数 + 中段线性 + 高段常数</div>
+        <line x1={leftPad} y1={topPad + plotHeight} x2={leftPad + plotWidth} y2={topPad + plotHeight} stroke="#b7aa9a" />
+        <line x1={leftPad} y1={topPad} x2={leftPad} y2={topPad + plotHeight} stroke="#b7aa9a" />
+        {ticksX.map((tick) => (
+          <g key={`${title}-x-${tick}`}>
+            <line x1={mapX(tick)} y1={topPad} x2={mapX(tick)} y2={topPad + plotHeight} stroke="#eee3d8" />
+            <text x={mapX(tick)} y={height - 8} textAnchor="middle" fontSize="11" fill="#6b6259">
+              {tick.toFixed(1)}
+            </text>
+          </g>
+        ))}
+        {ticksY.map((tick) => (
+          <g key={`${title}-y-${tick}`}>
+            <line x1={leftPad} y1={mapY(tick)} x2={leftPad + plotWidth} y2={mapY(tick)} stroke="#eee3d8" />
+            <text x={leftPad - 6} y={mapY(tick) + 4} textAnchor="end" fontSize="11" fill="#6b6259">
+              {tick.toFixed(0)}
+            </text>
+          </g>
+        ))}
+        <path d={path} fill="none" stroke="#c64532" strokeWidth="2" />
+        <text x={leftPad + plotWidth / 2} y={height - 2} textAnchor="middle" fontSize="11" fill="#6b6259">
+          f (kN)
+        </text>
+        <text
+          x={10}
+          y={topPad + plotHeight / 2}
+          textAnchor="middle"
+          fontSize="11"
+          fill="#6b6259"
+          transform={`rotate(-90 10 ${topPad + plotHeight / 2})`}
+        >
+          k_for_code
+        </text>
+      </svg>
     </div>
   );
 }
 
-function MetricCells({ values }: { values: readonly string[] }): ReactElement {
+function MetricCells({ values }: { values: string[] }): ReactElement {
   return (
     <>
       <td style={tableCellStyle}>{values[0]}</td>
@@ -191,27 +368,187 @@ function MetricCells({ values }: { values: readonly string[] }): ReactElement {
 export function ResultPage({
   report,
   requiredSafetyMargin,
+  controllerType,
+  controllerOrder,
+  runtimeStatus,
   pressureMatrixView,
   onChangePressureMatrixView,
+  onBackToWorkbench,
   onBackToOverview
 }: {
   report: Report;
   requiredSafetyMargin: number;
+  controllerType: "car" | "bogie";
+  controllerOrder: string[];
+  runtimeStatus: "idle" | "succeeded" | "failed";
   pressureMatrixView: "load" | "controller";
   onChangePressureMatrixView: (view: "load" | "controller") => void;
+  onBackToWorkbench: () => void;
   onBackToOverview: () => void;
 }): ReactElement {
   const parkingRowsByLoadGroup = Object.entries(report.parking_brake_check_results_by_load_group);
-  const parkingReference = parkingRowsByLoadGroup[0]?.[1] ?? report.parking_brake_check_result;
+  const warnings = Array.isArray(report.warnings) ? report.warnings : [];
+  const autoAdjustments = Array.isArray(report.auto_adjustments) ? report.auto_adjustments : [];
+  const parkingReference = report.parking_brake_check_result ?? parkingRowsByLoadGroup[0]?.[1];
   const parkingPerCarEntries = parkingReference ? Object.entries(parkingReference.per_car) : [];
-  const parkingCars = parkingPerCarEntries.map((_, index) => `${index + 1}车`);
+  const parkingCars = parkingPerCarEntries.map(([carName]) => carName);
   const wholeTrainFpb = parkingReference?.whole_train.F_PB ?? 0;
   const worstWholeTrainIncline = parkingRowsByLoadGroup.reduce(
     (maxIncline, [, result]) => Math.max(maxIncline, result.whole_train.incline_force),
     0
   );
-  const parkingUnitForce = parkingPerCarEntries[0]?.[1].F_N_PB ?? 0;
-  const parkingPerCarForce = parkingPerCarEntries[0]?.[1].F_PB ?? 0;
+  const parkingUnitForce =
+    parkingPerCarEntries.length === 0
+      ? 0
+      : parkingPerCarEntries.reduce((sum, [, value]) => sum + value.F_N_PB, 0) / parkingPerCarEntries.length;
+  const parkingPerCarForce =
+    parkingPerCarEntries.length === 0
+      ? 0
+      : parkingPerCarEntries.reduce((sum, [, value]) => sum + value.F_PB, 0) / parkingPerCarEntries.length;
+  const speedCheckMatrix = report.theoretical_speed_checks ?? {};
+  const speedSet = new Set<string>();
+  Object.values(speedCheckMatrix).forEach((perSpeed) => {
+    Object.keys(perSpeed).forEach((speed) => speedSet.add(speed));
+  });
+  const sortedSpeeds = [...speedSet].sort((left, right) => Number(left) - Number(right));
+  const speedBrakeTypes = [
+    ...BRAKE_TYPE_PRIORITY.filter((key) => {
+      const perSpeed = speedCheckMatrix[key];
+      return perSpeed !== undefined && hasMeaningfulSpeedCheck(perSpeed);
+    }),
+    ...Object.keys(speedCheckMatrix)
+      .filter((key) => !BRAKE_TYPE_PRIORITY.includes(key as (typeof BRAKE_TYPE_PRIORITY)[number]))
+      .filter((key) => hasMeaningfulSpeedCheck(speedCheckMatrix[key] ?? {}))
+      .sort(),
+  ];
+  const performanceRows = sortedSpeeds.map((speed) => {
+    const perBrakeType: Record<string, string[]> = {};
+    speedBrakeTypes.forEach((brakeType) => {
+      const values = speedCheckMatrix[brakeType]?.[speed];
+      perBrakeType[brakeType] = [
+        formatOptional(values?.beta_used, 3),
+        formatOptional(values?.requirement_a_mean, 3),
+        typeof values?.theoretical_distance_m === "number"
+          ? `${values.theoretical_distance_m.toFixed(0)} m`
+          : "-",
+      ];
+    });
+    return {
+      speed: `${speed} km/h`,
+      perBrakeType,
+    };
+  });
+  const loadSummary = report.load_summary ?? {};
+  const pressureByLoad = report.controller_pressure_standards ?? {};
+  const pressureBrakeTypeSet = new Set<string>();
+  Object.values(pressureByLoad).forEach((perBrakeType) => {
+    Object.keys(perBrakeType).forEach((brakeType) => pressureBrakeTypeSet.add(brakeType));
+  });
+  const pressureBrakeTypes = [
+    ...BRAKE_TYPE_PRIORITY.filter(
+      (key) => pressureBrakeTypeSet.has(key) && hasMeaningfulPressureEntries(pressureByLoad, key)
+    ),
+    ...[...pressureBrakeTypeSet]
+      .filter((key) => !BRAKE_TYPE_PRIORITY.includes(key as (typeof BRAKE_TYPE_PRIORITY)[number]))
+      .filter((key) => hasMeaningfulPressureEntries(pressureByLoad, key))
+      .sort(),
+  ];
+  const loadGroupsFromReport = Object.keys(loadSummary);
+  const sortedLoadGroups =
+    loadGroupsFromReport.every((item) => /^AW\d+$/.test(item))
+      ? [...loadGroupsFromReport].sort(
+          (left, right) =>
+            loadGroupSortKey(left) - loadGroupSortKey(right) || left.localeCompare(right)
+        )
+      : loadGroupsFromReport;
+  const matrixRows = sortedLoadGroups.flatMap((loadGroup) => {
+    const perController = loadSummary[loadGroup] ?? {};
+    const reportControllerNames = Object.keys(perController);
+    const orderedControllers = [
+      ...controllerOrder.filter((name) => reportControllerNames.includes(name)),
+      ...reportControllerNames.filter((name) => !controllerOrder.includes(name)),
+    ];
+    return orderedControllers.map((controller) => ({
+      load: loadGroup,
+      controller,
+      mass: formatOptional(perController[controller]?.mass_dynamic),
+      spring: formatOptional(perController[controller]?.spring_pressure, 0),
+      pressureByBrakeType: Object.fromEntries(
+        pressureBrakeTypes.map((brakeType) => [
+          brakeType,
+          formatOptional(pressureByLoad[loadGroup]?.[brakeType]?.[controller], 0),
+        ])
+      ),
+    }));
+  });
+  const sortedMatrixRows = matrixRows;
+  const controllerMap = new Map<string, typeof sortedMatrixRows>();
+  sortedMatrixRows.forEach((row) => {
+    const existing = controllerMap.get(row.controller) ?? [];
+    existing.push(row);
+    controllerMap.set(row.controller, existing);
+  });
+  const controllerMatrixRows = [...controllerMap.entries()]
+    .sort((left, right) => {
+      const leftOrder = controllerOrder.indexOf(left[0]);
+      const rightOrder = controllerOrder.indexOf(right[0]);
+      if (leftOrder !== -1 || rightOrder !== -1) {
+        if (leftOrder === -1) {
+          return 1;
+        }
+        if (rightOrder === -1) {
+          return -1;
+        }
+        return leftOrder - rightOrder;
+      }
+      const leftKey = controllerSortKey(left[0]);
+      const rightKey = controllerSortKey(right[0]);
+      if (leftKey[0] !== rightKey[0]) {
+        return leftKey[0] - rightKey[0];
+      }
+      if (leftKey[1] !== rightKey[1]) {
+        return leftKey[1] - rightKey[1];
+      }
+      return leftKey[2].localeCompare(rightKey[2]);
+    })
+    .map(([controller, rows]) => ({
+      controller,
+      rows: [...rows].sort(
+        (left, right) =>
+          loadGroupSortKey(left.load) - loadGroupSortKey(right.load) || left.load.localeCompare(right.load)
+      ),
+    }));
+  const pressureConversion = (report.controller_code_params?.pressure_conversion ??
+    {}) as Record<string, Record<string, Record<string, { k_used_for_code?: number; BCP0_used_for_code?: number }>>>;
+  const calibrationSummary = (report.calibration_summary ?? {}) as Record<string, unknown>;
+  const serviceSummary =
+    typeof calibrationSummary.service_brake === "object" && calibrationSummary.service_brake !== null
+      ? (calibrationSummary.service_brake as Record<string, unknown>)
+      : null;
+  const emergencySummary =
+    typeof calibrationSummary.emergency_brake === "object" && calibrationSummary.emergency_brake !== null
+      ? (calibrationSummary.emergency_brake as Record<string, unknown>)
+      : null;
+  const serviceCalibrationKForCode = getFirstCalibrationKForCode(serviceSummary);
+  const emergencyCalibrationKForCode = getFirstCalibrationKForCode(emergencySummary);
+  const serviceCalibrationBcp0ForCode = getCalibrationBcp0ForCode(serviceSummary);
+  const emergencyCalibrationBcp0ForCode = getCalibrationBcp0ForCode(emergencySummary);
+  const allCurvePoints = [...getCalibrationCurvePoints(serviceSummary), ...getCalibrationCurvePoints(emergencySummary)];
+  const sharedDomain =
+    allCurvePoints.length >= 2
+      ? {
+          minX: Math.min(...allCurvePoints.map((item) => item.force_kN)) - 4,
+          maxX: Math.max(...allCurvePoints.map((item) => item.force_kN)) + 4,
+          minY: Math.min(...allCurvePoints.map((item) => item.k_for_code)) - 80,
+          maxY: Math.max(...allCurvePoints.map((item) => item.k_for_code)) + 80,
+        }
+      : { minX: 0, maxX: 40, minY: 900, maxY: 1300 };
+  const runStatusText =
+    runtimeStatus === "succeeded"
+      ? "运行成功，结果来自后端本次 report。"
+      : runtimeStatus === "failed"
+        ? "最近一次运行失败，请返回配置修订后重试。"
+        : "尚未运行，请先返回配置点击运行。";
 
   return (
     <div style={{ display: "grid", gap: "18px" }}>
@@ -230,7 +567,7 @@ export function ResultPage({
           </p>
         </div>
         <div style={{ display: "flex", gap: "12px", flexWrap: "wrap" }}>
-          <button type="button" style={ghostActionStyle}>
+          <button type="button" style={ghostActionStyle} onClick={onBackToWorkbench}>
             返回配置
           </button>
           <button type="button" style={secondaryActionStyle} onClick={onBackToOverview}>
@@ -260,9 +597,9 @@ export function ResultPage({
             marginTop: "16px"
           }}
         >
-          <SummaryCard icon="✓" title="运行状态 / 最后一次运行时间" body="运行成功 · 2026-04-27 13:40" />
-          <SummaryCard icon="!" title="警告" body="当前存在 1 条警告：AW2 使用 AW3 fallback 结果参与检查。" />
-          <SummaryCard icon="↻" title="自动调整" body="已触发 1 条自动调整：EB 自动切换为等黏着分配。" />
+          <SummaryCard icon="✓" title="运行状态" body={runStatusText} />
+          <SummaryCard icon="!" title="警告" body={`当前存在 ${warnings.length} 条警告。`} />
+          <SummaryCard icon="↻" title="自动调整" body={`已触发 ${autoAdjustments.length} 条自动调整。`} />
         </div>
       </section>
 
@@ -276,23 +613,23 @@ export function ResultPage({
             <thead>
               <tr>
                 <th style={tableHeaderStyle}>初速度 (km/h)</th>
-                {brakeGroups.map((group) => (
-                  <th key={group.key} colSpan={3} style={tableHeaderStyle}>
-                    {group.label}
+                {speedBrakeTypes.map((brakeType) => (
+                  <th key={brakeType} colSpan={3} style={tableHeaderStyle}>
+                    {brakeTypeLabel(brakeType)}
                   </th>
                 ))}
               </tr>
               <tr>
                 <th style={tableHeaderStyle} />
-                {brakeGroups.map((group) => (
-                  <Fragment key={group.key}>
-                    <th key={`${group.key}-control`} style={tableHeaderStyle}>
+                {speedBrakeTypes.map((brakeType) => (
+                  <Fragment key={brakeType}>
+                    <th key={`${brakeType}-control`} style={tableHeaderStyle}>
                       控制减速度
                     </th>
-                    <th key={`${group.key}-mean`} style={tableHeaderStyle}>
+                    <th key={`${brakeType}-mean`} style={tableHeaderStyle}>
                       平均减速度
                     </th>
-                    <th key={`${group.key}-distance`} style={tableHeaderStyle}>
+                    <th key={`${brakeType}-distance`} style={tableHeaderStyle}>
                       制动距离
                     </th>
                   </Fragment>
@@ -300,12 +637,15 @@ export function ResultPage({
               </tr>
             </thead>
             <tbody>
-              {performanceRows.map((row) => (
+              {(performanceRows.length > 0 ? performanceRows : [{ speed: "-", perBrakeType: {} as Record<string, string[]> }]).map((row) => (
                 <tr key={row.speed}>
                   <td style={groupedTableCellStyle}>{row.speed}</td>
-                  <MetricCells values={row.fsb} />
-                  <MetricCells values={row.eb} />
-                  <MetricCells values={row.fb} />
+                  {speedBrakeTypes.map((brakeType) => (
+                    <MetricCells
+                      key={`${row.speed}-${brakeType}`}
+                      values={row.perBrakeType[brakeType] ?? ["-", "-", "-"]}
+                    />
+                  ))}
                 </tr>
               ))}
             </tbody>
@@ -343,28 +683,35 @@ export function ResultPage({
                   <th style={tableHeaderStyle}>控制器</th>
                   <th style={tableHeaderStyle}>动态载荷 mass_dyn_t (ton)</th>
                   <th style={tableHeaderStyle}>标准空簧压力 spring_kPa</th>
-                  <th style={tableHeaderStyle}>最大常用制动 BCP</th>
-                  <th style={tableHeaderStyle}>快速制动 BCP</th>
-                  <th style={tableHeaderStyle}>紧急制动 BCP</th>
+                  {pressureBrakeTypes.map((brakeType) => (
+                    <th key={`load-${brakeType}`} style={tableHeaderStyle}>
+                      {`${brakeTypeLabel(brakeType)} BCP`}
+                    </th>
+                  ))}
                 </tr>
               </thead>
               <tbody>
-                {matrixRows.map((row, index) => {
-                  const rowStyle = row.controller === "拖架 1" ? stripedBlueCellStyle : stripedOrangeCellStyle;
+                {(sortedMatrixRows.length > 0 ? sortedMatrixRows : [{ load: "-", controller: "-", mass: "-", spring: "-", pressureByBrakeType: {} as Record<string, string> }]).map((row, index, rows) => {
+                  const rowStyle =
+                    row.controller.includes("trailer") ? stripedBlueCellStyle : stripedOrangeCellStyle;
+                  const isLoadGroupStart = index === 0 || rows[index - 1].load !== row.load;
+                  const loadGroupRowSpan = rows.filter((item) => item.load === row.load).length;
 
                   return (
                     <tr key={`${row.load}-${row.controller}`}>
-                      {index % 2 === 0 ? (
-                        <td style={groupedTableCellStyle} rowSpan={2}>
+                      {isLoadGroupStart && row.load !== "-" ? (
+                        <td style={groupedTableCellStyle} rowSpan={loadGroupRowSpan}>
                           {row.load}
                         </td>
                       ) : null}
                       <td style={rowStyle}>{row.controller}</td>
                       <td style={rowStyle}>{row.mass}</td>
                       <td style={rowStyle}>{row.spring}</td>
-                      <td style={rowStyle}>{row.fsb}</td>
-                      <td style={rowStyle}>{row.fb}</td>
-                      <td style={rowStyle}>{row.eb}</td>
+                      {pressureBrakeTypes.map((brakeType) => (
+                        <td key={`${row.load}-${row.controller}-${brakeType}`} style={rowStyle}>
+                          {row.pressureByBrakeType[brakeType] ?? "-"}
+                        </td>
+                      ))}
                     </tr>
                   );
                 })}
@@ -377,41 +724,40 @@ export function ResultPage({
                   <th style={tableHeaderStyle}>控制器</th>
                   <th style={tableHeaderStyle}>载荷 / 指标</th>
                   <th style={tableHeaderStyle}>数值</th>
-                  <th style={tableHeaderStyle}>最大常用制动 BCP</th>
-                  <th style={tableHeaderStyle}>快速制动 BCP</th>
-                  <th style={tableHeaderStyle}>紧急制动 BCP</th>
+                  {pressureBrakeTypes.map((brakeType) => (
+                    <th key={`controller-${brakeType}`} style={tableHeaderStyle}>
+                      {`${brakeTypeLabel(brakeType)} BCP`}
+                    </th>
+                  ))}
                 </tr>
               </thead>
               <tbody>
-                {controllerMatrixRows.map((row, index) => {
-                  const rowStyle = row.load === "AW0" ? stripedBlueCellStyle : stripedOrangeCellStyle;
-
-                  return (
-                    <Fragment key={`${row.controller}-${row.load}`}>
-                      <tr key={`${row.controller}-${row.load}-mass`}>
-                        {index % 2 === 0 ? (
-                          <td style={groupedTableCellStyle} rowSpan={4}>
-                            {row.controller}
+                {(controllerMatrixRows.length > 0 ? controllerMatrixRows : [{ controller: "-", rows: [{ load: "-", controller: "-", mass: "-", spring: "-", pressureByBrakeType: {} as Record<string, string> }] }]).map(({ controller, rows }) => {
+                  const rowStyle =
+                    controller.includes("trailer") ? stripedBlueCellStyle : stripedOrangeCellStyle;
+                  const controllerRowSpan = rows.length * 2;
+                  return rows.map((row, rowIndex) => (
+                    <Fragment key={`${controller}-${row.load}`}>
+                      <tr key={`${controller}-${row.load}-mass`}>
+                        {rowIndex === 0 && controller !== "-" ? (
+                          <td style={groupedTableCellStyle} rowSpan={controllerRowSpan}>
+                            {controller}
                           </td>
                         ) : null}
                         <td style={rowStyle}>{`${row.load} / mass_dyn_t`}</td>
                         <td style={rowStyle}>{`${row.mass} ton`}</td>
-                        <td style={rowStyle} rowSpan={2}>
-                          {row.fsb}
-                        </td>
-                        <td style={rowStyle} rowSpan={2}>
-                          {row.fb}
-                        </td>
-                        <td style={rowStyle} rowSpan={2}>
-                          {row.eb}
-                        </td>
+                        {pressureBrakeTypes.map((brakeType) => (
+                          <td key={`${controller}-${row.load}-${brakeType}-mass`} style={rowStyle} rowSpan={2}>
+                            {row.pressureByBrakeType[brakeType] ?? "-"}
+                          </td>
+                        ))}
                       </tr>
-                      <tr key={`${row.controller}-${row.load}-spring`}>
+                      <tr key={`${controller}-${row.load}-spring`}>
                         <td style={rowStyle}>{`${row.load} / spring_kPa`}</td>
                         <td style={rowStyle}>{`${row.spring} kPa`}</td>
                       </tr>
                     </Fragment>
-                  );
+                  ));
                 })}
               </tbody>
             </table>
@@ -427,37 +773,76 @@ export function ResultPage({
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "18px", alignItems: "start" }}>
           <div style={{ display: "grid", gap: "14px" }}>
             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "14px" }}>
-              <ParameterCard title="常用制动 k_for_code" value="108 / 96" note="未标定时来自基础计算；标定后按分段公式输出。" />
-              <ParameterCard title="常用制动 BCP0_for_code" value="65 kPa" note="按 5 kPa 口径向上圆整。" />
-              <ParameterCard title="紧急制动 k_for_code" value="112 / 101" note="架控 EB 标定后输出分段公式。" />
-              <ParameterCard title="紧急制动 BCP0_for_code" value="70 kPa" note="架控 EB 使用最终生效值。" />
+              <ParameterCard
+                title="常用制动 k_for_code"
+                value={
+                  typeof serviceCalibrationKForCode === "number"
+                    ? `${serviceCalibrationKForCode}`
+                    : "-"
+                }
+                note="来自 report.controller_code_params.pressure_conversion。"
+              />
+              <ParameterCard
+                title="常用制动 BCP0_for_code"
+                value={
+                  typeof serviceCalibrationBcp0ForCode === "number"
+                    ? `${serviceCalibrationBcp0ForCode} kPa`
+                    : "-"
+                }
+                note="来自 report.controller_code_params.pressure_conversion。"
+              />
+              <ParameterCard
+                title="紧急制动 k_for_code"
+                value={
+                  typeof emergencyCalibrationKForCode === "number"
+                    ? `${emergencyCalibrationKForCode}`
+                    : "-"
+                }
+                note="来自 report.controller_code_params.pressure_conversion。"
+              />
+              <ParameterCard
+                title="紧急制动 BCP0_for_code"
+                value={
+                  typeof emergencyCalibrationBcp0ForCode === "number"
+                    ? `${emergencyCalibrationBcp0ForCode} kPa`
+                    : "-"
+                }
+                note="来自 report.controller_code_params.pressure_conversion。"
+              />
             </div>
-            <div
-              style={{
-                border: "1px solid #e0c4aa",
-                borderRadius: "14px",
-                padding: "14px",
-                background: "#fff6ee",
-                color: "#6b6259",
-                lineHeight: 1.6
-              }}
-            >
-              车控 EB 实际 BCP 压力标定 V1.0 暂不支持，需由开发人员线下处理，V1.1 接入。
+            <div style={{ color: "#6b6259", fontSize: "13px", marginTop: "-4px" }}>
+              原始值保留（来自 report.calibration_summary）
             </div>
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px" }}>
+              {renderSegmentLines("service_brake", serviceSummary)}
+              {renderSegmentLines("emergency_brake", emergencySummary)}
+            </div>
+            {controllerType === "car" ? (
+              <div
+                style={{
+                  border: "1px solid #e0c4aa",
+                  borderRadius: "14px",
+                  padding: "14px",
+                  background: "#fff6ee",
+                  color: "#6b6259",
+                  lineHeight: 1.6
+                }}
+              >
+                车控 EB 实际 BCP 压力标定 V1.0 暂不支持，需由开发人员线下处理，V1.1 接入。
+              </div>
+            ) : null}
           </div>
 
           <div style={{ display: "grid", gap: "14px" }}>
             <h3 style={{ margin: 0 }}>标定摘要</h3>
-            <FormulaBlock
-              title="常用制动 k_for_code 分段公式"
-              lines={["k_f(f) = 108, if f < 35", "k_f(f) = 0.96f + 74.4, if 35 <= f <= 70", "k_f(f) = 96, if f > 70"]}
+            <InfoSummary
+              title="后端标定曲线"
+              body="当前页面展示同一坐标轴下的 service_brake 与 emergency_brake 分段曲线。"
             />
-            <CurveSketch title="常用制动 k_for_code 分段曲线" color="#a95522" />
-            <FormulaBlock
-              title="紧急制动 k_for_code 分段公式"
-              lines={["k_f(f) = 112, if f < 35", "k_f(f) = 1.01f + 76.65, if 35 <= f <= 70", "k_f(f) = 101, if f > 70"]}
-            />
-            <CurveSketch title="紧急制动 k_for_code 分段曲线" color="#5c6f93" />
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px" }}>
+              {renderCurveChart("service_brake", serviceSummary, sharedDomain)}
+              {renderCurveChart("emergency_brake", emergencySummary, sharedDomain)}
+            </div>
           </div>
         </div>
       </section>
@@ -471,12 +856,12 @@ export function ResultPage({
           <ParameterCard
             title="F_N_PB 单个制动单元双侧作用力"
             value={`${formatFixed(parkingUnitForce)} kN`}
-            note="由 Fp、Fs1、Fs2、Lpi、eta_pi、Lo、eta_o 计算得到。"
+            note="按每车结果的平均值展示。"
           />
           <ParameterCard
             title="F_PB 每车停放制动力"
             value={`${formatFixed(parkingPerCarForce)} kN`}
-            note="结合基础制动几何换算、停放缸数量和 xi0。"
+            note="按每车结果的平均值展示。"
           />
           <ParameterCard
             title="全列停放制动力"

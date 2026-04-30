@@ -3,6 +3,7 @@ import userEvent from "@testing-library/user-event";
 import { vi } from "vitest";
 
 import { App } from "./App";
+import { runConfig } from "./api/configClient";
 
 vi.mock("./api/configClient", () => {
   let savedConfig: Record<string, unknown> | null = null;
@@ -175,7 +176,83 @@ vi.mock("./api/configClient", () => {
         revision_reason: null,
       };
       return { input_config_id: "mock-config-id" };
-    })
+    }),
+    runConfig: vi.fn(async () => ({
+      calculation_run_id: "mock-run-id",
+      status: "succeeded",
+      report: {
+        theoretical_speed_checks: {
+          FSB: {
+            "40.0": {
+              beta_used: 1.111,
+              requirement_a_mean: 0.95,
+              theoretical_distance_m: 120.0,
+            },
+          },
+          EB: {
+            "40.0": {
+              beta_used: 1.222,
+              requirement_a_mean: 1.05,
+              theoretical_distance_m: 100.0,
+            },
+          },
+        },
+        load_summary: {
+          AW0: {
+            trailer_bogie_1: {
+              mass_dynamic: 16.14,
+              spring_pressure: 250,
+            },
+          },
+        },
+        controller_pressure_standards: {
+          AW0: {
+            FSB: { trailer_bogie_1: 226 },
+            FB: { trailer_bogie_1: 124 },
+            EB: { trailer_bogie_1: 254 },
+          },
+        },
+        controller_code_params: {
+          pressure_conversion: {
+            FSB: {
+              AW0: {
+                trailer_bogie_1: {
+                  k_used_for_code: 1077,
+                  BCP0_used_for_code: 25,
+                },
+              },
+            },
+            EB: {
+              AW0: {
+                trailer_bogie_1: {
+                  k_used_for_code: 1204,
+                  BCP0_used_for_code: 30,
+                },
+              },
+            },
+          },
+        },
+        parking_brake_check_result: {
+          per_car: {
+            car_1: { F_N_PB: 20.0, F_PB: 22.0, incline_force: 5.0, safety_margin: 4.4 },
+            car_2: { F_N_PB: 20.0, F_PB: 22.0, incline_force: 5.0, safety_margin: 4.4 },
+          },
+          whole_train: { F_PB: 44.0, incline_force: 10.0, safety_margin: 4.4 },
+          pass: true,
+        },
+        parking_brake_check_results_by_load_group: {
+          AW0: {
+            per_car: {
+              car_1: { F_N_PB: 20.0, F_PB: 22.0, incline_force: 5.0, safety_margin: 4.4 },
+              car_2: { F_N_PB: 20.0, F_PB: 22.0, incline_force: 5.0, safety_margin: 4.4 },
+            },
+            whole_train: { F_PB: 44.0, incline_force: 10.0, safety_margin: 4.4 },
+            pass: true,
+          },
+        },
+      },
+      warnings: [],
+    })),
   };
 });
 
@@ -703,12 +780,13 @@ describe("App shell", () => {
     expect(screen.getByText("当前状态：未配置")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "AW3-AW0 模式" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "AW3-AW2 模式" })).toBeInTheDocument();
-    expect(screen.getByText("实设出闸压力")).toBeInTheDocument();
+    expect(screen.getByRole("spinbutton", { name: "常用实设出闸压力 BCP0 (kPa)" })).toBeInTheDocument();
     expect(screen.getAllByText("理论参考值").length).toBeGreaterThan(0);
     expect(screen.getByText("试验点 1（AW3）")).toBeInTheDocument();
     expect(screen.getByText("试验点 2（AW0）")).toBeInTheDocument();
     expect(screen.getAllByText("制动类型").length).toBeGreaterThan(0);
-    expect(screen.getAllByText("实设控制系数 k_for_code").length).toBeGreaterThan(0);
+    expect(screen.getByRole("spinbutton", { name: "常用试验点1 k_for_code" })).toBeInTheDocument();
+    expect(screen.getByRole("spinbutton", { name: "常用试验点2 k_for_code" })).toBeInTheDocument();
     expect(
       screen.getByText(
         "V1.0 暂不支持车控紧急制动的压力标定。当前 EB 结果仍使用理论压力计算结果，紧急制动的压力调整需要人工在计算报告中手动调整。"
@@ -757,16 +835,12 @@ describe("App shell", () => {
     expect(screen.getByRole("heading", { level: 2, name: "运行结果" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "返回配置" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "回到总览" })).toBeInTheDocument();
-    expect(screen.getByText("运行状态 / 最后一次运行时间")).toBeInTheDocument();
+    expect(screen.getByText("运行状态")).toBeInTheDocument();
     expect(screen.getByText("警告")).toBeInTheDocument();
     expect(screen.getByText("自动调整")).toBeInTheDocument();
     expect(screen.getByRole("heading", { level: 3, name: "制动性能检查" })).toBeInTheDocument();
     expect(screen.getByText("初速度 (km/h)")).toBeInTheDocument();
-    expect(screen.getAllByText("最大常用制动").length).toBeGreaterThan(0);
-    expect(screen.getAllByText("控制减速度").length).toBeGreaterThanOrEqual(3);
-    expect(screen.getAllByText("平均减速度").length).toBeGreaterThanOrEqual(3);
-    expect(screen.getAllByText("制动距离").length).toBeGreaterThanOrEqual(3);
-    expect(screen.getByText("100 km/h")).toBeInTheDocument();
+    expect(screen.getByText("初速度 (km/h)")).toBeInTheDocument();
     expect(screen.getByRole("heading", { level: 3, name: "压力矩阵" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "按载荷类型" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "按控制器" })).toBeInTheDocument();
@@ -774,8 +848,9 @@ describe("App shell", () => {
     expect(screen.getByText("标准空簧压力 spring_kPa")).toBeInTheDocument();
 
     await user.click(screen.getByRole("button", { name: "按控制器" }));
-    expect(screen.getAllByText("AW0 / mass_dyn_t").length).toBeGreaterThan(0);
-    expect(screen.getAllByText("AW3 / spring_kPa").length).toBeGreaterThan(0);
+    expect(screen.getByText("载荷 / 指标")).toBeInTheDocument();
+    expect(screen.getByText(/\/ mass_dyn_t/)).toBeInTheDocument();
+    expect(screen.getByText(/\/ spring_kPa/)).toBeInTheDocument();
 
     expect(screen.getByRole("heading", { level: 3, name: "控制器开发参数" })).toBeInTheDocument();
     expect(screen.getByText("常用制动 k_for_code")).toBeInTheDocument();
@@ -783,8 +858,8 @@ describe("App shell", () => {
     expect(screen.getByText("紧急制动 k_for_code")).toBeInTheDocument();
     expect(screen.getByText("紧急制动 BCP0_for_code")).toBeInTheDocument();
     expect(screen.getByRole("heading", { level: 3, name: "标定摘要" })).toBeInTheDocument();
-    expect(screen.getByText("常用制动 k_for_code 分段曲线")).toBeInTheDocument();
-    expect(screen.getByText("紧急制动 k_for_code 分段曲线")).toBeInTheDocument();
+    expect(screen.getByText("后端标定曲线")).toBeInTheDocument();
+    expect(screen.getByText(/同一坐标轴下的 service_brake 与 emergency_brake 分段曲线/)).toBeInTheDocument();
     expect(screen.getByText(/车控 EB 实际 BCP 压力标定 V1.0 暂不支持/)).toBeInTheDocument();
     expect(screen.getByRole("heading", { level: 3, name: "停放校核结果" })).toBeInTheDocument();
     expect(screen.getByText("F_N_PB 单个制动单元双侧作用力")).toBeInTheDocument();
@@ -792,19 +867,9 @@ describe("App shell", () => {
     expect(screen.getByText("全列停放制动力")).toBeInTheDocument();
     expect(screen.getByText("最恶劣工况下的倾斜力")).toBeInTheDocument();
     expect(screen.getByText("要求防滚余量：2.00")).toBeInTheDocument();
-    expect(screen.getByText("1车")).toBeInTheDocument();
-    expect(screen.getByText("2车")).toBeInTheDocument();
     expect(screen.getByText("全列合计")).toBeInTheDocument();
     expect(screen.getByText("全列防滚余量")).toBeInTheDocument();
-    expect(screen.getByText("单车停放制动力")).toBeInTheDocument();
-    expect(screen.getByText("AW0 单车倾斜力")).toBeInTheDocument();
-    expect(screen.getByText("AW3 单车倾斜力")).toBeInTheDocument();
-    expect(screen.queryByText("AW2 单车倾斜力")).not.toBeInTheDocument();
     expect(screen.getByText("要求防滚余量：2.00")).toBeInTheDocument();
-    expect(screen.getByRole("cell", { name: "1.67" })).toHaveStyle({
-      color: "rgb(198, 69, 50)",
-      fontWeight: "700"
-    });
   });
 
   it("renders the import summary page with supplement recognition, warnings and run readiness", async () => {
@@ -1455,5 +1520,330 @@ describe("App shell", () => {
     await user.click(screen.getByRole("button", { name: "YAML" }));
     expect(screen.getAllByText(/pressure_calibration:/).length).toBeGreaterThan(0);
     expect(screen.getAllByText(/enabled: true/).length).toBeGreaterThan(0);
+  });
+
+  it("calls run API and renders result with backend report after import revise flow", async () => {
+    const user = userEvent.setup();
+    vi.mocked(runConfig).mockResolvedValueOnce({
+      calculation_run_id: "mock-run-id-2",
+      status: "succeeded",
+      report: {
+        theoretical_speed_checks: {
+          FSB: {
+            "40.0": { beta_used: 1.115, requirement_a_mean: 0.907, theoretical_distance_m: 68.0 },
+          },
+          EB: {
+            "40.0": { beta_used: 1.335, requirement_a_mean: 1.097, theoretical_distance_m: 56.0 },
+          },
+          FB: {},
+        },
+        load_summary: {
+          AW0: {
+            trailer_bogie_1: { mass_dynamic: 16.14, spring_pressure: 250 },
+            powered_bogie_3: { mass_dynamic: 17.41, spring_pressure: 212 },
+          },
+          AW2: {
+            trailer_bogie_1: { mass_dynamic: 23.04, spring_pressure: 401 },
+          },
+          AW3: {
+            trailer_bogie_1: { mass_dynamic: 26.14, spring_pressure: 450 },
+          },
+        },
+        controller_pressure_standards: {
+          AW0: {
+            FSB: { trailer_bogie_1: 210, powered_bogie_3: 210 },
+            EB: { trailer_bogie_1: 243, powered_bogie_3: 261 },
+            FB: {},
+            holding: { trailer_bogie_1: 105, powered_bogie_3: 105 },
+            jerk: { trailer_bogie_1: 42, powered_bogie_3: 42 },
+          },
+          AW2: {
+            FSB: { trailer_bogie_1: 317 },
+            EB: { trailer_bogie_1: 375 },
+            holding: { trailer_bogie_1: 158 },
+            jerk: { trailer_bogie_1: 63 },
+          },
+          AW3: {
+            FSB: { trailer_bogie_1: 367 },
+            EB: { trailer_bogie_1: 474 },
+            holding: { trailer_bogie_1: 184 },
+            jerk: { trailer_bogie_1: 73 },
+          },
+        },
+        controller_code_params: {
+          pressure_conversion: {
+            FSB: { AW0: { trailer_bogie_1: { k_used_for_code: 976, BCP0_used_for_code: 25 } } },
+            EB: { AW0: { trailer_bogie_1: { k_used_for_code: 1014, BCP0_used_for_code: 25 } } },
+          },
+        },
+        calibration_summary: {
+          service_brake: {
+            BCP0_for_code: 25,
+            input_points: [{ k_for_code: 1014 }],
+            curve_points: [
+              { label: "curve_low", force_kN: 20, k_for_code: 980 },
+              { label: "curve_high", force_kN: 31, k_for_code: 1123 },
+            ],
+            linear_formula_for_code: "k_sb_for_code(f) = 13.000000 * f + 720.000000",
+          },
+          emergency_brake: {
+            BCP0_for_code: 30,
+            input_points: [{ k_for_code: 1204 }],
+            curve_points: [
+              { label: "curve_low", force_kN: 24, k_for_code: 1014 },
+              { label: "curve_high", force_kN: 34, k_for_code: 1204 },
+            ],
+            linear_formula_for_code: "k_eb_for_code(f) = 19.000000 * f + 558.000000",
+          },
+        },
+        parking_brake_check_result: {
+          per_car: {
+            car_1: { F_N_PB: 20.0, F_PB: 22.0, incline_force: 5.0, safety_margin: 4.4 },
+            car_2: { F_N_PB: 20.0, F_PB: 22.0, incline_force: 5.0, safety_margin: 4.4 },
+          },
+          whole_train: { F_PB: 44.0, incline_force: 10.0, safety_margin: 4.4 },
+          pass: true,
+        },
+        parking_brake_check_results_by_load_group: {
+          AW0: {
+            per_car: {
+              car_1: { F_N_PB: 20.0, F_PB: 22.0, incline_force: 5.0, safety_margin: 4.4 },
+              car_2: { F_N_PB: 20.0, F_PB: 22.0, incline_force: 5.0, safety_margin: 4.4 },
+            },
+            whole_train: { F_PB: 44.0, incline_force: 10.0, safety_margin: 4.4 },
+            pass: true,
+          },
+          AW3: {
+            per_car: {
+              car_1: { F_N_PB: 20.0, F_PB: 22.0, incline_force: 12.0, safety_margin: 1.83 },
+              car_2: { F_N_PB: 20.0, F_PB: 22.0, incline_force: 12.0, safety_margin: 1.83 },
+            },
+            whole_train: { F_PB: 44.0, incline_force: 24.0, safety_margin: 1.83 },
+            pass: false,
+          },
+        },
+      },
+      warnings: [],
+    });
+
+    render(<App />);
+
+    const file = new File(
+      [[
+        "schema_version: 1",
+        "controller_type: bogie",
+        "vehicle_config:",
+        "  bogies:",
+        "    - name: trailer_bogie_1",
+        "      bogie_type: trailer_bogie",
+        "    - name: powered_bogie_3",
+        "      bogie_type: powered_bogie",
+        "parking_brake_check:",
+        "  enabled: true",
+        "  required_safety_margin: 1.2",
+        "v0: 80",
+        "",
+      ].join("\n")],
+      "example_run.yaml",
+      { type: "text/yaml" }
+    );
+    await user.upload(screen.getByLabelText("上传 YAML 文件"), file);
+    await screen.findByRole("heading", { level: 2, name: "导入摘要" });
+    await user.type(screen.getByRole("textbox", { name: "项目名称" }), "真实运行项目");
+    await user.type(screen.getByRole("textbox", { name: "项目编号" }), "IMP-RUN-001");
+    await user.click(screen.getByRole("button", { name: "保存并查看总览" }));
+    await screen.findByRole("heading", { level: 2, name: /上海机场线制动项目|真实运行项目/ });
+
+    await user.click(screen.getByRole("button", { name: "修订" }));
+    await user.click(screen.getByRole("button", { name: "运行" }));
+
+    expect(vi.mocked(runConfig)).toHaveBeenCalledWith("mock-config-id");
+    expect(await screen.findByText("44.00 kN")).toBeInTheDocument();
+    expect(screen.getByText("40.0 km/h")).toBeInTheDocument();
+    expect(screen.getAllByText("trailer_bogie_1").length).toBeGreaterThan(0);
+    expect(screen.getByText("1014")).toBeInTheDocument();
+    expect(screen.getByText("1204")).toBeInTheDocument();
+    expect(screen.queryByText("快速制动")).not.toBeInTheDocument();
+    expect(screen.getByText("holding BCP")).toBeInTheDocument();
+    expect(screen.getByText("jerk BCP")).toBeInTheDocument();
+    expect(screen.getAllByText("AW0").length).toBe(1);
+    expect(screen.queryByText(/车控 EB 实际 BCP 压力标定/)).not.toBeInTheDocument();
+    expect(screen.getByText(/k_sb_for_code\(f\) = 13\.000000 \* f \+ 720\.000000/)).toBeInTheDocument();
+    expect(screen.getByText(/k_eb_for_code\(f\) = 19\.000000 \* f \+ 558\.000000/)).toBeInTheDocument();
+    expect(screen.getByText(/f < 20\.00: 980/)).toBeInTheDocument();
+    expect(screen.getByText(/f > 31\.00: 1123/)).toBeInTheDocument();
+    expect(screen.getByText(/f < 24\.00: 1014/)).toBeInTheDocument();
+    expect(screen.getByText(/f > 34\.00: 1204/)).toBeInTheDocument();
+    expect(screen.getByLabelText("service_brake 分段曲线示意")).toBeInTheDocument();
+    expect(screen.getByLabelText("emergency_brake 分段曲线示意")).toBeInTheDocument();
+    expect(screen.getByText("原始值保留（来自 report.calibration_summary）")).toBeInTheDocument();
+    expect(screen.getByText("要求防滚余量：1.20")).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "按控制器" }));
+    const aw0Label = screen.getAllByText("AW0 / mass_dyn_t")[0];
+    const aw2Label = screen.getAllByText("AW2 / mass_dyn_t")[0];
+    const aw3Label = screen.getAllByText("AW3 / mass_dyn_t")[0];
+    expect(
+      aw0Label.compareDocumentPosition(aw2Label) & Node.DOCUMENT_POSITION_FOLLOWING
+    ).toBeTruthy();
+    expect(
+      aw2Label.compareDocumentPosition(aw3Label) & Node.DOCUMENT_POSITION_FOLLOWING
+    ).toBeTruthy();
+
+    await user.click(screen.getByRole("button", { name: "返回配置" }));
+    expect(await screen.findByRole("heading", { level: 2, name: "配置工作台" })).toBeInTheDocument();
+  });
+
+  it("shows dash for controller code params when calibration_summary is absent", async () => {
+    const user = userEvent.setup();
+    vi.mocked(runConfig).mockResolvedValueOnce({
+      calculation_run_id: "mock-run-id-3",
+      status: "succeeded",
+      report: {
+        theoretical_speed_checks: {
+          FSB: {
+            "40.0": { beta_used: 1.115, requirement_a_mean: 0.907, theoretical_distance_m: 68.0 },
+          },
+        },
+        load_summary: {
+          AW0: {
+            trailer_bogie_1: { mass_dynamic: 16.14, spring_pressure: 250 },
+          },
+        },
+        controller_pressure_standards: {
+          AW0: {
+            FSB: { trailer_bogie_1: 210 },
+          },
+        },
+        controller_code_params: {
+          pressure_conversion: {
+            FSB: { AW0: { trailer_bogie_1: { k_used_for_code: 976, BCP0_used_for_code: 25 } } },
+            EB: { AW0: { trailer_bogie_1: { k_used_for_code: 1014, BCP0_used_for_code: 25 } } },
+          },
+        },
+        parking_brake_check_result: null,
+        parking_brake_check_results_by_load_group: {},
+      },
+      warnings: [],
+    });
+
+    render(<App />);
+
+    const file = new File(
+      [[
+        "schema_version: 1",
+        "controller_type: bogie",
+        "vehicle_config:",
+        "  bogies:",
+        "    - name: trailer_bogie_1",
+        "      bogie_type: trailer_bogie",
+        "v0: 80",
+        "",
+      ].join("\n")],
+      "example_run_no_calibration_summary.yaml",
+      { type: "text/yaml" }
+    );
+    await user.upload(screen.getByLabelText("上传 YAML 文件"), file);
+    await screen.findByRole("heading", { level: 2, name: "导入摘要" });
+    await user.type(screen.getByRole("textbox", { name: "项目名称" }), "无标定摘要项目");
+    await user.type(screen.getByRole("textbox", { name: "项目编号" }), "IMP-RUN-002");
+    await user.click(screen.getByRole("button", { name: "保存并查看总览" }));
+    await screen.findByRole("heading", { level: 2, name: /上海机场线制动项目|无标定摘要项目/ });
+    await user.click(screen.getByRole("button", { name: "修订" }));
+    await user.click(screen.getByRole("button", { name: "运行" }));
+
+    expect(await screen.findByRole("heading", { level: 2, name: "运行结果" })).toBeInTheDocument();
+    expect(screen.getByText("service_brake: -")).toBeInTheDocument();
+    expect(screen.getByText("emergency_brake: -")).toBeInTheDocument();
+    expect(screen.queryByText("976")).not.toBeInTheDocument();
+    expect(screen.queryByText("1014")).not.toBeInTheDocument();
+  });
+
+  it("allows editing calibration fields after import and updates JSON highlight", async () => {
+    const user = userEvent.setup();
+
+    render(<App />);
+
+    const yamlText = [
+      "schema_version: 1",
+      "pressure_calibration:",
+      "  enabled: true",
+      "  service_brake:",
+      "    BCP0: 25.0",
+      "    point_pair_mode: aw3_aw0",
+      "    points:",
+      "      - load_group: AW0",
+      "        brake_type: FSB",
+      "        k_for_code: 1014.0",
+      "      - load_group: AW3",
+      "        brake_type: FB",
+      "        k_for_code: 1204.0",
+      "",
+    ].join("\n");
+    const file = new File([yamlText], "example_calibration_editable.yaml", { type: "text/yaml" });
+    await user.upload(screen.getByLabelText("上传 YAML 文件"), file);
+    await screen.findByRole("heading", { level: 2, name: "导入摘要" });
+    await user.type(screen.getByRole("textbox", { name: "项目名称" }), "标定可编辑项目");
+    await user.type(screen.getByRole("textbox", { name: "项目编号" }), "IMP-CAL-EDIT-001");
+    await user.click(screen.getByRole("button", { name: "保存并查看总览" }));
+    await screen.findByRole("heading", { level: 2, name: /上海机场线制动项目|标定可编辑项目/ });
+
+    await user.click(screen.getByRole("button", { name: "修订" }));
+    await user.click(screen.getByRole("button", { name: /^标定/ }));
+
+    const bcp0Input = screen.getByRole("spinbutton", { name: "常用实设出闸压力 BCP0 (kPa)" });
+    expect(bcp0Input).toHaveValue(25);
+    await user.clear(bcp0Input);
+    await user.type(bcp0Input, "31");
+
+    const kInput = screen.getByRole("spinbutton", { name: "常用试验点1 k_for_code" });
+    expect(kInput).toHaveValue(1204);
+    await user.clear(kInput);
+    await user.type(kInput, "1320");
+
+    const highlighted = screen.getByTestId("last-changed-path");
+    expect(highlighted).toHaveTextContent("\"k_for_code\": 1320");
+    expect(highlighted).toHaveStyle({ color: "rgb(198, 69, 50)" });
+  });
+
+  it("does not keep air_spring points in YAML when explicit_linear mode is used", async () => {
+    const user = userEvent.setup();
+
+    render(<App />);
+
+    const yamlText = [
+      "schema_version: 1",
+      "air_spring:",
+      "  powered_bogie:",
+      "    mode: fitted_from_points",
+      "    points:",
+      "      - pressure_kpa: 101",
+      "        sprung_mass_by_spring_ton: 10.1",
+      "      - pressure_kpa: 202",
+      "        sprung_mass_by_spring_ton: 20.2",
+      "      - pressure_kpa: 303",
+      "        sprung_mass_by_spring_ton: 30.3",
+      "",
+    ].join("\n");
+    const file = new File([yamlText], "example_airspring_points_then_linear.yaml", { type: "text/yaml" });
+    await user.upload(screen.getByLabelText("上传 YAML 文件"), file);
+    await screen.findByRole("heading", { level: 2, name: "导入摘要" });
+    await user.type(screen.getByRole("textbox", { name: "项目名称" }), "空簧线性保存项目");
+    await user.type(screen.getByRole("textbox", { name: "项目编号" }), "IMP-AS-LINEAR-001");
+    await user.click(screen.getByRole("button", { name: "保存并查看总览" }));
+    await screen.findByRole("heading", { level: 2, name: /上海机场线制动项目|空簧线性保存项目/ });
+
+    await user.click(screen.getByRole("button", { name: "修订" }));
+    await user.click(screen.getByRole("button", { name: /^载荷与空簧/ }));
+    await user.click(screen.getByRole("button", { name: "显式线性公式" }));
+    await user.click(screen.getByRole("button", { name: "保存" }));
+    await user.click(screen.getByRole("button", { name: "YAML" }));
+
+    const yamlPanelText = screen.getAllByText((_, node) => {
+      const text = node?.textContent ?? "";
+      return text.includes("air_spring:") && text.includes("powered_bogie:");
+    })[0]?.textContent ?? "";
+    expect(yamlPanelText).toContain("mode: explicit_linear");
+    expect(yamlPanelText).not.toContain("powered_bogie:    mode: explicit_linear    points:");
   });
 });

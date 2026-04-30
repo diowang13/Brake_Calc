@@ -1,6 +1,7 @@
 import type {
   ImportYamlResult,
   LoadConfigResult,
+  RunConfigResult,
   SaveConfigRequestPayload,
   SaveConfigResult,
 } from "../contracts/config";
@@ -41,4 +42,29 @@ export async function importYaml(yamlText: string): Promise<ImportYamlResult> {
     throw new Error(`import_yaml_failed:${response.status}`);
   }
   return (await response.json()) as ImportYamlResult;
+}
+
+export async function runConfig(inputConfigId: string): Promise<RunConfigResult> {
+  const response = await fetch(`${API_BASE_URL}/api/configs/${inputConfigId}/run`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({}),
+  });
+  if (!response.ok) {
+    let detail = "";
+    try {
+      const payload = (await response.json()) as { detail?: unknown };
+      if (typeof payload.detail === "string" && payload.detail.length > 0) {
+        detail = payload.detail;
+      }
+    } catch {
+      detail = "";
+    }
+    throw new Error(
+      detail.length > 0 ? `run_config_failed:${response.status}:${detail}` : `run_config_failed:${response.status}`
+    );
+  }
+  return (await response.json()) as RunConfigResult;
 }

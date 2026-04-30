@@ -319,10 +319,12 @@ class CalculationService:
         hermes_session_id: str | None = None,
     ) -> CalculationRunResult:
         input_config = self._input_config_repository.get(input_config_id)
-        assert input_config is not None
+        if input_config is None:
+            raise LookupError("input_config_not_found")
         validation = self._validation_service.validate_yaml_text(input_config.yaml_text)
-        assert validation.valid
-        assert validation.normalized_inputs is not None
+        if not validation.valid or validation.normalized_inputs is None:
+            error_lines = [f"{item.path}: {item.message}" for item in validation.errors]
+            raise ValueError("input_config_invalid: " + "; ".join(error_lines))
 
         calculation_run = self._calculation_run_repository.create(
             project_id=input_config.project_id,

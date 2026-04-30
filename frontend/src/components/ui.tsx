@@ -309,7 +309,16 @@ export function CalibrationConfigCard({
   firstPointBrakeType,
   secondPointBrakeType,
   onChangeFirstPointBrakeType,
-  onChangeSecondPointBrakeType
+  onChangeSecondPointBrakeType,
+  pressureValue,
+  onChangePressureValue,
+  firstPointKValue,
+  secondPointKValue,
+  onChangeFirstPointKValue,
+  onChangeSecondPointKValue,
+  pressureAriaLabel,
+  firstPointKAriaLabel,
+  secondPointKAriaLabel
 }: {
   title: string;
   status: string;
@@ -325,6 +334,15 @@ export function CalibrationConfigCard({
   secondPointBrakeType: string;
   onChangeFirstPointBrakeType?: (value: string) => void;
   onChangeSecondPointBrakeType?: (value: string) => void;
+  pressureValue: string;
+  onChangePressureValue: (value: string) => void;
+  firstPointKValue: string;
+  secondPointKValue: string;
+  onChangeFirstPointKValue: (value: string) => void;
+  onChangeSecondPointKValue: (value: string) => void;
+  pressureAriaLabel: string;
+  firstPointKAriaLabel: string;
+  secondPointKAriaLabel: string;
 }): ReactElement {
   return (
     <div
@@ -355,7 +373,12 @@ export function CalibrationConfigCard({
         }}
       >
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px", marginBottom: "12px" }}>
-          <FieldBlock label={pressureLabel} />
+          <FieldBlock
+            label={pressureAriaLabel}
+            value={pressureValue}
+            onChange={onChangePressureValue}
+            inputMode="decimal"
+          />
           <InfoCard title="理论参考值" body="待接入基础机械模型计算结果后，在此显示理论参考值。" />
         </div>
         {warning ? (
@@ -397,7 +420,12 @@ export function CalibrationConfigCard({
               ) : (
                 <InfoCard title="制动类型固定为 EB" body="紧急控制系数标定的试验点不提供 brake_type 切换。" />
               )}
-              <FieldBlock label="实设控制系数 k_for_code" />
+              <FieldBlock
+                label={firstPointKAriaLabel}
+                value={firstPointKValue}
+                onChange={onChangeFirstPointKValue}
+                inputMode="decimal"
+              />
               <InfoCard title="理论参考值" body="待接入基础机械模型计算结果后，在此显示理论参考值。" />
             </div>
           </div>
@@ -424,7 +452,12 @@ export function CalibrationConfigCard({
               ) : (
                 <InfoCard title="制动类型固定为 EB" body="紧急控制系数标定的试验点不提供 brake_type 切换。" />
               )}
-              <FieldBlock label="实设控制系数 k_for_code" />
+              <FieldBlock
+                label={secondPointKAriaLabel}
+                value={secondPointKValue}
+                onChange={onChangeSecondPointKValue}
+                inputMode="decimal"
+              />
               <InfoCard title="理论参考值" body="待接入基础机械模型计算结果后，在此显示理论参考值。" />
             </div>
           </div>

@@ -20,4 +20,11 @@ export type ParkingBrakeCheckResult = {
 export type Report = {
   parking_brake_check_result: ParkingBrakeCheckResult | null;
   parking_brake_check_results_by_load_group: Record<string, ParkingBrakeCheckResult>;
+  theoretical_speed_checks?: Record<string, Record<string, Record<string, number>>>;
+  load_summary?: Record<string, Record<string, { mass_dynamic?: number; spring_pressure?: number }>>;
+  controller_pressure_standards?: Record<string, Record<string, Record<string, number>>>;
+  controller_code_params?: Record<string, unknown>;
+  calibration_summary?: Record<string, unknown>;
+  auto_adjustments?: Array<{ code?: string; message?: string }>;
+  warnings?: Array<{ code?: string; message?: string }>;
 };

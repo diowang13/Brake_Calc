@@ -52,3 +52,10 @@ export type SupplementPresence = {
   hasPressureCalibration: boolean;
   hasElectricBrake: boolean;
 };
+
+export type RunConfigResult = {
+  calculation_run_id: string;
+  status: string;
+  report: Record<string, unknown>;
+  warnings: unknown[];
+};

@@ -1,7 +1,7 @@
 import type { ReactElement } from "react";
 import { useEffect, useState } from "react";
 
-import { importYaml, loadConfig, saveConfig } from "./api/configClient";
+import { importYaml, loadConfig, runConfig, saveConfig } from "./api/configClient";
 import {
   ghostActionStyle,
   headerPanelStyle,
@@ -28,39 +28,9 @@ import {
 } from "./pages/WorkbenchPage";
 import { WizardPage } from "./pages/WizardPage";
 
-const mockReport: Report = {
-  parking_brake_check_result: {
-    per_car: {
-      car_1: { F_N_PB: 16.39, F_PB: 15.0, incline_force: 5.0, safety_margin: 3.0 },
-      car_2: { F_N_PB: 16.39, F_PB: 15.0, incline_force: 5.0, safety_margin: 3.0 },
-      car_3: { F_N_PB: 16.39, F_PB: 15.0, incline_force: 5.0, safety_margin: 3.0 },
-      car_4: { F_N_PB: 16.39, F_PB: 15.0, incline_force: 5.0, safety_margin: 3.0 }
-    },
-    whole_train: { F_PB: 60.0, incline_force: 20.0, safety_margin: 3.0 },
-    pass: true
-  },
-  parking_brake_check_results_by_load_group: {
-    AW0: {
-      per_car: {
-        car_1: { F_N_PB: 16.39, F_PB: 15.0, incline_force: 5.0, safety_margin: 3.0 },
-        car_2: { F_N_PB: 16.39, F_PB: 15.0, incline_force: 5.0, safety_margin: 3.0 },
-        car_3: { F_N_PB: 16.39, F_PB: 15.0, incline_force: 5.0, safety_margin: 3.0 },
-        car_4: { F_N_PB: 16.39, F_PB: 15.0, incline_force: 5.0, safety_margin: 3.0 }
-      },
-      whole_train: { F_PB: 60.0, incline_force: 20.0, safety_margin: 3.0 },
-      pass: true
-    },
-    AW3: {
-      per_car: {
-        car_1: { F_N_PB: 16.39, F_PB: 15.0, incline_force: 9.0, safety_margin: 1.67 },
-        car_2: { F_N_PB: 16.39, F_PB: 15.0, incline_force: 9.0, safety_margin: 1.67 },
-        car_3: { F_N_PB: 16.39, F_PB: 15.0, incline_force: 9.0, safety_margin: 1.67 },
-        car_4: { F_N_PB: 16.39, F_PB: 15.0, incline_force: 9.0, safety_margin: 1.67 }
-      },
-      whole_train: { F_PB: 60.0, incline_force: 36.0, safety_margin: 1.67 },
-      pass: false
-    }
-  }
+const emptyReport: Report = {
+  parking_brake_check_result: null,
+  parking_brake_check_results_by_load_group: {},
 };
 
 function parseCount(value: string, fallback: number): number {
@@ -268,6 +238,11 @@ export function App(): ReactElement {
     hasPressureCalibration: false,
     hasElectricBrake: false,
   });
+  const [yamlChangedLineIndexes, setYamlChangedLineIndexes] = useState<number[]>([]);
+  const [yamlChangedPaths, setYamlChangedPaths] = useState<string[]>([]);
+  const [runtimeReport, setRuntimeReport] = useState<Report>(emptyReport);
+  const [runtimeFormState, setRuntimeFormState] = useState<Record<string, unknown> | null>(null);
+  const [runtimeStatus, setRuntimeStatus] = useState<"idle" | "succeeded" | "failed">("idle");
 
   const applyImportedVehicleConfig = (formState: Record<string, unknown> | null): void => {
     if (formState === null) {
@@ -389,6 +364,59 @@ export function App(): ReactElement {
     };
   };
 
+  const isPlainObject = (value: unknown): value is Record<string, unknown> =>
+    typeof value === "object" && value !== null && !Array.isArray(value);
+
+  const collectChangedScalarPaths = (
+    previousValue: unknown,
+    nextValue: unknown,
+    basePath = ""
+  ): string[] => {
+    if (Array.isArray(previousValue) || Array.isArray(nextValue)) {
+      return previousValue === nextValue ? [] : [basePath];
+    }
+    if (isPlainObject(previousValue) && isPlainObject(nextValue)) {
+      const keys = new Set([...Object.keys(previousValue), ...Object.keys(nextValue)]);
+      const changed: string[] = [];
+      keys.forEach((key) => {
+        const childPath = basePath.length > 0 ? `${basePath}.${key}` : key;
+        changed.push(
+          ...collectChangedScalarPaths(previousValue[key], nextValue[key], childPath)
+        );
+      });
+      return changed;
+    }
+    return previousValue !== nextValue && basePath.length > 0 ? [basePath] : [];
+  };
+
+  const findYamlChangedLineIndexesByPaths = (yamlText: string, changedPaths: string[]): number[] => {
+    const changedSet = new Set(changedPaths);
+    const lines = yamlText.split(/\r?\n/);
+    const stack: Array<{ indent: number; key: string }> = [];
+    const indexes: number[] = [];
+    lines.forEach((line, index) => {
+      const match = line.match(/^(\s*)([A-Za-z0-9_]+)\s*:\s*(.*)$/);
+      if (match === null) {
+        return;
+      }
+      const indent = match[1].length;
+      const key = match[2];
+      const valuePortion = match[3];
+      while (stack.length > 0 && stack[stack.length - 1].indent >= indent) {
+        stack.pop();
+      }
+      const path = [...stack.map((item) => item.key), key].join(".");
+      const isContainer = valuePortion.length === 0;
+      if (!isContainer && changedSet.has(path)) {
+        indexes.push(index);
+      }
+      if (isContainer) {
+        stack.push({ indent, key });
+      }
+    });
+    return indexes;
+  };
+
   const handleSaveAndViewOverviewFromImportSummary = async (): Promise<void> => {
     setIsImportSubmitting(true);
     setImportSubmitError(null);
@@ -424,6 +452,64 @@ export function App(): ReactElement {
       setImportSubmitError(`保存失败：${detail}`);
     } finally {
       setIsImportSubmitting(false);
+    }
+  };
+
+  const handleRunDraft = async (draft: Record<string, unknown>): Promise<void> => {
+    const previousFormState = (overviewData?.form_state ?? importResult?.form_state ?? {}) as Record<
+      string,
+      unknown
+    >;
+    const yamlLines = serializeYaml(draft);
+    const afterYaml = `${yamlLines.join("\n")}\n`;
+    const changedPaths = collectChangedScalarPaths(previousFormState, draft);
+    setImportYamlText(afterYaml);
+    setYamlChangedPaths(changedPaths);
+    setYamlChangedLineIndexes(findYamlChangedLineIndexesByPaths(afterYaml, changedPaths));
+    setOverviewData((current) =>
+      current === null
+        ? current
+        : {
+            ...current,
+            form_state: draft,
+            yaml_text: afterYaml,
+          }
+    );
+
+    if (activeInputConfigId === null) {
+      window.alert("当前没有可运行的已保存配置，请先导入并保存配置。");
+      return;
+    }
+
+    try {
+      const now = new Date().toISOString();
+      const project = overviewData?.project ?? {
+        project_name: importProjectName,
+        project_code: importProjectCode,
+        email: null,
+        note: "",
+      };
+      const saved = await saveConfig({
+        project,
+        yaml_text: afterYaml,
+        form_state: draft,
+        validation_status: "valid",
+        errors: [],
+        created_at: now,
+        source_input_config_id: activeInputConfigId,
+        revision_reason: "run_from_workbench",
+      });
+      setActiveInputConfigId(saved.input_config_id);
+      const runResult = await runConfig(saved.input_config_id);
+      setRuntimeReport(runResult.report as Report);
+      setRuntimeFormState(draft);
+      setRuntimeStatus("succeeded");
+      setHasUnsavedWorkbenchChanges(false);
+      setActiveScreen("result");
+    } catch (error) {
+      setRuntimeStatus("failed");
+      const detail = error instanceof Error ? error.message : "unknown_error";
+      window.alert(`运行失败：${detail}`);
     }
   };
 
@@ -605,33 +691,59 @@ export function App(): ReactElement {
           onBackToOverview={() => navigateToScreen("overview")}
           onDirtyChange={setHasUnsavedWorkbenchChanges}
           onSaveDraft={(draft) => {
+            const previousFormState = (overviewData?.form_state ?? importResult?.form_state ?? {}) as Record<
+              string,
+              unknown
+            >;
             const yamlLines = serializeYaml(draft);
-            setImportYamlText(`${yamlLines.join("\n")}\n`);
+            const afterYaml = `${yamlLines.join("\n")}\n`;
+            const changedPaths = collectChangedScalarPaths(previousFormState, draft);
+            setImportYamlText(afterYaml);
+            setYamlChangedPaths(changedPaths);
+            setYamlChangedLineIndexes(findYamlChangedLineIndexesByPaths(afterYaml, changedPaths));
             setOverviewData((current) =>
               current === null
                 ? current
                 : {
                     ...current,
                     form_state: draft,
-                    yaml_text: `${yamlLines.join("\n")}\n`,
-                  }
+                    yaml_text: afterYaml,
+                }
             );
+          }}
+          onRunDraft={(draft) => {
+            void handleRunDraft(draft);
           }}
           importedYamlText={importYamlText}
           importedFormState={overviewData?.form_state ?? importResult?.form_state ?? null}
           importedErrors={overviewData?.errors ?? importResult?.errors ?? []}
           hasImportedConfig={hasImportedConfig}
+          yamlChangedLineIndexes={yamlChangedLineIndexes}
+          yamlChangedPaths={yamlChangedPaths}
         />
       );
     }
 
     if (activeScreen === "result") {
+      const runtimeParkingConfig = toRecord(runtimeFormState?.parking_brake_check);
+      const runtimeRequiredSafetyMargin =
+        typeof runtimeParkingConfig?.required_safety_margin === "number"
+          ? runtimeParkingConfig.required_safety_margin
+          : 2.0;
       return (
         <ResultPage
-          report={mockReport}
-          requiredSafetyMargin={2.0}
+          report={runtimeReport}
+          requiredSafetyMargin={runtimeRequiredSafetyMargin}
+          controllerType={controllerConfigType}
+          controllerOrder={
+            controllerConfigType === "bogie"
+              ? bogieControllerRows.map((item) => item.name)
+              : carControllerRows.map((item) => item.name)
+          }
+          runtimeStatus={runtimeStatus}
           pressureMatrixView={pressureMatrixView}
           onChangePressureMatrixView={setPressureMatrixView}
+          onBackToWorkbench={() => setActiveScreen("workbench")}
           onBackToOverview={() => setActiveScreen("overview")}
         />
       );
@@ -649,6 +761,8 @@ export function App(): ReactElement {
           yamlText={importYamlText}
           onChangeYamlText={(yamlText) => {
             setImportYamlText(yamlText);
+            setYamlChangedLineIndexes([]);
+            setYamlChangedPaths([]);
             setYamlSupplementPresence(deriveSupplementPresenceFromYaml(yamlText));
             setImportSubmitError(null);
           }}
