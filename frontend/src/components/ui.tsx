@@ -269,6 +269,7 @@ export function PointRow({
   massValue,
   onChangePressure,
   onChangeMass,
+  onDelete,
 }: {
   index: number;
   unitLabel: string;
@@ -276,6 +277,7 @@ export function PointRow({
   massValue?: string;
   onChangePressure?: (value: string) => void;
   onChangeMass?: (value: string) => void;
+  onDelete?: () => void;
 }): ReactElement {
   return (
     <div
@@ -286,7 +288,14 @@ export function PointRow({
         background: "#fff"
       }}
     >
-      <h4 style={{ margin: "0 0 12px" }}>{`特征点 ${index}`}</h4>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "12px" }}>
+        <h4 style={{ margin: 0 }}>{`特征点 ${index}`}</h4>
+        {onDelete !== undefined ? (
+          <button type="button" onClick={onDelete} style={{ border: "1px solid #ccbca8", borderRadius: "999px", background: "#fff", padding: "6px 10px", cursor: "pointer" }}>
+            删除
+          </button>
+        ) : null}
+      </div>
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px" }}>
         <FieldBlock label="压力 (kPa)" value={pressureValue} onChange={onChangePressure} />
         <FieldBlock label={unitLabel} value={massValue} onChange={onChangeMass} />

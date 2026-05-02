@@ -3,7 +3,7 @@ import userEvent from "@testing-library/user-event";
 import { vi } from "vitest";
 
 import { App } from "./App";
-import { runConfig } from "./api/configClient";
+import { downloadYaml, listProjects, loadConfig, openProject, runConfig } from "./api/configClient";
 
 vi.mock("./api/configClient", () => {
   let savedConfig: Record<string, unknown> | null = null;
@@ -252,6 +252,54 @@ vi.mock("./api/configClient", () => {
         },
       },
       warnings: [],
+    })),
+    openProject: vi.fn(async () => ({
+      input_config_id: "mock-config-id",
+      config: {
+        project: {
+          project_name: "上海机场线制动项目",
+          project_code: "SH-HX-026",
+          email: null,
+          note: "",
+        },
+        yaml_text: "schema_version: 1\nv0: 80\n",
+        form_state: { schema_version: 1, v0: 80 },
+        validation_status: "valid",
+        errors: [],
+        version: 3,
+        source_input_config_id: null,
+        revision_reason: null,
+        latest_run: null,
+      },
+    })),
+    downloadYaml: vi.fn(async () => ({
+      filename: "SH-HX-026_input_20260430_1200.yaml",
+      yaml_text: "schema_version: 1\nv0: 80\n",
+    })),
+    listProjects: vi.fn(async () => ({
+      items: [
+        {
+          project_name: "上海机场线制动项目",
+          project_code: "SH-HX-026",
+          updated_at: "最后修改时间",
+          latest_input_config_id: "mock-config-id",
+          controller_type: "bogie",
+          latest_run: {
+            calculation_run_id: "run-1",
+            status: "succeeded",
+            report: null,
+            created_at: "2026-04-30T12:00:00Z",
+          },
+        },
+        {
+          project_name: "崇明线预研项目",
+          project_code: "CM-PR-011",
+          updated_at: "最后修改时间",
+          latest_input_config_id: null,
+          controller_type: "car",
+          latest_run: null,
+        },
+      ],
     })),
   };
 });
@@ -925,7 +973,7 @@ describe("App shell", () => {
     await user.click(screen.getByRole("button", { name: "首页 / 项目列表" }));
     await user.click(screen.getAllByRole("button", { name: "打开" })[0]);
     expect(
-      screen.getByRole("heading", { level: 2, name: /上海机场线制动项目/ })
+      screen.getByRole("heading", { level: 2, name: /上海机场线制动项目|导入项目/ })
     ).toBeInTheDocument();
   });
 
@@ -1064,7 +1112,7 @@ describe("App shell", () => {
     await user.type(screen.getByRole("textbox", { name: "项目编号" }), "IMP-003");
     await user.click(screen.getByRole("button", { name: "保存并查看总览" }));
 
-    await screen.findByRole("heading", { level: 2, name: /上海机场线制动项目|导入项目/ });
+    await screen.findByRole("button", { name: "修订" });
     await user.click(screen.getByRole("button", { name: "修订" }));
 
     expect(screen.getByRole("spinbutton", { name: "最高速度 v0 (km/h)" })).toHaveValue(80);
@@ -1511,6 +1559,7 @@ describe("App shell", () => {
     expect(highlighted).toHaveStyle({ color: "rgb(198, 69, 50)" });
 
     await user.click(screen.getByRole("button", { name: "保存" }));
+    await user.click(screen.getByRole("button", { name: "确认保存" }));
     await user.click(screen.getByRole("button", { name: "YAML" }));
     expect(screen.getAllByText(/pressure_calibration:/).length).toBeGreaterThan(0);
     expect(screen.getAllByText(/enabled: true/).length).toBeGreaterThan(0);
@@ -1894,6 +1943,7 @@ describe("App shell", () => {
     await user.click(screen.getByRole("button", { name: /^载荷与空簧/ }));
     await user.click(screen.getByRole("button", { name: "显式线性公式" }));
     await user.click(screen.getByRole("button", { name: "保存" }));
+    await user.click(screen.getByRole("button", { name: "确认保存" }));
     await user.click(screen.getByRole("button", { name: "YAML" }));
 
     const yamlPanelText = screen.getAllByText((_, node) => {
@@ -1902,5 +1952,167 @@ describe("App shell", () => {
     })[0]?.textContent ?? "";
     expect(yamlPanelText).toContain("mode: explicit_linear");
     expect(yamlPanelText).not.toContain("powered_bogie:    mode: explicit_linear    points:");
+  });
+
+  it("allows adding and deleting custom ratio brake types", async () => {
+    const user = userEvent.setup();
+    render(<App />);
+    await user.click(screen.getByRole("button", { name: "配置工作台" }));
+    await user.click(screen.getByRole("button", { name: /^运行基础配置 \/ 技术条件/ }));
+
+    const addButton = screen.getByRole("button", { name: "添加制动类型" });
+    await user.click(addButton);
+    expect(screen.getByRole("textbox", { name: "制动类型代号 2" })).toBeInTheDocument();
+
+    const deleteButtons = screen.getAllByRole("button", { name: "删除" });
+    await user.click(deleteButtons[1]);
+    expect(screen.queryByRole("textbox", { name: "制动类型代号 2" })).not.toBeInTheDocument();
+  });
+
+  it("allows adding and deleting air spring feature points", async () => {
+    const user = userEvent.setup();
+    render(<App />);
+    await user.click(screen.getByRole("button", { name: "配置工作台" }));
+    await user.click(screen.getByRole("button", { name: /^载荷与空簧/ }));
+
+    expect(screen.getByText("特征点 3")).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "添加特征点" }));
+    expect(screen.getByText("特征点 4")).toBeInTheDocument();
+
+    const pointDeleteButtons = screen.getAllByRole("button", { name: "删除" });
+    await user.click(pointDeleteButtons[pointDeleteButtons.length - 1]);
+    expect(screen.queryByText("特征点 4")).not.toBeInTheDocument();
+  });
+
+  it("opens existing project from home buttons and loads readonly overview", async () => {
+    const user = userEvent.setup();
+    render(<App />);
+
+    await user.click(screen.getByRole("button", { name: "打开既有项目" }));
+    expect(await screen.findByRole("button", { name: "修订" })).toBeInTheDocument();
+    expect(vi.mocked(openProject)).toHaveBeenCalledWith("SH-HX-026");
+
+    await user.click(screen.getByRole("button", { name: "首页 / 项目列表" }));
+    await user.click(screen.getAllByRole("button", { name: "打开" })[1]);
+    expect(vi.mocked(openProject)).toHaveBeenCalledWith("CM-PR-011");
+  });
+
+  it("allows editing wizard project metadata fields", async () => {
+    const user = userEvent.setup();
+    render(<App />);
+    await user.click(screen.getByRole("button", { name: "新建初始化" }));
+
+    const projectName = screen.getByRole("textbox", { name: "项目名称" });
+    const projectCode = screen.getByRole("textbox", { name: "项目编号" });
+    const projectEmail = screen.getByRole("textbox", { name: "报告获取邮箱" });
+    const projectNote = screen.getByRole("textbox", { name: "备注（非必填）" });
+    await user.type(projectName, "项目A");
+    await user.type(projectCode, "CODE-A");
+    await user.type(projectEmail, "ops@example.com");
+    await user.type(projectNote, "note");
+    expect(projectName).toHaveValue("项目A");
+    expect(projectCode).toHaveValue("CODE-A");
+    expect(projectEmail).toHaveValue("ops@example.com");
+    expect(projectNote).toHaveValue("note");
+  });
+
+  it("reflects succeeded run status on overview and keeps result view available", async () => {
+    const user = userEvent.setup();
+    render(<App />);
+    await user.click(screen.getByRole("button", { name: "打开既有项目" }));
+    await screen.findByRole("button", { name: "修订" });
+    await user.click(screen.getByRole("button", { name: "修订" }));
+    await user.click(screen.getByRole("button", { name: "运行" }));
+    await screen.findByRole("heading", { level: 2, name: "运行结果" });
+    await user.click(screen.getByRole("button", { name: "回到总览" }));
+    await screen.findByRole("button", { name: "修订" });
+    expect(screen.getByRole("button", { name: "查看结果" })).toBeEnabled();
+  });
+
+  it("downloads YAML from workbench", async () => {
+    const user = userEvent.setup();
+    Object.defineProperty(window.URL, "createObjectURL", {
+      writable: true,
+      value: vi.fn(() => "blob:mock-url"),
+    });
+    Object.defineProperty(window.URL, "revokeObjectURL", {
+      writable: true,
+      value: vi.fn(),
+    });
+    render(<App />);
+    await user.click(screen.getByRole("button", { name: "打开既有项目" }));
+    await screen.findByRole("button", { name: "修订" });
+    await user.click(screen.getByRole("button", { name: "修订" }));
+    await user.click(screen.getByRole("button", { name: "下载 YAML" }));
+    expect(vi.mocked(downloadYaml)).toHaveBeenCalledWith("mock-config-id");
+    expect(window.URL.createObjectURL).toHaveBeenCalled();
+  });
+
+  it("rehydrates latest run from persisted record when reopening project", async () => {
+    const user = userEvent.setup();
+    vi.mocked(loadConfig).mockResolvedValueOnce({
+      project: {
+        project_name: "上海机场线制动项目",
+        project_code: "SH-HX-026",
+        email: null,
+        note: "",
+      },
+      yaml_text: "schema_version: 1\nv0: 80\n",
+      form_state: { schema_version: 1, v0: 80 },
+      validation_status: "valid",
+      errors: [],
+      version: 3,
+      source_input_config_id: null,
+      revision_reason: null,
+      latest_run: {
+        calculation_run_id: "run-persisted",
+        status: "succeeded",
+        report: {
+          parking_brake_check_result: null,
+          parking_brake_check_results_by_load_group: {},
+          theoretical_speed_checks: {},
+          load_summary: {},
+          controller_pressure_standards: {},
+          controller_code_params: { pressure_conversion: {} },
+        },
+        created_at: "2026-04-30T12:00:00Z",
+      },
+    });
+    vi.mocked(openProject).mockResolvedValueOnce({
+      input_config_id: "mock-config-id",
+      config: {
+        project: {
+          project_name: "上海机场线制动项目",
+          project_code: "SH-HX-026",
+          email: null,
+          note: "",
+        },
+        yaml_text: "schema_version: 1\nv0: 80\n",
+        form_state: { schema_version: 1, v0: 80 },
+        validation_status: "valid",
+        errors: [],
+        version: 3,
+        source_input_config_id: null,
+        revision_reason: null,
+        latest_run: {
+          calculation_run_id: "run-persisted",
+          status: "succeeded",
+          report: {
+            parking_brake_check_result: null,
+            parking_brake_check_results_by_load_group: {},
+            theoretical_speed_checks: {},
+            load_summary: {},
+            controller_pressure_standards: {},
+            controller_code_params: { pressure_conversion: {} },
+          },
+          created_at: "2026-04-30T12:00:00Z",
+        },
+      },
+    });
+    render(<App />);
+    await user.click(screen.getByRole("button", { name: "打开既有项目" }));
+    await screen.findByRole("heading", { level: 2, name: /上海机场线制动项目|导入项目/ });
+    await user.click(screen.getByRole("button", { name: "查看结果" }));
+    expect(await screen.findByRole("heading", { level: 2, name: "运行结果" })).toBeInTheDocument();
   });
 });

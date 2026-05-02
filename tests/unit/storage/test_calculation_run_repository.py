@@ -129,3 +129,35 @@ def test_calculation_run_repository_persists_failed_error(tmp_path: Path) -> Non
         ensure_ascii=True,
         sort_keys=True,
     )
+
+
+def test_calculation_run_repository_gets_latest_run_for_input_config(tmp_path: Path) -> None:
+    project_id, input_config_id, repository = create_input_config(tmp_path / "storage.sqlite3")
+    first = repository.create(
+        project_id=project_id,
+        input_config_id=input_config_id,
+        triggered_by="web_ui",
+        created_at="2026-04-25T10:10:00Z",
+    )
+    repository.mark_failed(
+        calculation_run_id=first.id,
+        error={"type": "runtime_error", "message": "failed"},
+        finished_at="2026-04-25T10:11:00Z",
+    )
+    second = repository.create(
+        project_id=project_id,
+        input_config_id=input_config_id,
+        triggered_by="web_ui",
+        created_at="2026-04-25T10:12:00Z",
+    )
+    repository.mark_succeeded(
+        calculation_run_id=second.id,
+        report=make_report_payload(),
+        finished_at="2026-04-25T10:13:00Z",
+        markdown_report_path=None,
+    )
+
+    latest = repository.get_latest_for_input_config(input_config_id)
+    assert latest is not None
+    assert latest.id == second.id
+    assert latest.status == "succeeded"

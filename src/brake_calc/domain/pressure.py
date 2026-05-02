@@ -35,10 +35,13 @@ def derive_pressure_parameters(
     lever_ratio: float = 1.0,
 ) -> tuple[float, float]:
     """按机械倍率推导基础 k_initial 与 BCP0_initial。"""
+    # NOTE:
+    # `lever_ratio` here refers to the caliper friction geometry factor Dw/(2*Rf),
+    # not a mechanical amplification ratio (Li/Lo family).
     if lever_ratio <= 0:
         raise ValueError("lever_ratio must be > 0")
-    k_initial = 1.0 / (n_cylinders * lo * eta_o * xi * li * eta_i * sc * lever_ratio)
-    bcp0_initial = (fs1 / (li * eta_i) + fs2) / (sc * lever_ratio)
+    k_initial = lever_ratio / (n_cylinders * lo * eta_o * xi * li * eta_i * sc)
+    bcp0_initial = (fs1 / (li * eta_i) + fs2) / sc
     return k_initial, bcp0_initial
 
 

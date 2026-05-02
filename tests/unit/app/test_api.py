@@ -3,7 +3,9 @@ from __future__ import annotations
 from brake_calc.app.api import (
     download_yaml,
     import_yaml,
+    list_projects,
     load_config,
+    open_latest_project_config,
     run_config,
     save_config,
     validate_config,
@@ -60,6 +62,21 @@ class FakeConfigService:
 
     def build_export_filename(self, *, project_code: str, created_at: str) -> str:
         return "LINE-001_input_20260425_1234.yaml"
+
+    def load_latest_project_config(self, project_code: str) -> object:
+        loaded = self.load_config("input-1")
+        return type("OpenProjectResult", (), {"input_config_id": "input-1", "config": loaded})()
+
+    def list_projects(self) -> list[dict[str, object]]:
+        return [
+            {
+                "project_name": "Line 1",
+                "project_code": "LINE-001",
+                "updated_at": "2026-04-25T12:34:56Z",
+                "latest_input_config_id": "input-1",
+                "controller_type": "bogie",
+            }
+        ]
 
 
 class FakeImportService:
@@ -136,12 +153,16 @@ def test_api_save_load_import_download_and_run_map_service_results() -> None:
         },
         calculation_service=FakeCalculationService(),
     )
+    opened = open_latest_project_config("LINE-001", config_service=config_service)
+    listed = list_projects(config_service=config_service)
 
     assert saved["input_config_id"] == "input-1"
     assert loaded["project"]["project_code"] == "LINE-001"
     assert imported["form_state"]["schema_version"] == 1
     assert downloaded["filename"] == "LINE-001_input_20260425_1234.yaml"
     assert run_response["status"] == "succeeded"
+    assert opened["input_config_id"] == "input-1"
+    assert listed["items"][0]["project_code"] == "LINE-001"
     assert config_service.last_saved_request is not None
     last_errors = getattr(config_service.last_saved_request, "errors")
     assert len(last_errors) == 0

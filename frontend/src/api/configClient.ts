@@ -1,6 +1,9 @@
 import type {
+  DownloadYamlResult,
   ImportYamlResult,
+  ListProjectsResult,
   LoadConfigResult,
+  OpenProjectResult,
   RunConfigResult,
   SaveConfigRequestPayload,
   SaveConfigResult,
@@ -67,4 +70,41 @@ export async function runConfig(inputConfigId: string): Promise<RunConfigResult>
     );
   }
   return (await response.json()) as RunConfigResult;
+}
+
+export async function openProject(projectCode: string): Promise<OpenProjectResult> {
+  const response = await fetch(`${API_BASE_URL}/api/projects/${encodeURIComponent(projectCode)}/latest-config`);
+  if (response.ok) {
+    return (await response.json()) as OpenProjectResult;
+  }
+  if (response.status !== 404) {
+    throw new Error(`open_project_failed:${response.status}`);
+  }
+
+  const listResult = await listProjects();
+  const matched = listResult.items.find((item) => item.project_code === projectCode);
+  if (matched?.latest_input_config_id === null || matched?.latest_input_config_id === undefined) {
+    throw new Error("open_project_failed:no_available_config");
+  }
+  const config = await loadConfig(matched.latest_input_config_id);
+  return {
+    input_config_id: matched.latest_input_config_id,
+    config,
+  };
+}
+
+export async function downloadYaml(inputConfigId: string): Promise<DownloadYamlResult> {
+  const response = await fetch(`${API_BASE_URL}/api/configs/${inputConfigId}/download-yaml`);
+  if (!response.ok) {
+    throw new Error(`download_yaml_failed:${response.status}`);
+  }
+  return (await response.json()) as DownloadYamlResult;
+}
+
+export async function listProjects(): Promise<ListProjectsResult> {
+  const response = await fetch(`${API_BASE_URL}/api/projects`);
+  if (!response.ok) {
+    throw new Error(`list_projects_failed:${response.status}`);
+  }
+  return (await response.json()) as ListProjectsResult;
 }

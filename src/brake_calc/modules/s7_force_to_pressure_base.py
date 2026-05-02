@@ -22,6 +22,8 @@ def run(ctx: Context) -> Context:
     if mech_params.cylinder_type == "caliper_cylinder":
         assert mech_params.Dw is not None
         assert mech_params.Rf is not None
+        # Friction geometry factor for caliper model: Dw/(2*Rf).
+        # This is not Li/Lo mechanical amplification.
         lever_ratio = mech_params.Dw / (2 * mech_params.Rf)
 
     k_initial, bcp0_initial = derive_pressure_parameters(

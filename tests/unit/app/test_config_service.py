@@ -150,6 +150,12 @@ class FakeInputConfigRepository:
     def get(self, input_config_id: str) -> FakeInputConfig | None:
         return self.items.get(input_config_id)
 
+    def get_latest_for_project(self, project_id: str) -> FakeInputConfig | None:
+        candidates = [item for item in self.items.values() if item.project_id == project_id]
+        if not candidates:
+            return None
+        return sorted(candidates, key=lambda item: item.version, reverse=True)[0]
+
 
 def test_config_service_saves_project_and_input_config() -> None:
     service = ConfigService(

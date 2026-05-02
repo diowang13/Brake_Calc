@@ -19,12 +19,20 @@ export function WizardPage({
   totalCars,
   poweredCars,
   trailerCars,
+  projectName,
+  projectCode,
+  projectEmail,
+  projectNote,
   onChangeBcuType,
   onChangeHasMixedBogieVehicles,
   onChangeTotalCars,
   onChangeMixedCars,
   onChangePoweredCars,
   onChangeTrailerCars,
+  onChangeProjectName,
+  onChangeProjectCode,
+  onChangeProjectEmail,
+  onChangeProjectNote,
   onEnterWorkbench
 }: {
   bcuType: "car" | "bogie";
@@ -34,12 +42,20 @@ export function WizardPage({
   totalCars: string;
   poweredCars: string;
   trailerCars: string;
+  projectName: string;
+  projectCode: string;
+  projectEmail: string;
+  projectNote: string;
   onChangeBcuType: (type: "car" | "bogie") => void;
   onChangeHasMixedBogieVehicles: (checked: boolean) => void;
   onChangeTotalCars: (value: string) => void;
   onChangeMixedCars: (value: string) => void;
   onChangePoweredCars: (value: string) => void;
   onChangeTrailerCars: (value: string) => void;
+  onChangeProjectName: (value: string) => void;
+  onChangeProjectCode: (value: string) => void;
+  onChangeProjectEmail: (value: string) => void;
+  onChangeProjectNote: (value: string) => void;
   onEnterWorkbench: () => void;
 }): ReactElement {
   const mixedCarsValue = parseNonNegativeInteger(mixedCars);
@@ -107,10 +123,10 @@ export function WizardPage({
           }}
         >
           <h3 style={{ margin: 0 }}>步骤 1 · 项目基础信息</h3>
-          <FieldBlock label="项目名称" />
-          <FieldBlock label="项目编号" />
-          <FieldBlock label="报告获取邮箱" />
-          <FieldBlock label="备注（非必填）" />
+          <FieldBlock label="项目名称" value={projectName} onChange={onChangeProjectName} />
+          <FieldBlock label="项目编号" value={projectCode} onChange={onChangeProjectCode} />
+          <FieldBlock label="报告获取邮箱" value={projectEmail} onChange={onChangeProjectEmail} />
+          <FieldBlock label="备注（非必填）" value={projectNote} onChange={onChangeProjectNote} />
         </div>
 
         <div

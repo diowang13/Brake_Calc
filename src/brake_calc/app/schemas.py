@@ -71,3 +71,9 @@ class CalculationRunResult:
     status: str
     report: dict[str, object]
     warnings: list[object]
+
+
+@dataclass(frozen=True)
+class OpenProjectResult:
+    input_config_id: str
+    config: LoadConfigResult

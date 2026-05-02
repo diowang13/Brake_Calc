@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, type ReactElement } from "react";
+import { useEffect, useMemo, useRef, useState, type ReactElement } from "react";
 
 import {
   ghostActionStyle,
@@ -116,6 +116,7 @@ export function WorkbenchPage({
   onDirtyChange,
   onSaveDraft,
   onRunDraft,
+  onDownloadYaml,
   importedYamlText,
   importedFormState,
   importedErrors,
@@ -150,6 +151,7 @@ export function WorkbenchPage({
   onDirtyChange: (dirty: boolean) => void;
   onSaveDraft: (draft: Record<string, unknown>) => void;
   onRunDraft: (draft: Record<string, unknown>) => void;
+  onDownloadYaml: () => void;
   importedYamlText: string;
   importedFormState: Record<string, unknown> | null;
   importedErrors: ValidationErrorItem[];
@@ -206,18 +208,19 @@ export function WorkbenchPage({
   const [servicePointTwoBrakeType, setServicePointTwoBrakeType] = useState<"FSB" | "FB">("FB");
   const [massAw0PoweredValue, setMassAw0PoweredValue] = useState("");
   const [massAw0TrailerValue, setMassAw0TrailerValue] = useState("");
+  const [massAw2PoweredValue, setMassAw2PoweredValue] = useState("");
+  const [massAw2TrailerValue, setMassAw2TrailerValue] = useState("");
   const [massAw3PoweredValue, setMassAw3PoweredValue] = useState("");
   const [massAw3TrailerValue, setMassAw3TrailerValue] = useState("");
   const [bogieWeightPoweredValue, setBogieWeightPoweredValue] = useState("");
   const [bogieWeightTrailerValue, setBogieWeightTrailerValue] = useState("");
   const [airSpringKValue, setAirSpringKValue] = useState("");
   const [airSpringBValue, setAirSpringBValue] = useState("");
-  const [airSpringPoint1PressureValue, setAirSpringPoint1PressureValue] = useState("");
-  const [airSpringPoint1MassValue, setAirSpringPoint1MassValue] = useState("");
-  const [airSpringPoint2PressureValue, setAirSpringPoint2PressureValue] = useState("");
-  const [airSpringPoint2MassValue, setAirSpringPoint2MassValue] = useState("");
-  const [airSpringPoint3PressureValue, setAirSpringPoint3PressureValue] = useState("");
-  const [airSpringPoint3MassValue, setAirSpringPoint3MassValue] = useState("");
+  const [airSpringPoints, setAirSpringPoints] = useState<Array<{ pressure: string; mass: string }>>([
+    { pressure: "", mass: "" },
+    { pressure: "", mass: "" },
+    { pressure: "", mass: "" },
+  ]);
   const [mechScValue, setMechScValue] = useState("");
   const [mechXiValue, setMechXiValue] = useState("");
   const [mechLiValue, setMechLiValue] = useState("");
@@ -252,9 +255,11 @@ export function WorkbenchPage({
   const [emergencyCalibrationPointOneKValue, setEmergencyCalibrationPointOneKValue] = useState("");
   const [emergencyCalibrationPointTwoKValue, setEmergencyCalibrationPointTwoKValue] = useState("");
   const [lastChangedPath, setLastChangedPath] = useState<string | null>(null);
+  const jsonPanelRef = useRef<HTMLDivElement | null>(null);
   const [activeInfoTab, setActiveInfoTab] = useState<"description" | "errors" | "yaml">(
     hasImportedConfig ? "yaml" : "description"
   );
+  const [showSaveConfirmModal, setShowSaveConfirmModal] = useState(false);
 
   const sectionErrorPrefixes: Record<WorkbenchSectionKey, string[]> = {
     requirements: ["v0", "V_list", "requirement", "response_time", "brake_types", "adhesion"],
@@ -276,40 +281,35 @@ export function WorkbenchPage({
     if (errors.length > 0) {
       return `${errors.length} 项错误`;
     }
-    const root = importedFormState;
-    const has = (path: string[]): boolean => getNestedStringText(root, path).trim().length > 0;
-    const hasObject = (path: string[]): boolean => {
-      let cursor: unknown = root;
-      for (const key of path) {
-        const record = toRecord(cursor);
-        if (record === null || !(key in record)) return false;
-        cursor = record[key];
-      }
-      return typeof cursor === "object" && cursor !== null;
-    };
-    const isEnabled = (path: string[]): boolean => {
-      let cursor: unknown = root;
-      for (const key of path) {
-        const record = toRecord(cursor);
-        if (record === null || !(key in record)) return false;
-        cursor = record[key];
-      }
-      return typeof cursor === "boolean" && cursor;
-    };
 
     if (section === "requirements") {
-      return has(["v0"]) && has(["requirement", "FSB", "value"]) && has(["requirement", "EB", "value"])
+      const ebValue = emergencyRequirementMode === "a_mean" ? ebMeanValue : ebDistanceValue;
+      return v0Value.trim() !== "" && fsbMeanValue.trim() !== "" && ebValue.trim() !== ""
         ? "已补充"
         : "待完善";
     }
-    if (section === "vehicle-config") return hasObject(["vehicle_config"]) ? "已补充" : "待完善";
-    if (section === "load-air-spring")
-      return hasObject(["mass_params"]) && hasObject(["air_spring"]) ? "已补充" : "待完善";
-    if (section === "base-brake") return hasObject(["mech_params"]) ? "已补充" : "待完善";
-    if (section === "parking") return isEnabled(["parking_brake_check", "enabled"]) ? "已补充" : "未补充";
-    if (section === "calibration")
-      return isEnabled(["pressure_calibration", "enabled"]) ? "已补充" : "未补充";
-    return isEnabled(["electric_brake", "enabled"]) ? "已补充" : "未补充";
+    if (section === "vehicle-config") return vehicleCountMatches ? "已补充" : "待完善";
+    if (section === "load-air-spring") {
+      const massReady =
+        massAw0PoweredValue.trim() !== "" &&
+        massAw0TrailerValue.trim() !== "" &&
+        massAw2PoweredValue.trim() !== "" &&
+        massAw2TrailerValue.trim() !== "" &&
+        massAw3PoweredValue.trim() !== "" &&
+        massAw3TrailerValue.trim() !== "";
+      const airSpringReady =
+        airSpringInputMode === "fitted_from_points"
+          ? airSpringPoints.some((item) => item.pressure.trim() !== "" && item.mass.trim() !== "")
+          : airSpringKValue.trim() !== "" && airSpringBValue.trim() !== "";
+      return massReady && airSpringReady ? "已补充" : "待完善";
+    }
+    if (section === "base-brake") {
+      const mechReady = mechScValue.trim() !== "" && mechXiValue.trim() !== "" && mechLiValue.trim() !== "";
+      return mechReady ? "已补充" : "待完善";
+    }
+    if (section === "parking") return parkingEnabled ? "已补充" : "未补充";
+    if (section === "calibration") return pressureCalibrationEnabled ? "已补充" : "未补充";
+    return "未补充";
   };
 
   const sectionDescriptionMap: Record<WorkbenchSectionKey, string> = {
@@ -386,6 +386,12 @@ export function WorkbenchPage({
     setMassAw0TrailerValue(
       getNestedNumberText(importedFormState, ["mass_params", "trailer_bogie", "mass_static", "AW0"])
     );
+    setMassAw2PoweredValue(
+      getNestedNumberText(importedFormState, ["mass_params", "powered_bogie", "mass_static", "AW2"])
+    );
+    setMassAw2TrailerValue(
+      getNestedNumberText(importedFormState, ["mass_params", "trailer_bogie", "mass_static", "AW2"])
+    );
     setMassAw3PoweredValue(
       getNestedNumberText(importedFormState, ["mass_params", "powered_bogie", "mass_static", "AW3"])
     );
@@ -432,15 +438,15 @@ export function WorkbenchPage({
       }
       return { pressure: "", mass: "" };
     };
-    const point1 = normalizePoint(pointsRaw[0]);
-    const point2 = normalizePoint(pointsRaw[1]);
-    const point3 = normalizePoint(pointsRaw[2]);
-    setAirSpringPoint1PressureValue(point1.pressure);
-    setAirSpringPoint1MassValue(point1.mass);
-    setAirSpringPoint2PressureValue(point2.pressure);
-    setAirSpringPoint2MassValue(point2.mass);
-    setAirSpringPoint3PressureValue(point3.pressure);
-    setAirSpringPoint3MassValue(point3.mass);
+    const nextPoints =
+      pointsRaw.length > 0
+        ? pointsRaw.map(normalizePoint)
+        : [
+            { pressure: "", mass: "" },
+            { pressure: "", mass: "" },
+            { pressure: "", mass: "" },
+          ];
+    setAirSpringPoints(nextPoints);
     const mechParams = toRecord(importedFormState.mech_params);
     const cylinderType = mechParams?.cylinder_type;
     if (cylinderType === "tread_cylinder" || cylinderType === "caliper_cylinder") {
@@ -654,13 +660,49 @@ export function WorkbenchPage({
   };
   const handleSave = (): void => {
     setSubmitAttempted(true);
+    setShowSaveConfirmModal(true);
+  };
+  const handleConfirmSave = (): void => {
     onSaveDraft(liveFormState);
     onDirtyChange(false);
+    setShowSaveConfirmModal(false);
   };
   const handleRun = (): void => {
     setSubmitAttempted(true);
     onRunDraft(liveFormState);
     onDirtyChange(false);
+  };
+
+  const isPlainObject = (value: unknown): value is Record<string, unknown> =>
+    typeof value === "object" && value !== null && !Array.isArray(value);
+
+  const collectChangedPaths = (beforeValue: unknown, afterValue: unknown, basePath = ""): string[] => {
+    if (Array.isArray(beforeValue) || Array.isArray(afterValue)) {
+      return JSON.stringify(beforeValue) === JSON.stringify(afterValue) || basePath.length === 0 ? [] : [basePath];
+    }
+    if (isPlainObject(beforeValue) && isPlainObject(afterValue)) {
+      const keys = new Set([...Object.keys(beforeValue), ...Object.keys(afterValue)]);
+      const changed: string[] = [];
+      keys.forEach((key) => {
+        const nextPath = basePath.length > 0 ? `${basePath}.${key}` : key;
+        changed.push(...collectChangedPaths(beforeValue[key], afterValue[key], nextPath));
+      });
+      return changed;
+    }
+    return Object.is(beforeValue, afterValue) || basePath.length === 0 ? [] : [basePath];
+  };
+
+  const readValueByPath = (rootValue: unknown, path: string): unknown => {
+    const parts = path.split(".");
+    let cursor: unknown = rootValue;
+    for (const part of parts) {
+      const record = toRecord(cursor);
+      if (record === null || !(part in record)) {
+        return undefined;
+      }
+      cursor = record[part];
+    }
+    return cursor;
   };
 
   const updateSpeedCheck = (index: number, value: string): void => {
@@ -690,6 +732,28 @@ export function WorkbenchPage({
       const nextIndex = current.length + 1;
       return [...current, { name: `holding_${nextIndex}`, ratioPercent: "50" }];
     });
+  };
+
+  const deleteRatioBrake = (index: number): void => {
+    setRatioBrakes((current) => current.filter((_, itemIndex) => itemIndex !== index));
+  };
+
+  const updateAirSpringPoint = (
+    index: number,
+    field: "pressure" | "mass",
+    value: string
+  ): void => {
+    setAirSpringPoints((current) =>
+      current.map((item, itemIndex) => (itemIndex === index ? { ...item, [field]: value } : item))
+    );
+  };
+
+  const addAirSpringPoint = (): void => {
+    setAirSpringPoints((current) => [...current, { pressure: "", mass: "" }]);
+  };
+
+  const deleteAirSpringPoint = (index: number): void => {
+    setAirSpringPoints((current) => current.filter((_, itemIndex) => itemIndex !== index));
   };
 
   const yamlFormStateMismatchMessages = useMemo(() => {
@@ -723,8 +787,16 @@ export function WorkbenchPage({
       "黏着利用限制 mu_limit (-)": "adhesion.mu_limit",
       "AW0 / 动车称重（整车）": "mass_params.powered_bogie.mass_static.AW0",
       "AW0 / 拖车称重（整车）": "mass_params.trailer_bogie.mass_static.AW0",
+      "AW2 / 动车称重（整车）": "mass_params.powered_bogie.mass_static.AW2",
+      "AW2 / 拖车称重（整车）": "mass_params.trailer_bogie.mass_static.AW2",
       "AW3 / 动车称重（整车）": "mass_params.powered_bogie.mass_static.AW3",
       "AW3 / 拖车称重（整车）": "mass_params.trailer_bogie.mass_static.AW3",
+      "AW0 / 动架称重": "mass_params.powered_bogie.mass_static.AW0",
+      "AW0 / 拖架称重": "mass_params.trailer_bogie.mass_static.AW0",
+      "AW2 / 动架称重": "mass_params.powered_bogie.mass_static.AW2",
+      "AW2 / 拖架称重": "mass_params.trailer_bogie.mass_static.AW2",
+      "AW3 / 动架称重": "mass_params.powered_bogie.mass_static.AW3",
+      "AW3 / 拖架称重": "mass_params.trailer_bogie.mass_static.AW3",
       "动车转向架重量 bogie_weight (ton)": "mass_params.powered_bogie.bogie_weight",
       "拖车转向架重量 bogie_weight (ton)": "mass_params.trailer_bogie.bogie_weight",
       "空簧线性系数 k (kPa/ton)": "air_spring.powered_bogie.airspring_k",
@@ -809,25 +881,78 @@ export function WorkbenchPage({
         ratio: toNumberOrUndefined(item.ratioPercent) === undefined ? undefined : Number(item.ratioPercent) / 100,
       }))
       .filter((item) => item.name.length > 0 && item.ratio !== undefined);
-    const airSpringPoints = [
-      [toNumberOrUndefined(airSpringPoint1PressureValue), toNumberOrUndefined(airSpringPoint1MassValue)],
-      [toNumberOrUndefined(airSpringPoint2PressureValue), toNumberOrUndefined(airSpringPoint2MassValue)],
-      [toNumberOrUndefined(airSpringPoint3PressureValue), toNumberOrUndefined(airSpringPoint3MassValue)],
-    ]
+    const normalizedAirSpringPoints = airSpringPoints
+      .map((point) => [toNumberOrUndefined(point.pressure), toNumberOrUndefined(point.mass)] as const)
       .filter((point) => point[0] !== undefined && point[1] !== undefined)
       .map((point) => ({
         pressure_kpa: point[0] as number,
         sprung_mass_by_spring_ton: point[1] as number,
       }));
+
+    const buildAirSpringByType = (existing: unknown): Record<string, unknown> => {
+      const next = { ...(toRecord(existing) ?? {}) } as Record<string, unknown>;
+      next.mode = airSpringInputMode;
+      if (airSpringInputMode === "fitted_from_points") {
+        next.points = normalizedAirSpringPoints;
+        delete next.airspring_k;
+        delete next.airspring_b;
+      } else {
+        next.airspring_k = toNumberOrUndefined(airSpringKValue);
+        next.airspring_b = toNumberOrUndefined(airSpringBValue);
+        delete next.points;
+      }
+      return next;
+    };
+    const controllerShape =
+      controllerConfigType === "bogie"
+        ? { n_bogies_by_controller: 1, n_springs_by_controller: 2, n_cylinders_by_controller: 4 }
+        : { n_bogies_by_controller: 2, n_springs_by_controller: 4, n_cylinders_by_controller: 8 };
+    const vehicleConfig =
+      controllerConfigType === "bogie"
+        ? {
+            bogies: bogieControllerRows.map((row) => ({ name: row.name, bogie_type: row.type })),
+          }
+        : {
+            cars: carControllerRows.map((row) => ({ name: row.name, car_type: row.type })),
+          };
+    const servicePointOneK = toNumberOrUndefined(serviceCalibrationPointOneKValue);
+    const servicePointTwoK = toNumberOrUndefined(serviceCalibrationPointTwoKValue);
+    const emergencyPointOneK = toNumberOrUndefined(emergencyCalibrationPointOneKValue);
+    const emergencyPointTwoK = toNumberOrUndefined(emergencyCalibrationPointTwoKValue);
+    const serviceBcp0 =
+      toNumberOrUndefined(serviceCalibrationBcp0Value) ??
+      toNumberOrUndefined(getNestedNumberText(importedFormState, ["pressure_calibration", "service_brake", "BCP0"]));
+    const emergencyBcp0 =
+      toNumberOrUndefined(emergencyCalibrationBcp0Value) ??
+      toNumberOrUndefined(getNestedNumberText(importedFormState, ["pressure_calibration", "emergency_brake", "BCP0"]));
+    const aw0Powered = toNumberOrUndefined(massAw0PoweredValue);
+    const aw2Powered = toNumberOrUndefined(massAw2PoweredValue);
+    const aw3Powered = toNumberOrUndefined(massAw3PoweredValue);
+    const aw0Trailer = toNumberOrUndefined(massAw0TrailerValue);
+    const aw2Trailer = toNumberOrUndefined(massAw2TrailerValue);
+    const aw3Trailer = toNumberOrUndefined(massAw3TrailerValue);
+    const poweredBogieWeight = toNumberOrUndefined(bogieWeightPoweredValue);
+    const trailerBogieWeight = toNumberOrUndefined(bogieWeightTrailerValue);
+    const poweredRotFactor = toNumberOrUndefined(
+      getNestedNumberText(importedFormState, ["mass_params", "powered_bogie", "rotational_mass_factor"])
+    );
+    const trailerRotFactor = toNumberOrUndefined(
+      getNestedNumberText(importedFormState, ["mass_params", "trailer_bogie", "rotational_mass_factor"])
+    );
     return {
       ...root,
       v0: v0Number ?? root.v0,
       V_list: vList.length > 0 ? vList : root.V_list,
+      load_groups: ["AW0", "AW2", "AW3"],
+      controller_type: controllerConfigType,
+      n_bogies_by_controller: controllerShape.n_bogies_by_controller,
+      n_springs_by_controller: controllerShape.n_springs_by_controller,
+      n_cylinders_by_controller: controllerShape.n_cylinders_by_controller,
       allocation_strategy: allocationStrategy,
       brake_types: [
         { name: "FSB", source: "kinematic" },
         { name: "EB", source: "kinematic" },
-        ...(fastBrakeEnabled ? [{ name: "FB", source: "kinematic" as const }] : []),
+        ...(fastBrakeEnabled ? [{ name: "FB", source: "fast_brake" as const }] : []),
         ...ratioBrakeTypes,
       ],
       requirement: {
@@ -849,6 +974,14 @@ export function WorkbenchPage({
           t1: toNumberOrUndefined(ebT1Value),
           t2: toNumberOrUndefined(ebT2Value),
         },
+        ...(fastBrakeEnabled
+          ? {
+              FB: {
+                t1: toNumberOrUndefined(fsbT1Value),
+                impulse_rate: toNumberOrUndefined(fsbImpulseRateValue),
+              },
+            }
+          : {}),
       },
       adhesion: {
         ...(toRecord(root.adhesion) ?? {}),
@@ -860,37 +993,30 @@ export function WorkbenchPage({
           ...(toRecord(toRecord(root.mass_params)?.powered_bogie) ?? {}),
           mass_static: {
             ...(toRecord(toRecord(toRecord(root.mass_params)?.powered_bogie)?.mass_static) ?? {}),
-            AW0: toNumberOrUndefined(massAw0PoweredValue),
-            AW3: toNumberOrUndefined(massAw3PoweredValue),
+            ...(aw0Powered !== undefined ? { AW0: aw0Powered } : {}),
+            ...(aw2Powered !== undefined ? { AW2: aw2Powered } : {}),
+            ...(aw3Powered !== undefined ? { AW3: aw3Powered } : {}),
           },
-          bogie_weight: toNumberOrUndefined(bogieWeightPoweredValue),
+          ...(poweredBogieWeight !== undefined ? { bogie_weight: poweredBogieWeight } : {}),
+          ...(poweredRotFactor !== undefined ? { rotational_mass_factor: poweredRotFactor } : {}),
         },
         trailer_bogie: {
           ...(toRecord(toRecord(root.mass_params)?.trailer_bogie) ?? {}),
           mass_static: {
             ...(toRecord(toRecord(toRecord(root.mass_params)?.trailer_bogie)?.mass_static) ?? {}),
-            AW0: toNumberOrUndefined(massAw0TrailerValue),
-            AW3: toNumberOrUndefined(massAw3TrailerValue),
+            ...(aw0Trailer !== undefined ? { AW0: aw0Trailer } : {}),
+            ...(aw2Trailer !== undefined ? { AW2: aw2Trailer } : {}),
+            ...(aw3Trailer !== undefined ? { AW3: aw3Trailer } : {}),
           },
-          bogie_weight: toNumberOrUndefined(bogieWeightTrailerValue),
+          ...(trailerBogieWeight !== undefined ? { bogie_weight: trailerBogieWeight } : {}),
+          ...(trailerRotFactor !== undefined ? { rotational_mass_factor: trailerRotFactor } : {}),
         },
       },
+      vehicle_config: vehicleConfig,
       air_spring: {
         ...(toRecord(root.air_spring) ?? {}),
-        powered_bogie: {
-          ...(toRecord(toRecord(root.air_spring)?.powered_bogie) ?? {}),
-          mode: airSpringInputMode,
-          airspring_k: toNumberOrUndefined(airSpringKValue),
-          airspring_b: toNumberOrUndefined(airSpringBValue),
-          points: airSpringInputMode === "fitted_from_points" ? airSpringPoints : undefined,
-        },
-        trailer_bogie: {
-          ...(toRecord(toRecord(root.air_spring)?.trailer_bogie) ?? {}),
-          mode: airSpringInputMode,
-          airspring_k: toNumberOrUndefined(airSpringKValue),
-          airspring_b: toNumberOrUndefined(airSpringBValue),
-          points: airSpringInputMode === "fitted_from_points" ? airSpringPoints : undefined,
-        },
+        powered_bogie: buildAirSpringByType(toRecord(root.air_spring)?.powered_bogie),
+        trailer_bogie: buildAirSpringByType(toRecord(root.air_spring)?.trailer_bogie),
       },
       mech_params: {
         ...(toRecord(root.mech_params) ?? {}),
@@ -911,41 +1037,38 @@ export function WorkbenchPage({
         enabled: pressureCalibrationEnabled,
         service_brake: {
           ...(toRecord(toRecord(root.pressure_calibration)?.service_brake) ?? {}),
-          BCP0: toNumberOrUndefined(serviceCalibrationBcp0Value),
+          ...(serviceBcp0 !== undefined ? { BCP0: serviceBcp0 } : {}),
           point_pair_mode: serviceCalibrationMode,
           points: [
             {
               load_group: "AW3",
               brake_type: servicePointOneBrakeType,
-              k_for_code: toNumberOrUndefined(serviceCalibrationPointOneKValue),
+              ...(servicePointOneK !== undefined ? { k_for_code: servicePointOneK } : {}),
             },
             {
               load_group: serviceCalibrationMode === "aw3_aw0" ? "AW0" : "AW2",
               brake_type: servicePointTwoBrakeType,
-              k_for_code: toNumberOrUndefined(serviceCalibrationPointTwoKValue),
+              ...(servicePointTwoK !== undefined ? { k_for_code: servicePointTwoK } : {}),
             },
           ],
         },
-        emergency_brake:
-          controllerConfigType === "bogie"
-            ? {
-                ...(toRecord(toRecord(root.pressure_calibration)?.emergency_brake) ?? {}),
-                BCP0: toNumberOrUndefined(emergencyCalibrationBcp0Value),
-                point_pair_mode: emergencyCalibrationMode,
-                points: [
-                  {
-                    load_group: "AW3",
-                    brake_type: "EB",
-                    k_for_code: toNumberOrUndefined(emergencyCalibrationPointOneKValue),
-                  },
-                  {
-                    load_group: emergencyCalibrationMode === "aw3_aw0" ? "AW0" : "AW2",
-                    brake_type: "EB",
-                    k_for_code: toNumberOrUndefined(emergencyCalibrationPointTwoKValue),
-                  },
-                ],
-              }
-            : (toRecord(toRecord(root.pressure_calibration)?.emergency_brake) ?? undefined),
+        emergency_brake: {
+          ...(toRecord(toRecord(root.pressure_calibration)?.emergency_brake) ?? {}),
+          ...(emergencyBcp0 !== undefined ? { BCP0: emergencyBcp0 } : {}),
+          point_pair_mode: emergencyCalibrationMode,
+          points: [
+            {
+              load_group: "AW3",
+              brake_type: "EB",
+              ...(emergencyPointOneK !== undefined ? { k_for_code: emergencyPointOneK } : {}),
+            },
+            {
+              load_group: emergencyCalibrationMode === "aw3_aw0" ? "AW0" : "AW2",
+              brake_type: "EB",
+              ...(emergencyPointTwoK !== undefined ? { k_for_code: emergencyPointTwoK } : {}),
+            },
+          ],
+        },
       },
       parking_brake_check: {
         ...(toRecord(root.parking_brake_check) ?? {}),
@@ -982,21 +1105,28 @@ export function WorkbenchPage({
           eta_o: toNumberOrUndefined(parkingEtaOValue),
         },
       },
+      electric_brake: {
+        ...(toRecord(root.electric_brake) ?? {}),
+        enabled: Boolean(toRecord(root.electric_brake)?.enabled ?? false),
+        force_scope:
+          (toRecord(root.electric_brake)?.force_scope as string | undefined) ?? "train_total",
+        characteristic_points: Array.isArray(toRecord(root.electric_brake)?.characteristic_points)
+          ? (toRecord(root.electric_brake)?.characteristic_points as Array<Record<string, unknown>>)
+          : [],
+      },
+      EB_limit_min: toNumberOrUndefined(getNestedNumberText(importedFormState, ["EB_limit_min"])) ?? 0,
     };
   }, [
     airSpringBValue,
     airSpringInputMode,
     airSpringKValue,
-    airSpringPoint1MassValue,
-    airSpringPoint1PressureValue,
-    airSpringPoint2MassValue,
-    airSpringPoint2PressureValue,
-    airSpringPoint3MassValue,
-    airSpringPoint3PressureValue,
+    airSpringPoints,
     allocationStrategy,
     baseBrakeCylinderType,
     bogieWeightPoweredValue,
     bogieWeightTrailerValue,
+    bogieControllerRows,
+    carControllerRows,
     controllerConfigType,
     ebDistanceValue,
     emergencyCalibrationBcp0Value,
@@ -1014,6 +1144,8 @@ export function WorkbenchPage({
     importedFormState,
     massAw0PoweredValue,
     massAw0TrailerValue,
+    massAw2PoweredValue,
+    massAw2TrailerValue,
     massAw3PoweredValue,
     massAw3TrailerValue,
     mechDwValue,
@@ -1144,20 +1276,46 @@ export function WorkbenchPage({
     return lines.map((line, index) => ({ line, highlighted: index === highlightIndex }));
   }, [lastChangedPath, liveFormState]);
 
+  const saveChangeSummary = useMemo(() => {
+    const previous = importedFormState ?? {};
+    const paths = collectChangedPaths(previous, liveFormState);
+    return paths.slice(0, 30).map((path) => {
+      const before = readValueByPath(previous, path);
+      const after = readValueByPath(liveFormState, path);
+      const toText = (value: unknown): string => {
+        if (value === undefined) return "(空)";
+        if (value === null) return "null";
+        if (typeof value === "string") return value;
+        if (typeof value === "number" || typeof value === "boolean") return String(value);
+        try {
+          return JSON.stringify(value);
+        } catch {
+          return String(value);
+        }
+      };
+      return { path, before: toText(before), after: toText(after) };
+    });
+  }, [importedFormState, liveFormState]);
+
   const highlightedLineIndex = useMemo(() => {
     const index = highlightedJson.findIndex((item) => item.highlighted);
     return index >= 0 ? index : null;
   }, [highlightedJson]);
 
   useEffect(() => {
-    if (highlightedLineIndex === null) {
+    if (highlightedLineIndex === null || activeInfoTab !== "yaml") {
       return;
     }
-    const target = document.querySelector(`[data-json-line="${highlightedLineIndex}"]`);
-    if (target instanceof HTMLElement && typeof target.scrollIntoView === "function") {
-      target.scrollIntoView({ block: "center", behavior: "smooth" });
+    const container = jsonPanelRef.current;
+    if (container === null) {
+      return;
     }
-  }, [highlightedLineIndex]);
+    const target = container.querySelector(`[data-json-line="${highlightedLineIndex}"]`);
+    if (target instanceof HTMLElement && typeof container.scrollTo === "function") {
+      const offset = Math.max(target.offsetTop - container.clientHeight / 2, 0);
+      container.scrollTo({ top: offset, behavior: "smooth" });
+    }
+  }, [activeInfoTab, highlightedLineIndex]);
 
   const effectiveControllerConfigType = useMemo<"car" | "bogie">(() => {
     const root = toRecord(importedFormState);
@@ -1258,18 +1416,24 @@ export function WorkbenchPage({
     vehicleCountSummary.currentTrailer === vehicleCountSummary.targetTrailer;
 
   const updateCarControllerName = (index: number, name: string): void => {
+    onDirtyChange(true);
+    setLastChangedPath("vehicle_config.cars");
     onChangeCarControllerRows(
       carControllerRows.map((row, rowIndex) => (rowIndex === index ? { ...row, name } : row))
     );
   };
 
   const updateBogieControllerName = (index: number, name: string): void => {
+    onDirtyChange(true);
+    setLastChangedPath("vehicle_config.bogies");
     onChangeBogieControllerRows(
       bogieControllerRows.map((row, rowIndex) => (rowIndex === index ? { ...row, name } : row))
     );
   };
 
   const updateCarControllerType = (index: number, type: CarControllerRow["type"]): void => {
+    onDirtyChange(true);
+    setLastChangedPath("vehicle_config.cars");
     onChangeCarControllerRows(
       carControllerRows.map((row, rowIndex) =>
         rowIndex === index ? { name: `${type}_${index + 1}`, type } : row
@@ -1278,6 +1442,8 @@ export function WorkbenchPage({
   };
 
   const updateBogieControllerType = (index: number, type: BogieControllerRow["type"]): void => {
+    onDirtyChange(true);
+    setLastChangedPath("vehicle_config.bogies");
     onChangeBogieControllerRows(
       bogieControllerRows.map((row, rowIndex) =>
         rowIndex === index ? { name: `${type}_${index + 1}`, type } : row
@@ -1312,7 +1478,7 @@ export function WorkbenchPage({
             <button type="button" style={ghostActionStyle} onClick={onBackToOverview}>
               返回总览
             </button>
-            <button type="button" style={ghostActionStyle}>
+            <button type="button" style={ghostActionStyle} onClick={onDownloadYaml}>
               下载 YAML
             </button>
             <button type="button" style={secondaryActionStyle} onClick={handleSave}>
@@ -1641,7 +1807,7 @@ export function WorkbenchPage({
                     {ratioBrakes.map((row, index) => (
                       <div
                         key={`ratio-brake-${index}`}
-                        style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px" }}
+                        style={{ display: "grid", gridTemplateColumns: "1fr 1fr auto", gap: "12px", alignItems: "end" }}
                       >
                         <FieldBlock
                           label={
@@ -1677,6 +1843,13 @@ export function WorkbenchPage({
                               : undefined
                           }
                         />
+                        <button
+                          type="button"
+                          style={ghostActionStyle}
+                          onClick={() => deleteRatioBrake(index)}
+                        >
+                          删除
+                        </button>
                       </div>
                     ))}
                   </div>
@@ -1900,6 +2073,16 @@ export function WorkbenchPage({
                     onChange={setMassAw0TrailerValue}
                   />
                   <FieldBlock
+                    label={`AW2 / ${loadInputMode === "car" ? "动车称重（整车）" : "动架称重"}`}
+                    value={massAw2PoweredValue}
+                    onChange={setMassAw2PoweredValue}
+                  />
+                  <FieldBlock
+                    label={`AW2 / ${loadInputMode === "car" ? "拖车称重（整车）" : "拖架称重"}`}
+                    value={massAw2TrailerValue}
+                    onChange={setMassAw2TrailerValue}
+                  />
+                  <FieldBlock
                     label={`AW3 / ${loadInputMode === "car" ? "动车称重（整车）" : "动架称重"}`}
                     value={massAw3PoweredValue}
                     onChange={setMassAw3PoweredValue}
@@ -1980,30 +2163,21 @@ export function WorkbenchPage({
                 </div>
                 {airSpringInputMode === "fitted_from_points" ? (
                   <div style={{ display: "grid", gap: "12px" }}>
-                    <PointRow
-                      unitLabel={airSpringMassUnit === "ton" ? "质量 (ton)" : "质量 (kN)"}
-                      index={1}
-                      pressureValue={airSpringPoint1PressureValue}
-                      massValue={airSpringPoint1MassValue}
-                      onChangePressure={setAirSpringPoint1PressureValue}
-                      onChangeMass={setAirSpringPoint1MassValue}
-                    />
-                    <PointRow
-                      unitLabel={airSpringMassUnit === "ton" ? "质量 (ton)" : "质量 (kN)"}
-                      index={2}
-                      pressureValue={airSpringPoint2PressureValue}
-                      massValue={airSpringPoint2MassValue}
-                      onChangePressure={setAirSpringPoint2PressureValue}
-                      onChangeMass={setAirSpringPoint2MassValue}
-                    />
-                    <PointRow
-                      unitLabel={airSpringMassUnit === "ton" ? "质量 (ton)" : "质量 (kN)"}
-                      index={3}
-                      pressureValue={airSpringPoint3PressureValue}
-                      massValue={airSpringPoint3MassValue}
-                      onChangePressure={setAirSpringPoint3PressureValue}
-                      onChangeMass={setAirSpringPoint3MassValue}
-                    />
+                    {airSpringPoints.map((point, index) => (
+                      <PointRow
+                        key={`air-spring-point-${index}`}
+                        unitLabel={airSpringMassUnit === "ton" ? "质量 (ton)" : "质量 (kN)"}
+                        index={index + 1}
+                        pressureValue={point.pressure}
+                        massValue={point.mass}
+                        onChangePressure={(value) => updateAirSpringPoint(index, "pressure", value)}
+                        onChangeMass={(value) => updateAirSpringPoint(index, "mass", value)}
+                        onDelete={airSpringPoints.length > 1 ? () => deleteAirSpringPoint(index) : undefined}
+                      />
+                    ))}
+                    <button type="button" style={secondaryActionStyle} onClick={addAirSpringPoint}>
+                      添加特征点
+                    </button>
                   </div>
                 ) : (
                   <div style={{ display: "grid", gap: "16px" }}>
@@ -2477,6 +2651,7 @@ export function WorkbenchPage({
                 ))}
               </div>
               <div
+                ref={jsonPanelRef}
                 style={{
                   border: "1px solid #d5c9ba",
                   borderRadius: "12px",
@@ -2505,6 +2680,82 @@ export function WorkbenchPage({
           ) : null}
         </aside>
       </div>
+      {showSaveConfirmModal ? (
+        <div
+          role="dialog"
+          aria-modal="true"
+          aria-label="保存确认"
+          style={{
+            position: "fixed",
+            inset: 0,
+            background: "rgba(32, 23, 13, 0.35)",
+            display: "grid",
+            placeItems: "center",
+            padding: "24px",
+            zIndex: 1000,
+          }}
+        >
+          <div
+            style={{
+              width: "min(560px, 92vw)",
+              borderRadius: "16px",
+              border: "1px solid #d5c9ba",
+              background: "#fffaf4",
+              boxShadow: "0 18px 42px rgba(31, 27, 22, 0.25)",
+              padding: "20px",
+              display: "grid",
+              gap: "14px",
+            }}
+          >
+            <h3 style={{ margin: 0, fontSize: "22px", color: "#1f1b16" }}>保存确认</h3>
+            <p style={{ margin: 0, color: "#5b5146", lineHeight: 1.6 }}>
+              将按当前配置写入新版本。保存后可在首页“打开既有项目”中继续加载此版本。
+            </p>
+            <div
+              style={{
+                border: "1px solid #e3d7c8",
+                borderRadius: "12px",
+                background: "#fff",
+                padding: "12px 14px",
+                color: "#4f463d",
+                fontSize: "14px",
+              }}
+            >
+              当前章节状态：{getStatusLabel(activeSection)}
+            </div>
+            <div
+              style={{
+                border: "1px solid #e3d7c8",
+                borderRadius: "12px",
+                background: "#fff",
+                padding: "12px 14px",
+                color: "#4f463d",
+                fontSize: "14px",
+                lineHeight: 1.5,
+              }}
+            >
+              <strong>关键变更路径：</strong>
+              <div>
+                {yamlChangedPaths.length > 0
+                  ? yamlChangedPaths.slice(0, 6).join(" / ")
+                  : "当前无路径差异（可能仅触发了格式化或状态切换）"}
+              </div>
+            </div>
+            <div style={{ display: "flex", justifyContent: "flex-end", gap: "10px" }}>
+              <button
+                type="button"
+                style={ghostActionStyle}
+                onClick={() => setShowSaveConfirmModal(false)}
+              >
+                取消
+              </button>
+              <button type="button" style={secondaryActionStyle} onClick={handleConfirmSave}>
+                确认保存
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 }

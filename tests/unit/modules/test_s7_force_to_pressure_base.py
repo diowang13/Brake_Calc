@@ -50,8 +50,8 @@ def test_s7_derives_caliper_cylinder_pressure_parameters_from_dw_and_rf() -> Non
     out = run(ctx)
 
     expected_ratio = 0.72 / (2 * 0.18)
-    expected_k = 1.0 / (4 * 1.0 * 1.0 * 0.29 * 3.4 * 0.95 * 0.0248 * expected_ratio)
-    expected_bcp0 = (1.0 / (3.4 * 0.95) + 0.25) / (0.0248 * expected_ratio)
+    expected_k = expected_ratio / (4 * 1.0 * 1.0 * 0.29 * 3.4 * 0.95 * 0.0248)
+    expected_bcp0 = (1.0 / (3.4 * 0.95) + 0.25) / 0.0248
     force = ctx.F_by_controller["FSB"]["AW0"]["powered_bogie_1"]
 
     assert out.k_initial == pytest.approx(expected_k)

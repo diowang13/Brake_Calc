@@ -204,6 +204,19 @@ class ProjectRepository:
         assert project is not None
         return project
 
+    def list_all(self) -> list[ProjectRecord]:
+        rows = self._connection.execute(
+            """
+            SELECT
+                id, project_name, project_code, email, note,
+                is_archived, archived_at, created_at, updated_at
+            FROM projects
+            WHERE is_archived = 0
+            ORDER BY updated_at DESC
+            """
+        ).fetchall()
+        return [item for item in (_row_to_project(row) for row in rows) if item is not None]
+
 
 class InputConfigRepository:
     """封装 input_configs 表的最小读写操作。"""
@@ -372,6 +385,22 @@ class CalculationRunRepository:
             WHERE id = ?
             """,
             (calculation_run_id,),
+        ).fetchone()
+        return _row_to_calculation_run(row)
+
+    def get_latest_for_input_config(self, input_config_id: str) -> CalculationRunRecord | None:
+        row = self._connection.execute(
+            """
+            SELECT
+                id, project_id, input_config_id, status, started_at,
+                finished_at, triggered_by, hermes_session_id, report_json,
+                markdown_report_path, error_json, created_at
+            FROM calculation_runs
+            WHERE input_config_id = ?
+            ORDER BY created_at DESC
+            LIMIT 1
+            """,
+            (input_config_id,),
         ).fetchone()
         return _row_to_calculation_run(row)
 

@@ -15,12 +15,14 @@ export function OverviewPage({
   onSupplementParking,
   onSupplementCalibration,
   overviewData,
+  runtimeStatus,
 }: {
   onViewResult: () => void;
   onRevise: () => void;
   onSupplementParking: () => void;
   onSupplementCalibration: () => void;
   overviewData: OverviewData | null;
+  runtimeStatus: "idle" | "succeeded" | "failed";
 }): ReactElement {
   const projectName = overviewData?.project.project_name ?? "上海机场线制动项目";
   const projectCode = overviewData?.project.project_code ?? "SH-HX-026";
@@ -40,7 +42,7 @@ export function OverviewPage({
     typeof (formState.pressure_calibration as { enabled?: unknown }).enabled === "boolean" &&
     (formState.pressure_calibration as { enabled: boolean }).enabled;
   const isImportedVersion = overviewData !== null;
-  const hasRunRecord = !isImportedVersion;
+  const hasRunRecord = overviewData === null || runtimeStatus === "succeeded";
 
   return (
     <div
@@ -76,7 +78,7 @@ export function OverviewPage({
             <div>
               <h2 style={{ margin: 0, fontSize: "32px" }}>{`${projectName} / ${projectCode}`}</h2>
               <p style={{ margin: "8px 0 0", color: "#6b6259" }}>
-                {isImportedVersion ? `版本 V${version} · 未运行` : `版本 V${version} · 已运行成功版本`}
+                {hasRunRecord ? `版本 V${version} · 已运行成功版本` : `版本 V${version} · 未运行`}
               </p>
             </div>
             <div style={{ display: "flex", gap: "12px", alignItems: "start" }}>
@@ -116,11 +118,11 @@ export function OverviewPage({
           >
             <strong>当前为只读状态。</strong>
             <p style={{ margin: "8px 0 0", color: "#6b6259", lineHeight: 1.6 }}>
-              {isImportedVersion
+              {!hasRunRecord
                 ? "当前版本来自导入配置，尚未运行。请先补录后置章节并运行，再查看结果。"
                 : "当前版本已运行成功，不能直接修改主配置。若需修改主配置，请点击“修订”创建新版本副本。"}
             </p>
-            {isImportedVersion ? (
+            {!hasRunRecord ? (
               <p style={{ margin: "8px 0 0", color: "#8a5a35", lineHeight: 1.6 }}>
                 暂无结果（请先运行）。
               </p>
@@ -131,11 +133,11 @@ export function OverviewPage({
         <section style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: "14px" }}>
           <InfoCard
             title="最后一次运行"
-            body={isImportedVersion ? "当前版本尚未运行。" : "2026-04-26 09:40 · 运行成功"}
+            body={hasRunRecord ? "最近一次运行成功。" : "当前版本尚未运行。"}
           />
           <InfoCard
             title="警告与自动调整"
-            body={isImportedVersion ? "暂无运行数据（需先运行）。" : "存在 1 条自动调整：EB 使用等黏着分配。"}
+            body={hasRunRecord ? "可在结果页查看最新运行警告与自动调整。" : "暂无运行数据（需先运行）。"}
           />
           <InfoCard
             title="停放校核状态"

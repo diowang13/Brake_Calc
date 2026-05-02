@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+import json
 from pathlib import Path
 from typing import Any
 
@@ -9,7 +10,15 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from datetime import datetime, timezone
 
-from brake_calc.app.api import import_yaml, load_config, run_config, save_config
+from brake_calc.app.api import (
+    download_yaml,
+    import_yaml,
+    list_projects,
+    load_config,
+    open_latest_project_config,
+    run_config,
+    save_config,
+)
 from brake_calc.app.services import CalculationService, ConfigService, ValidationService, YamlImportService
 from brake_calc.workflow.runner import run_workflow
 from brake_calc.storage.db import connect_sqlite
@@ -53,6 +62,25 @@ def _build_calculation_service(db_path: Path) -> tuple[CalculationService, objec
         ),
         connection,
     )
+
+
+def _attach_latest_run_payload(db_path: Path, payload: dict[str, object], input_config_id: str) -> dict[str, object]:
+    connection = connect_sqlite(db_path)
+    try:
+        run_repository = CalculationRunRepository(connection)
+        latest_run = run_repository.get_latest_for_input_config(input_config_id)
+        if latest_run is None:
+            payload["latest_run"] = None
+            return payload
+        payload["latest_run"] = {
+            "calculation_run_id": latest_run.id,
+            "status": latest_run.status,
+            "report": None if latest_run.report_json is None else json.loads(latest_run.report_json),
+            "created_at": latest_run.created_at,
+        }
+        return payload
+    finally:
+        connection.close()
 
 
 app = FastAPI(title="brake-calc API", version="0.1.0")
@@ -103,7 +131,67 @@ def load_config_route(input_config_id: str) -> dict[str, object]:
     db_path = _get_database_path()
     config_service, connection = _build_config_service(db_path)
     try:
-        return load_config(input_config_id, config_service=config_service)
+        payload = load_config(input_config_id, config_service=config_service)
+        return _attach_latest_run_payload(db_path, payload, input_config_id)
+    except AssertionError as exc:
+        raise HTTPException(status_code=404, detail="input_config_not_found") from exc
+    except Exception as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    finally:
+        connection.close()
+
+
+@app.get("/api/projects/{project_code}/latest-config")
+def open_project_route(project_code: str) -> dict[str, object]:
+    db_path = _get_database_path()
+    config_service, connection = _build_config_service(db_path)
+    try:
+        payload = open_latest_project_config(project_code, config_service=config_service)
+        config_payload = payload.get("config")
+        if isinstance(config_payload, dict):
+            payload["config"] = _attach_latest_run_payload(
+                db_path,
+                config_payload,
+                str(payload["input_config_id"]),
+            )
+        return payload
+    except LookupError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except Exception as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    finally:
+        connection.close()
+
+
+@app.get("/api/projects")
+def list_projects_route() -> dict[str, object]:
+    db_path = _get_database_path()
+    config_service, connection = _build_config_service(db_path)
+    try:
+        payload = list_projects(config_service=config_service)
+        for item in payload.get("items", []):
+            if not isinstance(item, dict):
+                continue
+            latest_input_config_id = item.get("latest_input_config_id")
+            if isinstance(latest_input_config_id, str):
+                latest = _attach_latest_run_payload(db_path, {}, latest_input_config_id).get("latest_run")
+            else:
+                latest = None
+            item["latest_run"] = latest
+        return payload
+    except Exception as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    finally:
+        connection.close()
+
+
+@app.get("/api/configs/{input_config_id}/download-yaml")
+def download_yaml_route(input_config_id: str) -> dict[str, object]:
+    db_path = _get_database_path()
+    config_service, connection = _build_config_service(db_path)
+    try:
+        now = datetime.now(timezone.utc).isoformat()
+        return download_yaml(input_config_id, created_at=now, config_service=config_service)
     except AssertionError as exc:
         raise HTTPException(status_code=404, detail="input_config_not_found") from exc
     except Exception as exc:

@@ -10,6 +10,7 @@ from pydantic import ValidationError
 from brake_calc.app.schemas import (
     CalculationRunResult,
     LoadConfigResult,
+    OpenProjectResult,
     ProjectPayload,
     SaveConfigRequest,
     SaveConfigResult,
@@ -272,6 +273,41 @@ class ConfigService:
     def build_export_filename(self, *, project_code: str, created_at: str) -> str:
         timestamp = datetime.fromisoformat(created_at.replace("Z", "+00:00"))
         return f"{project_code}_input_{timestamp:%Y%m%d_%H%M}.yaml"
+
+    def load_latest_project_config(self, project_code: str) -> OpenProjectResult:
+        project = self._project_repository.get_by_project_code(project_code)
+        if project is None:
+            raise LookupError("project_not_found")
+        latest_config = self._input_config_repository.get_latest_for_project(project.id)
+        if latest_config is None:
+            raise LookupError("input_config_not_found")
+        loaded = self.load_config(latest_config.id)
+        return OpenProjectResult(input_config_id=latest_config.id, config=loaded)
+
+    def list_projects(self) -> list[dict[str, object]]:
+        projects = self._project_repository.list_all()  # type: ignore[attr-defined]
+        result: list[dict[str, object]] = []
+        for project in projects:
+            latest_config = self._input_config_repository.get_latest_for_project(project.id)
+            controller_type: str | None = None
+            if latest_config is not None:
+                try:
+                    form_state = _load_json_object(latest_config.form_state_json)
+                    controller_raw = form_state.get("controller_type")
+                    if controller_raw in ("car", "bogie"):
+                        controller_type = str(controller_raw)
+                except Exception:
+                    controller_type = None
+            result.append(
+                {
+                    "project_name": project.project_name,
+                    "project_code": project.project_code,
+                    "updated_at": project.updated_at,
+                    "latest_input_config_id": None if latest_config is None else latest_config.id,
+                    "controller_type": controller_type,
+                }
+            )
+        return result
 
 
 class YamlImportService:

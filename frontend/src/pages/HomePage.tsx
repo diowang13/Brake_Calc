@@ -7,16 +7,32 @@ import {
   secondaryActionStyle
 } from "../app/styles";
 import { FieldBlock, ProjectRow } from "../components/ui";
+import type { ProjectListItem } from "../contracts/config";
 
 export function HomePage({
   onCreateProject,
   onOpenProject,
-  onImportYamlFile
+  onImportYamlFile,
+  projects
 }: {
   onCreateProject: () => void;
-  onOpenProject: () => void;
+  onOpenProject: (projectCode: string) => void;
   onImportYamlFile: (yamlText: string) => void;
+  projects: ProjectListItem[];
 }): ReactElement {
+  const formatUpdatedAt = (value: string): string => {
+    const parsed = new Date(value);
+    if (!Number.isFinite(parsed.getTime())) {
+      return value;
+    }
+    const year = parsed.getFullYear();
+    const month = String(parsed.getMonth() + 1).padStart(2, "0");
+    const day = String(parsed.getDate()).padStart(2, "0");
+    const hour = String(parsed.getHours()).padStart(2, "0");
+    const minute = String(parsed.getMinutes()).padStart(2, "0");
+    const second = String(parsed.getSeconds()).padStart(2, "0");
+    return `${year}-${month}-${day} ${hour}:${minute}:${second}`;
+  };
   const handleImportYamlFile = (event: ChangeEvent<HTMLInputElement>): void => {
     const file = event.target.files?.[0];
     if (file === undefined) {
@@ -30,6 +46,28 @@ export function HomePage({
     reader.readAsText(file);
     event.target.value = "";
   };
+
+  const rows =
+    projects.length > 0
+      ? projects
+      : [
+          {
+            project_name: "上海机场线制动项目",
+            project_code: "SH-HX-026",
+            updated_at: "最后修改时间",
+            latest_input_config_id: null,
+            latest_run: { calculation_run_id: "", status: "succeeded", report: null, created_at: "" },
+          },
+          {
+            project_name: "崇明线预研项目",
+            project_code: "CM-PR-011",
+            updated_at: "最后修改时间",
+            latest_input_config_id: null,
+            latest_run: { calculation_run_id: "", status: "failed", report: null, created_at: "" },
+          },
+        ];
+  const firstOpenableProjectCode =
+    projects.find((item) => item.latest_input_config_id !== null)?.project_code ?? null;
 
   return (
     <div style={{ display: "grid", gap: "20px" }}>
@@ -56,7 +94,17 @@ export function HomePage({
             <button type="button" style={primaryActionStyle} onClick={onCreateProject}>
               新建项目计算
             </button>
-            <button type="button" style={secondaryActionStyle}>
+            <button
+              type="button"
+              style={secondaryActionStyle}
+              onClick={() => {
+                if (firstOpenableProjectCode !== null) {
+                  onOpenProject(firstOpenableProjectCode);
+                }
+              }}
+              disabled={firstOpenableProjectCode === null}
+              title={firstOpenableProjectCode === null ? "当前无可打开的已保存配置" : undefined}
+            >
               打开既有项目
             </button>
           </div>
@@ -103,22 +151,29 @@ export function HomePage({
             默认按最后修改时间倒序；列表内显示项目身份、BCU 类型和最近运行状态。
           </p>
         </div>
-        <ProjectRow
-          title="上海机场线制动项目 / SH-HX-026"
-          subtitle="适用于既有项目打开与重算"
-          updatedAt="最后修改时间"
-          controllerMode="架控"
-          status="最近运行成功"
-          onOpen={onOpenProject}
-        />
-        <ProjectRow
-          title="崇明线预研项目 / CM-PR-011"
-          subtitle="等待补充停放校核"
-          updatedAt="最后修改时间"
-          controllerMode="车控"
-          status="最近运行失败"
-          onOpen={onOpenProject}
-        />
+        {rows.map((item) => (
+          <ProjectRow
+            key={item.project_code}
+            title={`${item.project_name} / ${item.project_code}`}
+            subtitle="适用于既有项目打开与重算"
+            updatedAt={formatUpdatedAt(item.updated_at)}
+            controllerMode={
+              item.controller_type === "bogie"
+                ? "架控"
+                : item.controller_type === "car"
+                  ? "车控"
+                  : "未知"
+            }
+            status={
+              item.latest_run?.status === "succeeded"
+                ? "最近运行成功"
+                : item.latest_run?.status === "failed"
+                  ? "最近运行失败"
+                  : "暂无运行记录"
+            }
+            onOpen={() => onOpenProject(item.project_code)}
+          />
+        ))}
       </section>
     </div>
   );

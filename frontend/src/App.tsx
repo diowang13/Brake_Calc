@@ -1,7 +1,15 @@
 import type { ReactElement } from "react";
 import { useEffect, useState } from "react";
 
-import { importYaml, loadConfig, runConfig, saveConfig } from "./api/configClient";
+import {
+  downloadYaml,
+  importYaml,
+  listProjects,
+  loadConfig,
+  openProject,
+  runConfig,
+  saveConfig,
+} from "./api/configClient";
 import {
   ghostActionStyle,
   headerPanelStyle,
@@ -15,6 +23,7 @@ import {
 } from "./app/styles";
 import { screens, type ScreenKey } from "./app/screens";
 import type { ImportYamlResult, LoadConfigResult, SupplementPresence } from "./contracts/config";
+import type { ProjectListItem } from "./contracts/config";
 import type { Report } from "./contracts/report";
 import { HomePage } from "./pages/HomePage";
 import { ImportSummaryPage } from "./pages/ImportSummaryPage";
@@ -227,6 +236,10 @@ export function App(): ReactElement {
   const [activeInputConfigId, setActiveInputConfigId] = useState<string | null>(null);
   const [importProjectName, setImportProjectName] = useState("");
   const [importProjectCode, setImportProjectCode] = useState("");
+  const [wizardProjectName, setWizardProjectName] = useState("");
+  const [wizardProjectCode, setWizardProjectCode] = useState("");
+  const [wizardProjectEmail, setWizardProjectEmail] = useState("");
+  const [wizardProjectNote, setWizardProjectNote] = useState("");
   const [importYamlText, setImportYamlText] = useState("schema_version: 1\nv0: 80\n");
   const [importResult, setImportResult] = useState<ImportYamlResult | null>(null);
   const [hasImportedConfig, setHasImportedConfig] = useState(false);
@@ -243,6 +256,32 @@ export function App(): ReactElement {
   const [runtimeReport, setRuntimeReport] = useState<Report>(emptyReport);
   const [runtimeFormState, setRuntimeFormState] = useState<Record<string, unknown> | null>(null);
   const [runtimeStatus, setRuntimeStatus] = useState<"idle" | "succeeded" | "failed">("idle");
+  const [projects, setProjects] = useState<ProjectListItem[]>([]);
+  const [requireReloadForWorkbench, setRequireReloadForWorkbench] = useState(false);
+
+  useEffect(() => {
+    listProjects()
+      .then((result) => {
+        setProjects(result.items);
+      })
+      .catch(() => {
+        setProjects([]);
+      });
+  }, []);
+
+  const hydrateRuntimeFromLoadedConfig = (loaded: LoadConfigResult): void => {
+    if (loaded.latest_run?.status === "succeeded" && loaded.latest_run.report !== null) {
+      setRuntimeStatus("succeeded");
+      setRuntimeReport(loaded.latest_run.report as Report);
+      setRuntimeFormState(loaded.form_state);
+      return;
+    }
+    if (loaded.latest_run?.status === "failed") {
+      setRuntimeStatus("failed");
+      return;
+    }
+    setRuntimeStatus((current) => (current === "succeeded" ? current : "idle"));
+  };
 
   const applyImportedVehicleConfig = (formState: Record<string, unknown> | null): void => {
     if (formState === null) {
@@ -445,7 +484,9 @@ export function App(): ReactElement {
       const loaded = await loadConfig(saved.input_config_id);
       setOverviewData(loaded);
       applyImportedVehicleConfig(loaded.form_state);
+      hydrateRuntimeFromLoadedConfig(loaded);
       setHasImportedConfig(true);
+      setRequireReloadForWorkbench(false);
       setActiveScreen("overview");
     } catch (error) {
       const detail = error instanceof Error ? error.message : "unknown_error";
@@ -483,12 +524,27 @@ export function App(): ReactElement {
 
     try {
       const now = new Date().toISOString();
-      const project = overviewData?.project ?? {
-        project_name: importProjectName,
-        project_code: importProjectCode,
-        email: null,
-        note: "",
-      };
+      const project = (() => {
+        if (overviewData?.project !== undefined) {
+          return overviewData.project;
+        }
+        const wizardCode = wizardProjectCode.trim();
+        const wizardName = wizardProjectName.trim();
+        if (wizardCode.length > 0 || wizardName.length > 0) {
+          return {
+            project_name: wizardName.length > 0 ? wizardName : "未命名项目",
+            project_code: wizardCode.length > 0 ? wizardCode : `UNSET-${Date.now()}`,
+            email: wizardProjectEmail.trim().length > 0 ? wizardProjectEmail.trim() : null,
+            note: wizardProjectNote,
+          };
+        }
+        return {
+          project_name: importProjectName,
+          project_code: importProjectCode,
+          email: null,
+          note: "",
+        };
+      })();
       const saved = await saveConfig({
         project,
         yaml_text: afterYaml,
@@ -505,11 +561,69 @@ export function App(): ReactElement {
       setRuntimeFormState(draft);
       setRuntimeStatus("succeeded");
       setHasUnsavedWorkbenchChanges(false);
+      setOverviewData((current) => (current === null ? current : { ...current }));
       setActiveScreen("result");
     } catch (error) {
       setRuntimeStatus("failed");
       const detail = error instanceof Error ? error.message : "unknown_error";
       window.alert(`运行失败：${detail}`);
+    }
+  };
+
+  const handleSaveDraft = async (draft: Record<string, unknown>): Promise<void> => {
+    const previousFormState = (overviewData?.form_state ?? importResult?.form_state ?? {}) as Record<
+      string,
+      unknown
+    >;
+    const yamlLines = serializeYaml(draft);
+    const afterYaml = `${yamlLines.join("\n")}\n`;
+    const changedPaths = collectChangedScalarPaths(previousFormState, draft);
+    setImportYamlText(afterYaml);
+    setYamlChangedPaths(changedPaths);
+    setYamlChangedLineIndexes(findYamlChangedLineIndexesByPaths(afterYaml, changedPaths));
+    try {
+      const now = new Date().toISOString();
+      const project = (() => {
+        if (overviewData?.project !== undefined) {
+          return overviewData.project;
+        }
+        const wizardCode = wizardProjectCode.trim();
+        const wizardName = wizardProjectName.trim();
+        if (wizardCode.length > 0 || wizardName.length > 0) {
+          return {
+            project_name: wizardName.length > 0 ? wizardName : "未命名项目",
+            project_code: wizardCode.length > 0 ? wizardCode : `UNSET-${Date.now()}`,
+            email: wizardProjectEmail.trim().length > 0 ? wizardProjectEmail.trim() : null,
+            note: wizardProjectNote,
+          };
+        }
+        return {
+          project_name: importProjectName,
+          project_code: importProjectCode,
+          email: null,
+          note: "",
+        };
+      })();
+      const payload: SaveConfigRequestPayload = {
+        project,
+        yaml_text: afterYaml,
+        form_state: draft,
+        validation_status: "valid",
+        errors: [],
+        created_at: now,
+      };
+      if (activeInputConfigId !== null) {
+        payload.source_input_config_id = activeInputConfigId;
+        payload.revision_reason = "save_from_workbench";
+      }
+      const saved = await saveConfig(payload);
+      setActiveInputConfigId(saved.input_config_id);
+      const loaded = await loadConfig(saved.input_config_id);
+      setOverviewData(loaded);
+      setHasUnsavedWorkbenchChanges(false);
+    } catch (error) {
+      const detail = error instanceof Error ? error.message : "unknown_error";
+      window.alert(`保存失败：${detail}`);
     }
   };
 
@@ -526,6 +640,7 @@ export function App(): ReactElement {
         if (!isCancelled) {
           setOverviewData(result);
           applyImportedVehicleConfig(result.form_state);
+          hydrateRuntimeFromLoadedConfig(result);
         }
       })
       .catch(() => {
@@ -586,6 +701,7 @@ export function App(): ReactElement {
     setActiveWorkbenchSection("requirements");
     setHasImportedConfig(false);
     setHasUnsavedWorkbenchChanges(false);
+    setRequireReloadForWorkbench(false);
     setActiveScreen("workbench");
   };
 
@@ -600,12 +716,19 @@ export function App(): ReactElement {
     if (screen === activeScreen) {
       return;
     }
+    if (screen === "workbench" && activeScreen === "home" && requireReloadForWorkbench) {
+      window.alert("请先在首页打开既有项目（加载已保存配置），再从总览“修订”进入工作台。");
+      return;
+    }
     if (activeScreen === "workbench" && hasUnsavedWorkbenchChanges) {
       const shouldLeave = window.confirm("当前有未保存改动，确认离开吗？");
       if (!shouldLeave) {
         return;
       }
       setHasUnsavedWorkbenchChanges(false);
+    }
+    if (activeScreen === "workbench" && screen === "home") {
+      setRequireReloadForWorkbench(true);
     }
     setActiveScreen(screen);
   };
@@ -615,7 +738,24 @@ export function App(): ReactElement {
       return (
         <HomePage
           onCreateProject={() => setActiveScreen("wizard")}
-          onOpenProject={() => setActiveScreen("overview")}
+          onOpenProject={(projectCode) => {
+            openProject(projectCode)
+              .then((result) => {
+                setActiveInputConfigId(result.input_config_id);
+                setOverviewData(result.config);
+                setImportProjectName(result.config.project.project_name);
+                setImportProjectCode(result.config.project.project_code);
+                applyImportedVehicleConfig(result.config.form_state);
+                hydrateRuntimeFromLoadedConfig(result.config);
+                setHasImportedConfig(true);
+                setRequireReloadForWorkbench(false);
+                setActiveScreen("overview");
+              })
+              .catch((error) => {
+                const detail = error instanceof Error ? error.message : "unknown_error";
+                window.alert(`打开项目失败：${detail}`);
+              });
+          }}
           onImportYamlFile={(yamlText) => {
             setImportYamlText(yamlText);
             setYamlSupplementPresence(deriveSupplementPresenceFromYaml(yamlText));
@@ -625,6 +765,7 @@ export function App(): ReactElement {
               .catch(() => setImportResult(null));
             setActiveScreen("import-summary");
           }}
+          projects={projects}
         />
       );
     }
@@ -639,12 +780,20 @@ export function App(): ReactElement {
           totalCars={totalCars}
           poweredCars={poweredCars}
           trailerCars={trailerCars}
+          projectName={wizardProjectName}
+          projectCode={wizardProjectCode}
+          projectEmail={wizardProjectEmail}
+          projectNote={wizardProjectNote}
           onChangeBcuType={handleChangeBcuType}
           onChangeHasMixedBogieVehicles={handleToggleMixedBogieVehicles}
           onChangeTotalCars={updateInitializerCount(setTotalCars)}
           onChangeMixedCars={updateInitializerCount(setMixedCars)}
           onChangePoweredCars={updateInitializerCount(setPoweredCars)}
           onChangeTrailerCars={updateInitializerCount(setTrailerCars)}
+          onChangeProjectName={setWizardProjectName}
+          onChangeProjectCode={setWizardProjectCode}
+          onChangeProjectEmail={setWizardProjectEmail}
+          onChangeProjectNote={setWizardProjectNote}
           onEnterWorkbench={handleEnterWorkbenchFromWizard}
         />
       );
@@ -658,6 +807,7 @@ export function App(): ReactElement {
           onSupplementParking={() => handleOpenWorkbenchSectionFromOverview("parking")}
           onSupplementCalibration={() => handleOpenWorkbenchSectionFromOverview("calibration")}
           overviewData={overviewData}
+          runtimeStatus={runtimeStatus}
         />
       );
     }
@@ -691,28 +841,32 @@ export function App(): ReactElement {
           onBackToOverview={() => navigateToScreen("overview")}
           onDirtyChange={setHasUnsavedWorkbenchChanges}
           onSaveDraft={(draft) => {
-            const previousFormState = (overviewData?.form_state ?? importResult?.form_state ?? {}) as Record<
-              string,
-              unknown
-            >;
-            const yamlLines = serializeYaml(draft);
-            const afterYaml = `${yamlLines.join("\n")}\n`;
-            const changedPaths = collectChangedScalarPaths(previousFormState, draft);
-            setImportYamlText(afterYaml);
-            setYamlChangedPaths(changedPaths);
-            setYamlChangedLineIndexes(findYamlChangedLineIndexesByPaths(afterYaml, changedPaths));
-            setOverviewData((current) =>
-              current === null
-                ? current
-                : {
-                    ...current,
-                    form_state: draft,
-                    yaml_text: afterYaml,
-                }
-            );
+            void handleSaveDraft(draft);
           }}
           onRunDraft={(draft) => {
             void handleRunDraft(draft);
+          }}
+          onDownloadYaml={() => {
+            if (activeInputConfigId === null) {
+              window.alert("当前没有可下载的配置，请先保存配置。");
+              return;
+            }
+            downloadYaml(activeInputConfigId)
+              .then((payload) => {
+                const blob = new Blob([payload.yaml_text], { type: "text/yaml;charset=utf-8" });
+                const objectUrl = window.URL.createObjectURL(blob);
+                const anchor = document.createElement("a");
+                anchor.href = objectUrl;
+                anchor.download = payload.filename;
+                document.body.append(anchor);
+                anchor.click();
+                anchor.remove();
+                window.URL.revokeObjectURL(objectUrl);
+              })
+              .catch((error) => {
+                const detail = error instanceof Error ? error.message : "unknown_error";
+                window.alert(`下载 YAML 失败：${detail}`);
+              });
           }}
           importedYamlText={importYamlText}
           importedFormState={overviewData?.form_state ?? importResult?.form_state ?? null}

@@ -87,6 +87,19 @@ def load_config(input_config_id: str, *, config_service: object) -> dict[str, ob
     return _serialize(config_service.load_config(input_config_id))  # type: ignore[attr-defined]
 
 
+def open_latest_project_config(project_code: str, *, config_service: object) -> dict[str, object]:
+    loaded = config_service.load_latest_project_config(project_code)  # type: ignore[attr-defined]
+    return {
+        "input_config_id": str(getattr(loaded, "input_config_id")),
+        "config": _serialize(getattr(loaded, "config")),
+    }
+
+
+def list_projects(*, config_service: object) -> dict[str, object]:
+    items = config_service.list_projects()  # type: ignore[attr-defined]
+    return {"items": items}
+
+
 def import_yaml(request: dict[str, object], *, import_service: object) -> dict[str, object]:
     return _serialize(import_service.import_yaml(str(request["yaml_text"])))  # type: ignore[attr-defined]
 

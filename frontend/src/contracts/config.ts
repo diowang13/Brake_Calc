@@ -19,6 +19,12 @@ export type LoadConfigResult = {
   version: number;
   source_input_config_id: string | null;
   revision_reason: string | null;
+  latest_run?: {
+    calculation_run_id: string;
+    status: string;
+    report: Record<string, unknown> | null;
+    created_at: string;
+  } | null;
 };
 
 export type SaveConfigRequestPayload = {
@@ -58,4 +64,32 @@ export type RunConfigResult = {
   status: string;
   report: Record<string, unknown>;
   warnings: unknown[];
+};
+
+export type OpenProjectResult = {
+  input_config_id: string;
+  config: LoadConfigResult;
+};
+
+export type DownloadYamlResult = {
+  filename: string;
+  yaml_text: string;
+};
+
+export type ProjectListItem = {
+  project_name: string;
+  project_code: string;
+  updated_at: string;
+  latest_input_config_id: string | null;
+  controller_type?: "car" | "bogie" | null;
+  latest_run?: {
+    calculation_run_id: string;
+    status: string;
+    report: Record<string, unknown> | null;
+    created_at: string;
+  } | null;
+};
+
+export type ListProjectsResult = {
+  items: ProjectListItem[];
 };
