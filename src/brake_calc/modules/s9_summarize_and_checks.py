@@ -19,6 +19,7 @@ from brake_calc.domain.reporting import (
     summarize_electric_brake,
     theoretical_speed_check,
 )
+from brake_calc.domain.mass import rotational_mass_factor_for_bogie_type
 from brake_calc.errors import InputValidationError
 
 logger = logging.getLogger(__name__)
@@ -204,7 +205,7 @@ def run(ctx: Context) -> Context:
             n_springs_by_controller=inputs.n_springs_by_controller,
             bogie_weight=params.bogie_weight,
             aw0_static_mass=params.mass_static["AW0"],
-            rotational_mass_factor=params.rotational_mass_factor,
+            rotational_mass_factor=rotational_mass_factor_for_bogie_type(bogie_type),
         )
 
     pressure_conversion: dict[str, dict[str, dict[str, dict[str, float | int]]]] = {}

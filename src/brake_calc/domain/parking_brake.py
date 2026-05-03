@@ -17,7 +17,7 @@ def _aggregate_controller_masses_to_cars(
     controller_type: str,
     controller_masses: dict[str, dict[str, float]],
 ) -> dict[str, dict[str, float]]:
-    """将控制器粒度质量整理为停放校核所需的每车粒度。"""
+    """将控制器粒度质量整理为停放校核所需的每车粒度（静态质量口径）。"""
     if controller_type == "car":
         return controller_masses
 
@@ -27,7 +27,7 @@ def _aggregate_controller_masses_to_cars(
         car_name = f"car_{(index // 2) + 1}"
         pair = items[index : index + 2]
         aggregated[car_name] = {
-            "mass_dynamic": round(sum(values["mass_dynamic"] for _, values in pair), 12),
+            "mass_static": round(sum(values["mass_static"] for _, values in pair), 12),
         }
     return aggregated
 
@@ -76,7 +76,7 @@ def evaluate_parking_brake_check(
     whole_train_incline_force = 0.0
 
     for car_name, mass_values in per_car_masses.items():
-        incline_force = mass_values["mass_dynamic"] * GRAVITY_MPS2 * grade + wind_force_per_car
+        incline_force = mass_values["mass_static"] * GRAVITY_MPS2 * grade + wind_force_per_car
         safety_margin = (
             parking_force_per_car / incline_force if incline_force > 0 else float("inf")
         )

@@ -99,8 +99,8 @@ def test_evaluate_parking_brake_check_returns_per_car_and_whole_train_summary() 
         controller_type="car",
         load_group="AW0",
         controller_masses={
-            "powered_car_1": {"mass_dynamic": 22.0},
-            "trailer_car_1": {"mass_dynamic": 20.0},
+            "powered_car_1": {"mass_static": 22.0},
+            "trailer_car_1": {"mass_static": 20.0},
         },
         parking_config=Inputs.model_validate(make_valid_car_payload()).parking_brake_check,
         mech_params=Inputs.model_validate(make_valid_car_payload()).mech_params,
@@ -125,7 +125,7 @@ def test_evaluate_parking_brake_check_uses_caliper_geometry_factor_for_force() -
     result = evaluate_parking_brake_check(
         controller_type="car",
         load_group="AW0",
-        controller_masses={"powered_car_1": {"mass_dynamic": 22.0}},
+        controller_masses={"powered_car_1": {"mass_static": 22.0}},
         parking_config=inputs.parking_brake_check,
         mech_params=inputs.mech_params,
     )
@@ -141,9 +141,9 @@ def test_evaluate_parking_brake_check_distributes_wind_term_by_vehicle_count() -
         controller_type="car",
         load_group="AW0",
         controller_masses={
-            "powered_car_1": {"mass_dynamic": 22.0},
-            "trailer_car_1": {"mass_dynamic": 20.0},
-            "powered_car_2": {"mass_dynamic": 22.0},
+            "powered_car_1": {"mass_static": 22.0},
+            "trailer_car_1": {"mass_static": 20.0},
+            "powered_car_2": {"mass_static": 22.0},
         },
         parking_config=inputs.parking_brake_check,
         mech_params=inputs.mech_params,

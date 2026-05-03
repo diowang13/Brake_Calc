@@ -15,9 +15,9 @@ def test_s4_calculates_static_and_dynamic_mass_by_bogie_controller() -> None:
     out = run(ctx)
 
     assert out.Mass_by_controller["AW0"]["powered_bogie_1"]["mass_static"] == 10.0
-    assert out.Mass_by_controller["AW0"]["powered_bogie_1"]["mass_dynamic"] == 10.8
+    assert out.Mass_by_controller["AW0"]["powered_bogie_1"]["mass_dynamic"] == 11.0
     assert out.Mass_by_controller["AW0"]["trailer_bogie_1"]["mass_static"] == 9.0
-    assert out.Mass_by_controller["AW0"]["trailer_bogie_1"]["mass_dynamic"] == 9.36
+    assert out.Mass_by_controller["AW0"]["trailer_bogie_1"]["mass_dynamic"] == 9.45
 
 
 def test_s4_aggregates_mass_by_car_controller() -> None:
@@ -27,9 +27,9 @@ def test_s4_aggregates_mass_by_car_controller() -> None:
     out = run(ctx)
 
     assert out.Mass_by_controller["AW0"]["powered_car_1"]["mass_static"] == 20.0
-    assert out.Mass_by_controller["AW0"]["powered_car_1"]["mass_dynamic"] == 21.6
+    assert out.Mass_by_controller["AW0"]["powered_car_1"]["mass_dynamic"] == 22.0
     assert out.Mass_by_controller["AW0"]["trailer_car_1"]["mass_static"] == 18.0
-    assert out.Mass_by_controller["AW0"]["trailer_car_1"]["mass_dynamic"] == 18.72
+    assert out.Mass_by_controller["AW0"]["trailer_car_1"]["mass_dynamic"] == 18.9
 
 
 def test_s4_outputs_air_spring_pressures_by_controller() -> None:
@@ -64,3 +64,16 @@ def test_s4_outputs_air_spring_fit_by_bogie_type() -> None:
     assert out.AirSpringFit_by_bogie_type["trailer_bogie"]["k"] == 20.0
     assert out.AirSpringFit_by_bogie_type["trailer_bogie"]["b"] == 80.0
     assert out.AirSpringFit_by_bogie_type["trailer_bogie"]["source_mode"] == "fitted_from_points"
+
+
+def test_s4_uses_fixed_rotational_mass_factor_by_bogie_type() -> None:
+    payload = make_valid_bogie_payload()
+    payload["mass_params"]["powered_bogie"]["rotational_mass_factor"] = 0.0
+    payload["mass_params"]["trailer_bogie"]["rotational_mass_factor"] = 0.0
+    ctx = Context(validated_inputs=Inputs.model_validate(payload))
+    ctx = run_s3(run_s2(ctx))
+
+    out = run(ctx)
+
+    assert out.Mass_by_controller["AW0"]["powered_bogie_1"]["mass_dynamic"] == 11.0
+    assert out.Mass_by_controller["AW0"]["trailer_bogie_1"]["mass_dynamic"] == 9.45

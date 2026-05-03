@@ -14,6 +14,7 @@ from brake_calc.domain.mass import (
     calc_air_spring_pressure,
     calc_dynamic_mass,
     fit_air_spring_linear_formula,
+    rotational_mass_factor_for_bogie_type,
 )
 from brake_calc.errors import InputValidationError
 
@@ -83,7 +84,7 @@ def run(ctx: Context) -> Context:
                 "mass_dynamic": calc_dynamic_mass(
                     static_mass=static_mass,
                     aw0_static_mass=params.mass_static["AW0"] * inputs.n_bogies_by_controller,
-                    rotational_mass_factor=params.rotational_mass_factor,
+                    rotational_mass_factor=rotational_mass_factor_for_bogie_type(bogie_type),
                 ),
             }
         mass_by_controller[load_group] = per_controller

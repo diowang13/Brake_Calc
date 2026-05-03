@@ -3,6 +3,15 @@
 from __future__ import annotations
 
 
+def rotational_mass_factor_for_bogie_type(bogie_type: str) -> float:
+    """返回固定旋转质量系数。"""
+    if bogie_type == "powered_bogie":
+        return 0.1
+    if bogie_type == "trailer_bogie":
+        return 0.05
+    raise ValueError(f"unsupported bogie_type: {bogie_type}")
+
+
 def calc_dynamic_mass(
     static_mass: float,
     aw0_static_mass: float,
