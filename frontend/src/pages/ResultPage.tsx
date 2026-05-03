@@ -2,7 +2,6 @@ import { Fragment, type ReactElement } from "react";
 import type { Report } from "../contracts/report";
 
 import {
-  ghostActionStyle,
   groupedTableCellStyle,
   panelStyle,
   secondaryActionStyle,
@@ -447,7 +446,6 @@ export function ResultPage({
   autoAdjustments,
   pressureMatrixView,
   onChangePressureMatrixView,
-  onBackToWorkbench,
   onBackToOverview
 }: {
   report: Report;
@@ -459,7 +457,6 @@ export function ResultPage({
   autoAdjustments: Array<{ code?: string; message?: string }>;
   pressureMatrixView: "load" | "controller";
   onChangePressureMatrixView: (view: "load" | "controller") => void;
-  onBackToWorkbench: () => void;
   onBackToOverview: () => void;
 }): ReactElement {
   const parkingRowsByLoadGroup = Object.entries(report.parking_brake_check_results_by_load_group);
@@ -633,8 +630,8 @@ export function ResultPage({
     runtimeStatus === "succeeded"
       ? "运行成功，结果来自后端本次 report。"
       : runtimeStatus === "failed"
-        ? "最近一次运行失败，请返回配置修订后重试。"
-        : "尚未运行，请先返回配置点击运行。";
+        ? "最近一次运行失败，请先回到总览并进入修订后重试。"
+        : "尚未运行，请先回到总览并进入修订后运行。";
   const hasCalibrationSummary = serviceSummary !== null || emergencySummary !== null;
   const isParkingEnabled = parkingReference !== undefined && parkingReference !== null;
 
@@ -655,9 +652,6 @@ export function ResultPage({
           </p>
         </div>
         <div style={{ display: "flex", gap: "12px", flexWrap: "wrap" }}>
-          <button type="button" style={ghostActionStyle} onClick={onBackToWorkbench}>
-            返回配置
-          </button>
           <button type="button" style={secondaryActionStyle} onClick={onBackToOverview}>
             回到总览
           </button>

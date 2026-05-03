@@ -350,7 +350,7 @@ async function openWorkbenchFromHome(user: ReturnType<typeof userEvent.setup>): 
     expect(screen.getByText("车控")).toBeInTheDocument();
     expect(screen.getByText("架控")).toBeInTheDocument();
 
-    await user.click(screen.getByRole("button", { name: "只读总览" }));
+    await user.click(screen.getByRole("button", { name: "打开既有项目" }));
     expect(
       screen.getByRole("heading", { level: 2, name: /上海机场线制动项目/ })
     ).toBeInTheDocument();
@@ -901,10 +901,11 @@ async function openWorkbenchFromHome(user: ReturnType<typeof userEvent.setup>): 
 
     render(<App />);
 
-    await user.click(screen.getByRole("button", { name: "结果页" }));
+    await user.click(screen.getByRole("button", { name: "打开既有项目" }));
+    await screen.findByRole("button", { name: "查看结果" });
+    await user.click(screen.getByRole("button", { name: "查看结果" }));
 
     expect(screen.getByRole("heading", { level: 2, name: "运行结果" })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "返回配置" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "回到总览" })).toBeInTheDocument();
     expect(screen.getByText("运行状态")).toBeInTheDocument();
     expect(screen.getByText("警告")).toBeInTheDocument();
@@ -938,7 +939,10 @@ async function openWorkbenchFromHome(user: ReturnType<typeof userEvent.setup>): 
 
     render(<App />);
 
-    await user.click(screen.getByRole("button", { name: "导入摘要" }));
+    const file = new File(["schema_version: 1\nv0: 80\n"], "import_summary_entry.yaml", {
+      type: "text/yaml"
+    });
+    await user.upload(screen.getByLabelText("上传 YAML 文件"), file);
 
     expect(await screen.findByRole("heading", { level: 2, name: "导入摘要" })).toBeInTheDocument();
     expect(screen.getByText("是否包含停放校核 / 标定 / electric_brake 等后置内容")).toBeInTheDocument();
@@ -950,7 +954,7 @@ async function openWorkbenchFromHome(user: ReturnType<typeof userEvent.setup>): 
     expect(screen.getByRole("textbox", { name: "导入 YAML 文本" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "保存并查看总览" })).toBeDisabled();
     expect(screen.getByRole("button", { name: "保存并查看总览" })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "查看总览" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "预览总览" })).toBeInTheDocument();
     expect(screen.getByText("请先补全：项目名称、项目编号。")).toBeInTheDocument();
   });
 
@@ -1071,11 +1075,14 @@ async function openWorkbenchFromHome(user: ReturnType<typeof userEvent.setup>): 
 
     render(<App />);
 
-    await user.click(screen.getByRole("button", { name: "只读总览" }));
+    await user.click(screen.getByRole("button", { name: "打开既有项目" }));
     await user.click(screen.getAllByRole("button", { name: "点击补录" })[0]);
     expect(screen.getByRole("heading", { level: 3, name: "停放校核" })).toBeInTheDocument();
 
     await user.click(screen.getByRole("button", { name: "返回总览" }));
+    if (screen.queryByRole("dialog", { name: "未保存改动" }) !== null) {
+      await user.click(screen.getByRole("button", { name: "确认" }));
+    }
     await user.click(screen.getAllByRole("button", { name: "点击补录" })[1]);
     expect(screen.getByRole("heading", { level: 3, name: "标定" })).toBeInTheDocument();
   });
@@ -1084,7 +1091,7 @@ async function openWorkbenchFromHome(user: ReturnType<typeof userEvent.setup>): 
     const user = userEvent.setup();
 
     render(<App />);
-    await user.click(screen.getByRole("button", { name: "只读总览" }));
+    await user.click(screen.getByRole("button", { name: "打开既有项目" }));
     await user.click(screen.getByRole("button", { name: "修订" }));
 
     expect(screen.getByRole("heading", { level: 2, name: "配置工作台" })).toBeInTheDocument();
@@ -1480,7 +1487,7 @@ async function openWorkbenchFromHome(user: ReturnType<typeof userEvent.setup>): 
     expect(screen.getByText("当前状态：已配置")).toBeInTheDocument();
   });
 
-  it("disables wizard entry after import while keeping home entry available", async () => {
+  it("keeps wizard entry available after import while overview still blocks direct result without run", async () => {
     const user = userEvent.setup();
 
     render(<App />);
@@ -1495,7 +1502,7 @@ async function openWorkbenchFromHome(user: ReturnType<typeof userEvent.setup>): 
     await user.click(screen.getByRole("button", { name: "保存并查看总览" }));
     await screen.findByRole("heading", { level: 2, name: /上海机场线制动项目|禁用初始化项目/ });
 
-    expect(screen.getByRole("button", { name: "新建初始化" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "新建初始化" })).toBeEnabled();
     expect(screen.getByRole("button", { name: "查看结果" })).toBeDisabled();
     expect(screen.getByRole("button", { name: "查看结果" })).toHaveAttribute("title", "暂无结果（请先运行）");
     expect(screen.getByText("暂无结果（请先运行）。")).toBeInTheDocument();
@@ -1533,8 +1540,6 @@ async function openWorkbenchFromHome(user: ReturnType<typeof userEvent.setup>): 
 
   it("prompts before leaving workbench with unsaved changes and respects cancel or confirm", async () => {
     const user = userEvent.setup();
-    const confirmSpy = vi.spyOn(window, "confirm");
-    confirmSpy.mockReturnValueOnce(false).mockReturnValueOnce(true);
 
     render(<App />);
     await openWorkbenchFromHome(user);
@@ -1543,31 +1548,25 @@ async function openWorkbenchFromHome(user: ReturnType<typeof userEvent.setup>): 
     await user.type(screen.getByRole("spinbutton", { name: "最高速度 v0 (km/h)" }), "81");
 
     await user.click(screen.getByRole("button", { name: "首页 / 项目列表" }));
-    expect(confirmSpy).toHaveBeenCalled();
+    expect(screen.getByRole("dialog", { name: "未保存改动" })).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "取消" }));
     expect(screen.getByRole("heading", { level: 2, name: "配置工作台" })).toBeInTheDocument();
 
     await user.click(screen.getByRole("button", { name: "首页 / 项目列表" }));
+    expect(screen.getByRole("dialog", { name: "未保存改动" })).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "确认" }));
     expect(screen.getByRole("button", { name: "新建项目计算" })).toBeInTheDocument();
-
-    confirmSpy.mockRestore();
   });
 
   it("blocks direct navigation from home to workbench and requires overview revise path", async () => {
     const user = userEvent.setup();
-    const alertSpy = vi.spyOn(window, "alert").mockImplementation(() => undefined);
 
     render(<App />);
-    await user.click(screen.getByRole("button", { name: "配置工作台" }));
-
-    expect(alertSpy).toHaveBeenCalledWith(
-      "请先在首页打开既有项目（加载已保存配置），再从总览“修订”进入工作台。"
-    );
+    expect(screen.getByRole("button", { name: "配置工作台" })).toBeDisabled();
     expect(screen.getByRole("button", { name: "新建项目计算" })).toBeInTheDocument();
 
     await openWorkbenchFromHome(user);
     expect(screen.getByRole("heading", { level: 2, name: "配置工作台" })).toBeInTheDocument();
-
-    alertSpy.mockRestore();
   });
 
   it("shows readable save confirmation with key-path summary and save status feedback", async () => {
@@ -1633,7 +1632,6 @@ async function openWorkbenchFromHome(user: ReturnType<typeof userEvent.setup>): 
 
   it("discards unsaved workbench edits after confirmed leave and reopen", async () => {
     const user = userEvent.setup();
-    const confirmSpy = vi.spyOn(window, "confirm").mockReturnValue(true);
 
     render(<App />);
     await openWorkbenchFromHome(user);
@@ -1644,12 +1642,12 @@ async function openWorkbenchFromHome(user: ReturnType<typeof userEvent.setup>): 
     expect(v0Input).toHaveValue(81);
 
     await user.click(screen.getByRole("button", { name: "首页 / 项目列表" }));
+    expect(screen.getByRole("dialog", { name: "未保存改动" })).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "确认" }));
     expect(screen.getByRole("button", { name: "新建项目计算" })).toBeInTheDocument();
 
     await openWorkbenchFromHome(user);
     expect(await screen.findByRole("spinbutton", { name: "最高速度 v0 (km/h)" })).not.toHaveValue(81);
-
-    confirmSpy.mockRestore();
   });
 
   it("updates JSON live, highlights last changed path, and refreshes YAML text after save", async () => {
@@ -1865,8 +1863,8 @@ async function openWorkbenchFromHome(user: ReturnType<typeof userEvent.setup>): 
       aw2Label.compareDocumentPosition(aw3Label) & Node.DOCUMENT_POSITION_FOLLOWING
     ).toBeTruthy();
 
-    await user.click(screen.getByRole("button", { name: "返回配置" }));
-    expect(await screen.findByRole("heading", { level: 2, name: "配置工作台" })).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "回到总览" }));
+    expect(await screen.findByRole("heading", { level: 2, name: /上海机场线制动项目|真实运行项目/ })).toBeInTheDocument();
   });
 
   it("shows dash for controller code params when calibration_summary is absent", async () => {

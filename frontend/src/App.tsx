@@ -204,6 +204,18 @@ function serializeYaml(value: unknown, indent = 0): string[] {
 }
 
 export function App(): ReactElement {
+  type AppDialogState =
+    | {
+        kind: "alert";
+        title: string;
+        message: string;
+      }
+    | {
+        kind: "confirm";
+        title: string;
+        message: string;
+        onConfirm: () => void;
+      };
   const [activeScreen, setActiveScreen] = useState<ScreenKey>("home");
   const [loadInputMode, setLoadInputMode] = useState<"car" | "bogie">("car");
   const [controllerConfigType, setControllerConfigType] = useState<"car" | "bogie">("car");
@@ -263,6 +275,15 @@ export function App(): ReactElement {
   const [runtimeStatus, setRuntimeStatus] = useState<"idle" | "succeeded" | "failed">("idle");
   const [projects, setProjects] = useState<ProjectListItem[]>([]);
   const [requireReloadForWorkbench, setRequireReloadForWorkbench] = useState(false);
+  const [appDialog, setAppDialog] = useState<AppDialogState | null>(null);
+
+  const showAlertDialog = (title: string, message: string): void => {
+    setAppDialog({ kind: "alert", title, message });
+  };
+
+  const showConfirmDialog = (title: string, message: string, onConfirm: () => void): void => {
+    setAppDialog({ kind: "confirm", title, message, onConfirm });
+  };
 
   useEffect(() => {
     listProjects()
@@ -346,6 +367,7 @@ export function App(): ReactElement {
     }
   };
   const currentScreen = screens.find((screen) => screen.key === activeScreen) ?? screens[0];
+  const hasResultAvailable = runtimeStatus === "succeeded";
 
   const parseEnabledFromYaml = (yamlText: string, sectionName: string): boolean | null => {
     const lines = yamlText.split(/\r?\n/);
@@ -526,7 +548,7 @@ export function App(): ReactElement {
     );
 
     if (activeInputConfigId === null) {
-      window.alert("当前没有可运行的已保存配置，请先导入并保存配置。");
+      showAlertDialog("运行提示", "当前没有可运行的已保存配置，请先导入并保存配置。");
       return;
     }
 
@@ -589,7 +611,7 @@ export function App(): ReactElement {
     } catch (error) {
       setRuntimeStatus("failed");
       const detail = error instanceof Error ? error.message : "unknown_error";
-      window.alert(`运行失败：${detail}`);
+      showAlertDialog("运行失败", `运行失败：${detail}`);
     }
   };
 
@@ -734,20 +756,61 @@ export function App(): ReactElement {
     setActiveScreen("workbench");
   };
 
+  const shouldEnableTopNavTarget = (target: ScreenKey): boolean => {
+    if (target === activeScreen) {
+      return true;
+    }
+    if (activeScreen === "home") {
+      return target === "wizard";
+    }
+    if (activeScreen === "wizard") {
+      return target === "home";
+    }
+    if (activeScreen === "import-summary") {
+      return target === "home" || target === "wizard";
+    }
+    if (activeScreen === "overview") {
+      if (target === "workbench") {
+        return false;
+      }
+      if (target === "result") {
+        return hasResultAvailable;
+      }
+      return target === "home" || target === "wizard" || target === "import-summary";
+    }
+    if (activeScreen === "workbench") {
+      return target !== "workbench";
+    }
+    if (activeScreen === "result") {
+      return target !== "workbench";
+    }
+    return false;
+  };
+
   const navigateToScreen = (screen: ScreenKey): void => {
     if (screen === activeScreen) {
       return;
     }
-    if (screen === "workbench" && activeScreen === "home") {
-      window.alert("请先在首页打开既有项目（加载已保存配置），再从总览“修订”进入工作台。");
+    if (!shouldEnableTopNavTarget(screen)) {
+      return;
+    }
+    if (activeScreen === "import-summary" && (screen === "home" || screen === "wizard")) {
+      showConfirmDialog("放弃导入确认", "当前导入尚未确认，离开将放弃导入。确认离开吗？", () => {
+        setAppDialog(null);
+        setActiveScreen(screen);
+      });
       return;
     }
     if (activeScreen === "workbench" && hasUnsavedWorkbenchChanges) {
-      const shouldLeave = window.confirm("当前有未保存改动，确认离开吗？");
-      if (!shouldLeave) {
-        return;
-      }
-      setHasUnsavedWorkbenchChanges(false);
+      showConfirmDialog("未保存改动", "当前有未保存改动，确认离开吗？", () => {
+        setAppDialog(null);
+        setHasUnsavedWorkbenchChanges(false);
+        if (activeScreen === "workbench" && screen === "home") {
+          setRequireReloadForWorkbench(true);
+        }
+        setActiveScreen(screen);
+      });
+      return;
     }
     if (activeScreen === "workbench" && screen === "home") {
       setRequireReloadForWorkbench(true);
@@ -775,7 +838,7 @@ export function App(): ReactElement {
               })
               .catch((error) => {
                 const detail = error instanceof Error ? error.message : "unknown_error";
-                window.alert(`打开项目失败：${detail}`);
+                showAlertDialog("打开项目失败", `打开项目失败：${detail}`);
               });
           }}
           onImportYamlFile={(yamlText) => {
@@ -882,7 +945,7 @@ export function App(): ReactElement {
           }}
           onDownloadYaml={() => {
             if (activeInputConfigId === null) {
-              window.alert("当前没有可下载的配置，请先保存配置。");
+              showAlertDialog("下载提示", "当前没有可下载的配置，请先保存配置。");
               return;
             }
             downloadYaml(activeInputConfigId)
@@ -899,7 +962,7 @@ export function App(): ReactElement {
               })
               .catch((error) => {
                 const detail = error instanceof Error ? error.message : "unknown_error";
-                window.alert(`下载 YAML 失败：${detail}`);
+                showAlertDialog("下载失败", `下载 YAML 失败：${detail}`);
               });
           }}
           importedYamlText={importYamlText}
@@ -933,7 +996,6 @@ export function App(): ReactElement {
           autoAdjustments={runtimeAutoAdjustments}
           pressureMatrixView={pressureMatrixView}
           onChangePressureMatrixView={setPressureMatrixView}
-          onBackToWorkbench={() => setActiveScreen("workbench")}
           onBackToOverview={() => setActiveScreen("overview")}
         />
       );
@@ -943,7 +1005,11 @@ export function App(): ReactElement {
       return (
         <ImportSummaryPage
           onSaveAndViewOverview={handleSaveAndViewOverviewFromImportSummary}
-          onViewOverview={() => setActiveScreen("overview")}
+          onViewOverview={() => {
+            setHasImportedConfig(true);
+            setRequireReloadForWorkbench(false);
+            setActiveScreen("overview");
+          }}
           projectName={importProjectName}
           projectCode={importProjectCode}
           onChangeProjectName={setImportProjectName}
@@ -1010,7 +1076,7 @@ export function App(): ReactElement {
         >
           {screens.map((screen) => {
             const isActive = screen.key === activeScreen;
-            const isDisabled = screen.key === "wizard" && hasImportedConfig;
+            const isDisabled = !isActive && !shouldEnableTopNavTarget(screen.key);
 
             return (
               <button
@@ -1034,6 +1100,56 @@ export function App(): ReactElement {
 
         <section style={pagePanelStyle}>{pageContent}</section>
       </div>
+      {appDialog !== null ? (
+        <div
+          style={{
+            position: "fixed",
+            inset: 0,
+            background: "rgba(31, 27, 22, 0.35)",
+            display: "grid",
+            placeItems: "center",
+            zIndex: 1200,
+            padding: "16px",
+          }}
+        >
+          <section
+            role="dialog"
+            aria-modal="true"
+            aria-label={appDialog.title}
+            style={{
+              width: "min(560px, 100%)",
+              borderRadius: "20px",
+              border: "1px solid #d5c9ba",
+              background: "#fffdf9",
+              boxShadow: "0 20px 48px rgba(59, 39, 20, 0.22)",
+              padding: "22px",
+              display: "grid",
+              gap: "14px",
+            }}
+          >
+            <h3 style={{ margin: 0, fontSize: "22px", color: "#1f1b16" }}>{appDialog.title}</h3>
+            <p style={{ margin: 0, color: "#6b6259", lineHeight: 1.7 }}>{appDialog.message}</p>
+            <div style={{ display: "flex", justifyContent: "flex-end", gap: "10px" }}>
+              <button
+                type="button"
+                style={secondaryActionStyle}
+                onClick={() => setAppDialog(null)}
+              >
+                {appDialog.kind === "confirm" ? "取消" : "我知道了"}
+              </button>
+              {appDialog.kind === "confirm" ? (
+                <button
+                  type="button"
+                  style={primaryActionStyle}
+                  onClick={appDialog.onConfirm}
+                >
+                  确认
+                </button>
+              ) : null}
+            </div>
+          </section>
+        </div>
+      ) : null}
     </main>
   );
 }

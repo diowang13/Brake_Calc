@@ -64,7 +64,7 @@ export function ImportSummaryPage({
           <div>
             <h2 style={{ margin: 0, fontSize: "32px" }}>导入摘要</h2>
             <p style={{ margin: "8px 0 0", color: "#6b6259" }}>
-              导入成功后先确认配置是否完整、是否存在警告，再决定进入工作台还是查看总览。
+              导入成功后先确认配置是否完整、是否存在警告，再决定进入工作台还是预览总览。
             </p>
           </div>
           <div style={{ display: "flex", gap: "12px", flexWrap: "wrap" }}>
@@ -89,7 +89,7 @@ export function ImportSummaryPage({
               {isSubmitting ? "保存中..." : "保存并查看总览"}
             </button>
             <button type="button" style={secondaryActionStyle} onClick={onViewOverview}>
-              查看总览
+              预览总览
             </button>
           </div>
         </div>

@@ -168,6 +168,28 @@ export function WorkbenchPage({
 }): ReactElement {
   const toRecord = (value: unknown): Record<string, unknown> | null =>
     typeof value === "object" && value !== null ? (value as Record<string, unknown>) : null;
+  const deepEqual = (left: unknown, right: unknown): boolean => {
+    if (Object.is(left, right)) {
+      return true;
+    }
+    if (Array.isArray(left) || Array.isArray(right)) {
+      if (!Array.isArray(left) || !Array.isArray(right) || left.length !== right.length) {
+        return false;
+      }
+      return left.every((item, index) => deepEqual(item, right[index]));
+    }
+    if (typeof left === "object" && left !== null && typeof right === "object" && right !== null) {
+      const leftKeys = Object.keys(left as Record<string, unknown>);
+      const rightKeys = Object.keys(right as Record<string, unknown>);
+      if (leftKeys.length !== rightKeys.length) {
+        return false;
+      }
+      return leftKeys.every((key) =>
+        deepEqual((left as Record<string, unknown>)[key], (right as Record<string, unknown>)[key])
+      );
+    }
+    return false;
+  };
   const getNestedStringText = (root: unknown, path: string[]): string => {
     let cursor: unknown = root;
     for (const key of path) {
@@ -263,6 +285,7 @@ export function WorkbenchPage({
   const [emergencyCalibrationPointTwoKValue, setEmergencyCalibrationPointTwoKValue] = useState("");
   const [lastChangedPath, setLastChangedPath] = useState<string | null>(null);
   const jsonPanelRef = useRef<HTMLDivElement | null>(null);
+  const baselineLiveFormStateRef = useRef<Record<string, unknown> | null>(null);
   const [activeInfoTab, setActiveInfoTab] = useState<"description" | "errors" | "yaml">(
     hasImportedConfig ? "yaml" : "description"
   );
@@ -1321,6 +1344,18 @@ export function WorkbenchPage({
       return { path, before: toText(before), after: toText(after) };
     });
   }, [importedFormState, liveFormState]);
+
+  useEffect(() => {
+    baselineLiveFormStateRef.current = liveFormState;
+  }, [importedFormState]);
+
+  const hasDiffFromImported =
+    baselineLiveFormStateRef.current !== null &&
+    !deepEqual(baselineLiveFormStateRef.current, liveFormState);
+
+  useEffect(() => {
+    onDirtyChange(hasDiffFromImported);
+  }, [hasDiffFromImported, onDirtyChange]);
 
   const highlightedLineIndex = useMemo(() => {
     const index = highlightedJson.findIndex((item) => item.highlighted);
