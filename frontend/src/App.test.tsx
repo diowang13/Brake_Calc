@@ -1,9 +1,16 @@
-import { render, screen } from "@testing-library/react";
+import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { vi } from "vitest";
 
 import { App } from "./App";
-import { downloadYaml, listProjects, loadConfig, openProject, runConfig } from "./api/configClient";
+import {
+  downloadYaml,
+  listProjects,
+  loadConfig,
+  openProject,
+  previewCalibration,
+  runConfig,
+} from "./api/configClient";
 
 vi.mock("./api/configClient", () => {
   let savedConfig: Record<string, unknown> | null = null;
@@ -253,6 +260,12 @@ vi.mock("./api/configClient", () => {
       },
       warnings: [],
     })),
+    previewCalibration: vi.fn(async () => ({
+      service_bcp0: 25,
+      emergency_bcp0: 30,
+      service_k_by_load_group: { AW0: 1014, AW2: 1100, AW3: 1204 },
+      emergency_k_by_load_group: { AW0: 980, AW2: 1050, AW3: 1123 },
+    })),
     openProject: vi.fn(async () => ({
       input_config_id: "mock-config-id",
       config: {
@@ -305,6 +318,13 @@ vi.mock("./api/configClient", () => {
 });
 
 describe("App shell", () => {
+async function openWorkbenchFromHome(user: ReturnType<typeof userEvent.setup>): Promise<void> {
+  await user.click(screen.getByRole("button", { name: "首页 / 项目列表" }));
+  await user.click(screen.getByRole("button", { name: "打开既有项目" }));
+  await screen.findByRole("button", { name: "修订" });
+  await user.click(screen.getByRole("button", { name: "修订" }));
+}
+
   it("renders the core frontend pages and switches between them", async () => {
     const user = userEvent.setup();
 
@@ -343,7 +363,7 @@ describe("App shell", () => {
     expect(screen.getByText("停放校核状态")).toBeInTheDocument();
     expect(screen.queryByText("电空计算")).not.toBeInTheDocument();
 
-    await user.click(screen.getByRole("button", { name: "配置工作台" }));
+    await user.click(screen.getByRole("button", { name: "修订" }));
     expect(screen.getByRole("heading", { level: 2, name: "配置工作台" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "返回总览" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "保存" })).toBeInTheDocument();
@@ -365,7 +385,8 @@ describe("App shell", () => {
 
     render(<App />);
 
-    await user.click(screen.getByRole("button", { name: "配置工作台" }));
+    await openWorkbenchFromHome(user);
+    await user.click(screen.getByRole("button", { name: /^载荷与空簧/ }));
 
     expect(screen.getByRole("heading", { level: 3, name: "车辆载荷参数录入" })).toBeInTheDocument();
     expect(screen.getByRole("heading", { level: 3, name: "转向架参数录入" })).toBeInTheDocument();
@@ -387,7 +408,8 @@ describe("App shell", () => {
 
     render(<App />);
 
-    await user.click(screen.getByRole("button", { name: "配置工作台" }));
+    await openWorkbenchFromHome(user);
+    await user.click(screen.getByRole("button", { name: /^载荷与空簧/ }));
 
     expect(screen.getByText("特征点 1")).toBeInTheDocument();
     expect(screen.queryByText("空簧线性系数 k (kPa/ton)")).not.toBeInTheDocument();
@@ -410,7 +432,8 @@ describe("App shell", () => {
 
     render(<App />);
 
-    await user.click(screen.getByRole("button", { name: "配置工作台" }));
+    await openWorkbenchFromHome(user);
+    await user.click(screen.getByRole("button", { name: /^载荷与空簧/ }));
 
     expect(screen.getByRole("heading", { level: 3, name: "载荷与空簧" })).toBeInTheDocument();
     expect(
@@ -622,7 +645,7 @@ describe("App shell", () => {
 
     render(<App />);
 
-    await user.click(screen.getByRole("button", { name: "配置工作台" }));
+    await openWorkbenchFromHome(user);
     await user.click(screen.getByRole("button", { name: /^运行基础配置 \/ 技术条件/ }));
 
     expect(screen.getByRole("heading", { level: 3, name: "运行基础配置 / 技术条件" })).toBeInTheDocument();
@@ -674,7 +697,7 @@ describe("App shell", () => {
 
     render(<App />);
 
-    await user.click(screen.getByRole("button", { name: "配置工作台" }));
+    await openWorkbenchFromHome(user);
     await user.click(screen.getByRole("button", { name: /^运行基础配置 \/ 技术条件/ }));
 
     const firstNameInput = screen.getByRole("textbox", {
@@ -718,7 +741,7 @@ describe("App shell", () => {
 
     render(<App />);
 
-    await user.click(screen.getByRole("button", { name: "配置工作台" }));
+    await openWorkbenchFromHome(user);
     await user.click(screen.getByRole("button", { name: /^运行基础配置 \/ 技术条件/ }));
 
     const v0Input = screen.getByRole("spinbutton", { name: "最高速度 v0 (km/h)" });
@@ -750,7 +773,7 @@ describe("App shell", () => {
 
     render(<App />);
 
-    await user.click(screen.getByRole("button", { name: "配置工作台" }));
+    await openWorkbenchFromHome(user);
     await user.click(screen.getByRole("button", { name: /^基础制动机械参数/ }));
 
     expect(screen.getByRole("heading", { level: 3, name: "基础制动机械参数" })).toBeInTheDocument();
@@ -786,7 +809,7 @@ describe("App shell", () => {
 
     render(<App />);
 
-    await user.click(screen.getByRole("button", { name: "配置工作台" }));
+    await openWorkbenchFromHome(user);
     await user.click(screen.getByRole("button", { name: /^停放校核/ }));
 
     expect(screen.getByRole("heading", { level: 3, name: "停放校核" })).toBeInTheDocument();
@@ -819,7 +842,7 @@ describe("App shell", () => {
 
     render(<App />);
 
-    await user.click(screen.getByRole("button", { name: "配置工作台" }));
+    await openWorkbenchFromHome(user);
     await user.click(screen.getByRole("button", { name: /^标定/ }));
 
     expect(screen.getByRole("heading", { level: 3, name: "标定" })).toBeInTheDocument();
@@ -868,7 +891,7 @@ describe("App shell", () => {
 
     render(<App />);
 
-    await user.click(screen.getByRole("button", { name: "配置工作台" }));
+    await openWorkbenchFromHome(user);
 
     expect(screen.queryByRole("button", { name: /^电空计算/ })).not.toBeInTheDocument();
   });
@@ -1029,7 +1052,8 @@ describe("App shell", () => {
       await screen.findByRole("heading", { level: 2, name: /上海机场线制动项目|导入项目/ })
     ).toBeInTheDocument();
 
-    await user.click(screen.getByRole("button", { name: "配置工作台" }));
+    await openWorkbenchFromHome(user);
+    await user.click(screen.getByRole("button", { name: /^载荷与空簧/ }));
     expect(screen.getByRole("textbox", { name: "AW0 / 动车称重（整车）" })).toHaveValue("15.83");
     expect(screen.getByRole("textbox", { name: "AW0 / 拖车称重（整车）" })).toHaveValue("15.37");
     expect(screen.getByRole("textbox", { name: "AW3 / 动车称重（整车）" })).toHaveValue("26.37");
@@ -1513,7 +1537,7 @@ describe("App shell", () => {
     confirmSpy.mockReturnValueOnce(false).mockReturnValueOnce(true);
 
     render(<App />);
-    await user.click(screen.getByRole("button", { name: "配置工作台" }));
+    await openWorkbenchFromHome(user);
     await user.click(screen.getByRole("button", { name: /^运行基础配置 \/ 技术条件/ }));
     await user.clear(screen.getByRole("spinbutton", { name: "最高速度 v0 (km/h)" }));
     await user.type(screen.getByRole("spinbutton", { name: "最高速度 v0 (km/h)" }), "81");
@@ -1524,6 +1548,106 @@ describe("App shell", () => {
 
     await user.click(screen.getByRole("button", { name: "首页 / 项目列表" }));
     expect(screen.getByRole("button", { name: "新建项目计算" })).toBeInTheDocument();
+
+    confirmSpy.mockRestore();
+  });
+
+  it("blocks direct navigation from home to workbench and requires overview revise path", async () => {
+    const user = userEvent.setup();
+    const alertSpy = vi.spyOn(window, "alert").mockImplementation(() => undefined);
+
+    render(<App />);
+    await user.click(screen.getByRole("button", { name: "配置工作台" }));
+
+    expect(alertSpy).toHaveBeenCalledWith(
+      "请先在首页打开既有项目（加载已保存配置），再从总览“修订”进入工作台。"
+    );
+    expect(screen.getByRole("button", { name: "新建项目计算" })).toBeInTheDocument();
+
+    await openWorkbenchFromHome(user);
+    expect(screen.getByRole("heading", { level: 2, name: "配置工作台" })).toBeInTheDocument();
+
+    alertSpy.mockRestore();
+  });
+
+  it("shows readable save confirmation with key-path summary and save status feedback", async () => {
+    const user = userEvent.setup();
+
+    render(<App />);
+    await openWorkbenchFromHome(user);
+    await user.click(screen.getByRole("button", { name: /^运行基础配置 \/ 技术条件/ }));
+    await user.clear(screen.getByRole("spinbutton", { name: "最高速度 v0 (km/h)" }));
+    await user.type(screen.getByRole("spinbutton", { name: "最高速度 v0 (km/h)" }), "82");
+
+    await user.click(screen.getByRole("button", { name: "保存" }));
+
+    const dialog = screen.getByRole("dialog", { name: "保存确认" });
+    expect(dialog).toBeInTheDocument();
+    expect(screen.getByText("关键变更路径：")).toBeInTheDocument();
+    expect(within(dialog).getByText(/v0/)).toBeInTheDocument();
+    expect(within(dialog).queryByText(/"name":"FSB"/)).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "确认保存" }));
+    expect(await screen.findByText(/保存成功/)).toBeInTheDocument();
+  });
+
+  it("triggers one preview-calibration call when switching from disabled to enabled", async () => {
+    const user = userEvent.setup();
+    render(<App />);
+
+    await openWorkbenchFromHome(user);
+    await user.click(screen.getByRole("button", { name: /^标定/ }));
+    await user.click(screen.getByRole("button", { name: "停用 pressure_calibration" }));
+    await user.click(screen.getByRole("button", { name: "启用 pressure_calibration" }));
+
+    expect(vi.mocked(runConfig)).not.toHaveBeenCalled();
+    expect(vi.mocked(previewCalibration)).toHaveBeenCalledWith("mock-config-id");
+    expect(await screen.findByText("BCP0 理论参考值：25 kPa")).toBeInTheDocument();
+  });
+
+  it("shows warning and auto-adjustment details in result summary", async () => {
+    const user = userEvent.setup();
+    vi.mocked(runConfig).mockResolvedValueOnce({
+      calculation_run_id: "warn-run",
+      status: "succeeded",
+      report: {
+        theoretical_speed_checks: {},
+        load_summary: {},
+        controller_pressure_standards: {},
+        controller_code_params: { pressure_conversion: {} },
+        parking_brake_check_result: null,
+        parking_brake_check_results_by_load_group: {},
+        auto_adjustments: [{ code: "fb_over_eb", message: "FB 压力超过 EB，已自动上调 EB 基值" }],
+      },
+      warnings: [{ code: "adhesion_clip", message: "黏着约束触发，已按上限裁剪" }],
+    });
+
+    render(<App />);
+    await openWorkbenchFromHome(user);
+    await user.click(screen.getByRole("button", { name: "运行" }));
+
+    expect(await screen.findByRole("heading", { level: 2, name: "运行结果" })).toBeInTheDocument();
+    expect(screen.getByText("黏着约束触发，已按上限裁剪")).toBeInTheDocument();
+    expect(screen.getByText("FB 压力超过 EB，已自动上调 EB 基值")).toBeInTheDocument();
+  });
+
+  it("discards unsaved workbench edits after confirmed leave and reopen", async () => {
+    const user = userEvent.setup();
+    const confirmSpy = vi.spyOn(window, "confirm").mockReturnValue(true);
+
+    render(<App />);
+    await openWorkbenchFromHome(user);
+    await user.click(screen.getByRole("button", { name: /^运行基础配置 \/ 技术条件/ }));
+    const v0Input = screen.getByRole("spinbutton", { name: "最高速度 v0 (km/h)" });
+    await user.clear(v0Input);
+    await user.type(v0Input, "81");
+    expect(v0Input).toHaveValue(81);
+
+    await user.click(screen.getByRole("button", { name: "首页 / 项目列表" }));
+    expect(screen.getByRole("button", { name: "新建项目计算" })).toBeInTheDocument();
+
+    await openWorkbenchFromHome(user);
+    expect(await screen.findByRole("spinbutton", { name: "最高速度 v0 (km/h)" })).not.toHaveValue(81);
 
     confirmSpy.mockRestore();
   });
@@ -1957,7 +2081,7 @@ describe("App shell", () => {
   it("allows adding and deleting custom ratio brake types", async () => {
     const user = userEvent.setup();
     render(<App />);
-    await user.click(screen.getByRole("button", { name: "配置工作台" }));
+    await openWorkbenchFromHome(user);
     await user.click(screen.getByRole("button", { name: /^运行基础配置 \/ 技术条件/ }));
 
     const addButton = screen.getByRole("button", { name: "添加制动类型" });
@@ -1972,8 +2096,9 @@ describe("App shell", () => {
   it("allows adding and deleting air spring feature points", async () => {
     const user = userEvent.setup();
     render(<App />);
-    await user.click(screen.getByRole("button", { name: "配置工作台" }));
+    await openWorkbenchFromHome(user);
     await user.click(screen.getByRole("button", { name: /^载荷与空簧/ }));
+    await user.click(screen.getByRole("button", { name: "特征点拟合" }));
 
     expect(screen.getByText("特征点 3")).toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "添加特征点" }));
@@ -2116,3 +2241,5 @@ describe("App shell", () => {
     expect(await screen.findByRole("heading", { level: 2, name: "运行结果" })).toBeInTheDocument();
   });
 });
+
+

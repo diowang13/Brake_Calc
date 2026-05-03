@@ -116,6 +116,7 @@ export function WorkbenchPage({
   onDirtyChange,
   onSaveDraft,
   onRunDraft,
+  onRequestCalibrationReference,
   onDownloadYaml,
   importedYamlText,
   importedFormState,
@@ -149,8 +150,14 @@ export function WorkbenchPage({
   onChangeBogieControllerRows: (rows: BogieControllerRow[]) => void;
   onBackToOverview: () => void;
   onDirtyChange: (dirty: boolean) => void;
-  onSaveDraft: (draft: Record<string, unknown>) => void;
+  onSaveDraft: (draft: Record<string, unknown>) => Promise<void>;
   onRunDraft: (draft: Record<string, unknown>) => void;
+  onRequestCalibrationReference: () => Promise<{
+    serviceBcp0?: number;
+    emergencyBcp0?: number;
+    serviceKByLoadGroup?: Record<string, number>;
+    emergencyKByLoadGroup?: Record<string, number>;
+  }>;
   onDownloadYaml: () => void;
   importedYamlText: string;
   importedFormState: Record<string, unknown> | null;
@@ -260,6 +267,21 @@ export function WorkbenchPage({
     hasImportedConfig ? "yaml" : "description"
   );
   const [showSaveConfirmModal, setShowSaveConfirmModal] = useState(false);
+  const [calibrationReference, setCalibrationReference] = useState<{
+    loaded: boolean;
+    serviceBcp0?: number;
+    emergencyBcp0?: number;
+    serviceKByLoadGroup: Record<string, number>;
+    emergencyKByLoadGroup: Record<string, number>;
+  }>({
+    loaded: false,
+    serviceKByLoadGroup: {},
+    emergencyKByLoadGroup: {},
+  });
+  const [saveFeedback, setSaveFeedback] = useState<{ type: "idle" | "saving" | "success" | "error"; message: string }>({
+    type: "idle",
+    message: "",
+  });
 
   const sectionErrorPrefixes: Record<WorkbenchSectionKey, string[]> = {
     requirements: ["v0", "V_list", "requirement", "response_time", "brake_types", "adhesion"],
@@ -660,12 +682,23 @@ export function WorkbenchPage({
   };
   const handleSave = (): void => {
     setSubmitAttempted(true);
+    setSaveFeedback({ type: "idle", message: "" });
     setShowSaveConfirmModal(true);
   };
-  const handleConfirmSave = (): void => {
-    onSaveDraft(liveFormState);
-    onDirtyChange(false);
-    setShowSaveConfirmModal(false);
+  const handleConfirmSave = async (): Promise<void> => {
+    setSaveFeedback({ type: "saving", message: "保存中..." });
+    try {
+      await onSaveDraft(liveFormState);
+      onDirtyChange(false);
+      setSaveFeedback({
+        type: "success",
+        message: `保存成功（${new Date().toLocaleTimeString("zh-CN", { hour12: false })}）`,
+      });
+      setShowSaveConfirmModal(false);
+    } catch (error) {
+      const detail = error instanceof Error ? error.message : "unknown_error";
+      setSaveFeedback({ type: "error", message: `保存失败：${detail}` });
+    }
   };
   const handleRun = (): void => {
     setSubmitAttempted(true);
@@ -678,7 +711,16 @@ export function WorkbenchPage({
 
   const collectChangedPaths = (beforeValue: unknown, afterValue: unknown, basePath = ""): string[] => {
     if (Array.isArray(beforeValue) || Array.isArray(afterValue)) {
-      return JSON.stringify(beforeValue) === JSON.stringify(afterValue) || basePath.length === 0 ? [] : [basePath];
+      if (!Array.isArray(beforeValue) || !Array.isArray(afterValue)) {
+        return basePath.length === 0 ? [] : [basePath];
+      }
+      const changed: string[] = [];
+      const maxLength = Math.max(beforeValue.length, afterValue.length);
+      for (let index = 0; index < maxLength; index += 1) {
+        const nextPath = `${basePath}[${index}]`;
+        changed.push(...collectChangedPaths(beforeValue[index], afterValue[index], nextPath));
+      }
+      return changed;
     }
     if (isPlainObject(beforeValue) && isPlainObject(afterValue)) {
       const keys = new Set([...Object.keys(beforeValue), ...Object.keys(afterValue)]);
@@ -1192,84 +1234,67 @@ export function WorkbenchPage({
     if (lastChangedPath === null) {
       return lines.map((line) => ({ line, highlighted: false }));
     }
-    const indexedPointPathMatch = lastChangedPath.match(
-      /^pressure_calibration\.(service_brake|emergency_brake)\.points\[(\d+)\]\.(k_for_code|brake_type)$/
-    );
-    if (indexedPointPathMatch !== null) {
-      const [, brakeScope, pointIndexText, pointKey] = indexedPointPathMatch;
-      const pointIndex = Number(pointIndexText);
-      const sectionLine = lines.findIndex((line) => line.includes(`"${brakeScope}": {`));
-      if (sectionLine >= 0) {
-        const candidateIndexes: number[] = [];
-        for (let index = sectionLine + 1; index < lines.length; index += 1) {
-          const line = lines[index];
-          if (line.startsWith("    }") && !line.includes(",")) {
-            break;
-          }
-          if (line.includes(`"${pointKey}"`)) {
-            candidateIndexes.push(index);
-          }
-        }
-        const highlightIndex = candidateIndexes[pointIndex] ?? -1;
-        if (highlightIndex >= 0) {
-          return lines.map((line, index) => ({ line, highlighted: index === highlightIndex }));
-        }
-      }
-    }
-    const bcp0PathMatch = lastChangedPath.match(
-      /^pressure_calibration\.(service_brake|emergency_brake)\.BCP0$/
-    );
-    if (bcp0PathMatch !== null) {
-      const [, brakeScope] = bcp0PathMatch;
-      const sectionLine = lines.findIndex((line) => line.includes(`"${brakeScope}": {`));
-      if (sectionLine >= 0) {
-        const highlightIndex = lines.findIndex(
-          (line, index) => index > sectionLine && line.includes("\"BCP0\"")
-        );
-        if (highlightIndex >= 0) {
-          return lines.map((line, index) => ({ line, highlighted: index === highlightIndex }));
-        }
-      }
-    }
-    const parts = lastChangedPath.split(".");
-    let depth = 0;
-    const stack: string[] = [];
-    let highlightIndex = -1;
 
-    for (let index = 0; index < lines.length; index += 1) {
-      const line = lines[index];
+    type Frame = { kind: "object"; path: string } | { kind: "array"; path: string; index: number };
+    const frameStack: Frame[] = [];
+    const pathLineMap = new Map<string, number>();
+    const toPath = (parent: string, child: string): string => (parent.length > 0 ? `${parent}.${child}` : child);
+    const registerArrayIndexIfNeeded = (): void => {
+      const top = frameStack[frameStack.length - 1];
+      if (top?.kind === "array") {
+        top.index += 1;
+      }
+    };
+
+    lines.forEach((line, lineIndex) => {
       const trimmed = line.trim();
+      const top = frameStack[frameStack.length - 1];
 
+      if (trimmed.startsWith("{") && top?.kind === "array") {
+        frameStack.push({ kind: "object", path: `${top.path}[${top.index}]` });
+        return;
+      }
+      if (trimmed === "{") {
+        frameStack.push({ kind: "object", path: "" });
+        return;
+      }
       if (trimmed === "}" || trimmed === "}," || trimmed === "]" || trimmed === "],") {
-        while (stack.length > depth) {
-          stack.pop();
+        const popped = frameStack.pop();
+        if (popped?.kind === "object") {
+          registerArrayIndexIfNeeded();
         }
-        depth = Math.max(depth - 1, 0);
-        continue;
+        return;
+      }
+      if (trimmed === "[" || trimmed === "],") {
+        return;
       }
 
       const keyMatch = trimmed.match(/^"([^"]+)":\s*(.*)$/);
-      if (keyMatch === null) {
-        continue;
+      if (keyMatch !== null) {
+        const [, key, valuePortion] = keyMatch;
+        const parentPath = top?.kind === "object" ? top.path : "";
+        const currentPath = toPath(parentPath, key);
+        pathLineMap.set(currentPath, lineIndex);
+        if (valuePortion === "{") {
+          frameStack.push({ kind: "object", path: currentPath });
+          return;
+        }
+        if (valuePortion === "[") {
+          frameStack.push({ kind: "array", path: currentPath, index: 0 });
+          return;
+        }
+        return;
       }
-      const key = keyMatch[1];
-      const valuePortion = keyMatch[2];
-      const currentPath = [...stack.slice(0, depth), key];
 
-      if (currentPath.join(".") === lastChangedPath) {
-        highlightIndex = index;
-        break;
+      if (top?.kind === "array") {
+        pathLineMap.set(`${top.path}[${top.index}]`, lineIndex);
+        top.index += 1;
       }
+    });
 
-      const opensObject = valuePortion === "{" || valuePortion === "[";
-      if (opensObject) {
-        stack[depth] = key;
-        depth += 1;
-      }
-    }
-
+    let highlightIndex = pathLineMap.get(lastChangedPath) ?? -1;
     if (highlightIndex < 0) {
-      const fallbackKey = parts[parts.length - 1];
+      const fallbackKey = lastChangedPath.split(".").at(-1)?.replace(/\[\d+\]/g, "") ?? "";
       const fallbackPattern = `"${fallbackKey}"`;
       highlightIndex = lines.findIndex((line) => line.includes(fallbackPattern));
     }
@@ -1311,9 +1336,9 @@ export function WorkbenchPage({
       return;
     }
     const target = container.querySelector(`[data-json-line="${highlightedLineIndex}"]`);
-    if (target instanceof HTMLElement && typeof container.scrollTo === "function") {
-      const offset = Math.max(target.offsetTop - container.clientHeight / 2, 0);
-      container.scrollTo({ top: offset, behavior: "smooth" });
+    if (target instanceof HTMLElement) {
+      const offset = Math.max(target.offsetTop - 24, 0);
+      container.scrollTop = offset;
     }
   }, [activeInfoTab, highlightedLineIndex]);
 
@@ -2424,9 +2449,25 @@ export function WorkbenchPage({
                   label="启用 pressure_calibration"
                   active={pressureCalibrationEnabled}
                   onClick={() => {
+                    const wasDisabled = !pressureCalibrationEnabled;
                     setPressureCalibrationEnabled(true);
                     onDirtyChange(true);
                     setLastChangedPath("pressure_calibration.enabled");
+                    if (wasDisabled) {
+                      void onRequestCalibrationReference()
+                        .then((reference) => {
+                          setCalibrationReference({
+                            loaded: true,
+                            serviceBcp0: reference.serviceBcp0,
+                            emergencyBcp0: reference.emergencyBcp0,
+                            serviceKByLoadGroup: reference.serviceKByLoadGroup ?? {},
+                            emergencyKByLoadGroup: reference.emergencyKByLoadGroup ?? {},
+                          });
+                        })
+                        .catch(() => {
+                          setCalibrationReference((current) => ({ ...current, loaded: true }));
+                        });
+                    }
                   }}
                 />
                 <TogglePill
@@ -2484,6 +2525,25 @@ export function WorkbenchPage({
                     setServiceCalibrationPointTwoKValue(value);
                     setLastChangedPath("pressure_calibration.service_brake.points[1].k_for_code");
                   }}
+                  pressureReferenceText={
+                    typeof calibrationReference.serviceBcp0 === "number"
+                      ? `BCP0 理论参考值：${calibrationReference.serviceBcp0.toFixed(0)} kPa`
+                      : undefined
+                  }
+                  firstPointReferenceText={
+                    typeof calibrationReference.serviceKByLoadGroup.AW3 === "number"
+                      ? `k_for_code 理论参考值：${calibrationReference.serviceKByLoadGroup.AW3.toFixed(0)}`
+                      : undefined
+                  }
+                  secondPointReferenceText={
+                    typeof calibrationReference.serviceKByLoadGroup[
+                      serviceCalibrationMode === "aw3_aw0" ? "AW0" : "AW2"
+                    ] === "number"
+                      ? `k_for_code 理论参考值：${calibrationReference.serviceKByLoadGroup[
+                          serviceCalibrationMode === "aw3_aw0" ? "AW0" : "AW2"
+                        ].toFixed(0)}`
+                      : undefined
+                  }
                 />
                 {effectiveControllerConfigType === "bogie" ? (
                   <CalibrationConfigCard
@@ -2520,6 +2580,25 @@ export function WorkbenchPage({
                       setEmergencyCalibrationPointTwoKValue(value);
                       setLastChangedPath("pressure_calibration.emergency_brake.points[1].k_for_code");
                     }}
+                    pressureReferenceText={
+                      typeof calibrationReference.emergencyBcp0 === "number"
+                        ? `BCP0 理论参考值：${calibrationReference.emergencyBcp0.toFixed(0)} kPa`
+                        : undefined
+                    }
+                    firstPointReferenceText={
+                      typeof calibrationReference.emergencyKByLoadGroup.AW3 === "number"
+                        ? `k_for_code 理论参考值：${calibrationReference.emergencyKByLoadGroup.AW3.toFixed(0)}`
+                        : undefined
+                    }
+                    secondPointReferenceText={
+                      typeof calibrationReference.emergencyKByLoadGroup[
+                        emergencyCalibrationMode === "aw3_aw0" ? "AW0" : "AW2"
+                      ] === "number"
+                        ? `k_for_code 理论参考值：${calibrationReference.emergencyKByLoadGroup[
+                            emergencyCalibrationMode === "aw3_aw0" ? "AW0" : "AW2"
+                          ].toFixed(0)}`
+                        : undefined
+                    }
                   />
                 ) : (
                   <InfoCard
@@ -2680,6 +2759,22 @@ export function WorkbenchPage({
           ) : null}
         </aside>
       </div>
+      {saveFeedback.type !== "idle" ? (
+        <div
+          style={{
+            ...panelStyle,
+            borderColor:
+              saveFeedback.type === "error"
+                ? "#c64532"
+                : saveFeedback.type === "success"
+                  ? "#9f7657"
+                  : "#d5c9ba",
+            color: saveFeedback.type === "error" ? "#c64532" : "#4f463d",
+          }}
+        >
+          {saveFeedback.message}
+        </div>
+      ) : null}
       {showSaveConfirmModal ? (
         <div
           role="dialog"
@@ -2741,6 +2836,28 @@ export function WorkbenchPage({
                   : "当前无路径差异（可能仅触发了格式化或状态切换）"}
               </div>
             </div>
+            <div
+              style={{
+                border: "1px solid #e3d7c8",
+                borderRadius: "12px",
+                background: "#fff",
+                padding: "12px 14px",
+                color: "#4f463d",
+                fontSize: "13px",
+                lineHeight: 1.6,
+                maxHeight: "140px",
+                overflowY: "auto",
+              }}
+            >
+              <strong>关键变更明细：</strong>
+              {saveChangeSummary.length > 0 ? (
+                saveChangeSummary.slice(0, 4).map((item) => (
+                  <div key={`save-summary-${item.path}`}>{item.path}: {item.before} → {item.after}</div>
+                ))
+              ) : (
+                <div>当前无字段级变化。</div>
+              )}
+            </div>
             <div style={{ display: "flex", justifyContent: "flex-end", gap: "10px" }}>
               <button
                 type="button"
@@ -2749,10 +2866,20 @@ export function WorkbenchPage({
               >
                 取消
               </button>
-              <button type="button" style={secondaryActionStyle} onClick={handleConfirmSave}>
+              <button
+                type="button"
+                style={secondaryActionStyle}
+                onClick={() => {
+                  void handleConfirmSave();
+                }}
+                disabled={saveFeedback.type === "saving"}
+              >
                 确认保存
               </button>
             </div>
+            {saveFeedback.type === "error" ? (
+              <div style={{ color: "#c64532", fontSize: "13px" }}>{saveFeedback.message}</div>
+            ) : null}
           </div>
         </div>
       ) : null}

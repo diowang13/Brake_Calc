@@ -7,6 +7,7 @@ import {
   listProjects,
   loadConfig,
   openProject,
+  previewCalibration,
   runConfig,
   saveConfig,
 } from "./api/configClient";
@@ -254,6 +255,10 @@ export function App(): ReactElement {
   const [yamlChangedLineIndexes, setYamlChangedLineIndexes] = useState<number[]>([]);
   const [yamlChangedPaths, setYamlChangedPaths] = useState<string[]>([]);
   const [runtimeReport, setRuntimeReport] = useState<Report>(emptyReport);
+  const [runtimeWarnings, setRuntimeWarnings] = useState<Array<{ code?: string; message?: string }>>([]);
+  const [runtimeAutoAdjustments, setRuntimeAutoAdjustments] = useState<
+    Array<{ code?: string; message?: string }>
+  >([]);
   const [runtimeFormState, setRuntimeFormState] = useState<Record<string, unknown> | null>(null);
   const [runtimeStatus, setRuntimeStatus] = useState<"idle" | "succeeded" | "failed">("idle");
   const [projects, setProjects] = useState<ProjectListItem[]>([]);
@@ -271,8 +276,11 @@ export function App(): ReactElement {
 
   const hydrateRuntimeFromLoadedConfig = (loaded: LoadConfigResult): void => {
     if (loaded.latest_run?.status === "succeeded" && loaded.latest_run.report !== null) {
+      const report = loaded.latest_run.report as Report;
       setRuntimeStatus("succeeded");
-      setRuntimeReport(loaded.latest_run.report as Report);
+      setRuntimeReport(report);
+      setRuntimeWarnings(Array.isArray(report.warnings) ? report.warnings : []);
+      setRuntimeAutoAdjustments(Array.isArray(report.auto_adjustments) ? report.auto_adjustments : []);
       setRuntimeFormState(loaded.form_state);
       return;
     }
@@ -557,7 +565,22 @@ export function App(): ReactElement {
       });
       setActiveInputConfigId(saved.input_config_id);
       const runResult = await runConfig(saved.input_config_id);
-      setRuntimeReport(runResult.report as Report);
+      const report = runResult.report as Report;
+      setRuntimeReport(report);
+      const topLevelWarnings = Array.isArray(runResult.warnings) ? runResult.warnings : [];
+      const normalizedTopLevelWarnings = topLevelWarnings
+        .map((item) =>
+          typeof item === "string"
+            ? ({ message: item } as { code?: string; message?: string })
+            : (item as { code?: string; message?: string })
+        )
+        .filter((item) => typeof item === "object" && item !== null);
+      setRuntimeWarnings(
+        Array.isArray(report.warnings) && report.warnings.length > 0
+          ? report.warnings
+          : normalizedTopLevelWarnings
+      );
+      setRuntimeAutoAdjustments(Array.isArray(report.auto_adjustments) ? report.auto_adjustments : []);
       setRuntimeFormState(draft);
       setRuntimeStatus("succeeded");
       setHasUnsavedWorkbenchChanges(false);
@@ -622,8 +645,7 @@ export function App(): ReactElement {
       setOverviewData(loaded);
       setHasUnsavedWorkbenchChanges(false);
     } catch (error) {
-      const detail = error instanceof Error ? error.message : "unknown_error";
-      window.alert(`保存失败：${detail}`);
+      throw error;
     }
   };
 
@@ -716,7 +738,7 @@ export function App(): ReactElement {
     if (screen === activeScreen) {
       return;
     }
-    if (screen === "workbench" && activeScreen === "home" && requireReloadForWorkbench) {
+    if (screen === "workbench" && activeScreen === "home") {
       window.alert("请先在首页打开既有项目（加载已保存配置），再从总览“修订”进入工作台。");
       return;
     }
@@ -840,11 +862,23 @@ export function App(): ReactElement {
           onChangeBogieControllerRows={setBogieControllerRows}
           onBackToOverview={() => navigateToScreen("overview")}
           onDirtyChange={setHasUnsavedWorkbenchChanges}
-          onSaveDraft={(draft) => {
-            void handleSaveDraft(draft);
-          }}
+          onSaveDraft={handleSaveDraft}
           onRunDraft={(draft) => {
             void handleRunDraft(draft);
+          }}
+          onRequestCalibrationReference={async () => {
+            if (activeInputConfigId === null) {
+              return { serviceKByLoadGroup: {}, emergencyKByLoadGroup: {} };
+            }
+            const preview = await previewCalibration(activeInputConfigId);
+            return {
+              serviceBcp0:
+                typeof preview.service_bcp0 === "number" ? preview.service_bcp0 : undefined,
+              emergencyBcp0:
+                typeof preview.emergency_bcp0 === "number" ? preview.emergency_bcp0 : undefined,
+              serviceKByLoadGroup: preview.service_k_by_load_group ?? {},
+              emergencyKByLoadGroup: preview.emergency_k_by_load_group ?? {},
+            };
           }}
           onDownloadYaml={() => {
             if (activeInputConfigId === null) {
@@ -895,6 +929,8 @@ export function App(): ReactElement {
               : carControllerRows.map((item) => item.name)
           }
           runtimeStatus={runtimeStatus}
+          warnings={runtimeWarnings}
+          autoAdjustments={runtimeAutoAdjustments}
           pressureMatrixView={pressureMatrixView}
           onChangePressureMatrixView={setPressureMatrixView}
           onBackToWorkbench={() => setActiveScreen("workbench")}

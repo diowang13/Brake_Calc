@@ -5,6 +5,7 @@ import json
 import yaml
 
 from brake_calc.app.services import CalculationService, ValidationService
+from brake_calc.contracts.inputs import Inputs
 from brake_calc.contracts.report import Report
 from tests.unit.contracts.test_inputs import make_valid_bogie_payload
 
@@ -103,6 +104,12 @@ def make_report() -> Report:
         pressure_standards={"AW0": {"FSB": {"bogie_1": 123.0}}},
         BCP_calibrated_by_controller={"AW0": {"FSB": {"bogie_1": 123.0}}},
         controller_pressure_standards={"AW0": {"FSB": {"bogie_1": 123.0}}},
+        controller_code_params={
+            "pressure_conversion": {
+                "FSB": {"AW0": {"bogie_1": {"k_used_for_code": 1014.0, "BCP0_used_for_code": 25.0}}},
+                "EB": {"AW0": {"bogie_1": {"k_used_for_code": 1123.0, "BCP0_used_for_code": 30.0}}},
+            }
+        },
         calibration_summary={"service_brake": {"BCP0": 25}},
         parking_brake_check_results_by_load_group={},
         auto_adjustments=[],
@@ -163,3 +170,47 @@ def test_calculation_service_returns_v1_report_sections() -> None:
     assert "auto_adjustments" in result.report
     assert "parking_brake_check_results_by_load_group" in result.report
     assert "electric_brake_summary" in result.report
+
+
+def test_calculation_service_preview_calibration_defaults_does_not_persist_run() -> None:
+    yaml_text = yaml.safe_dump(make_valid_bogie_payload(), sort_keys=False, allow_unicode=False)
+    run_repository = FakeCalculationRunRepository()
+    service = CalculationService(
+        input_config_repository=FakeInputConfigRepository(
+            FakeInputConfig(input_config_id="input-1", project_id="project-1", yaml_text=yaml_text)
+        ),
+        calculation_run_repository=run_repository,
+        validation_service=ValidationService(),
+        run_workflow_fn=lambda inputs: make_report(),
+    )
+
+    preview = service.preview_calibration_defaults(input_config_id="input-1")
+
+    assert preview["service_bcp0"] == 25.0
+    assert run_repository.created is None
+
+
+def test_calculation_service_preview_calibration_defaults_uses_baseline_without_calibration() -> None:
+    payload = make_valid_bogie_payload()
+    payload["pressure_calibration"]["service_brake"]["BCP0"] = 30.0
+    yaml_text = yaml.safe_dump(payload, sort_keys=False, allow_unicode=False)
+    captured_enabled: list[bool] = []
+
+    def _capture_run(inputs: object) -> Report:
+        assert isinstance(inputs, Inputs)
+        pressure_calibration = inputs.pressure_calibration
+        captured_enabled.append(pressure_calibration.enabled)
+        return make_report()
+
+    service = CalculationService(
+        input_config_repository=FakeInputConfigRepository(
+            FakeInputConfig(input_config_id="input-1", project_id="project-1", yaml_text=yaml_text)
+        ),
+        calculation_run_repository=FakeCalculationRunRepository(),
+        validation_service=ValidationService(),
+        run_workflow_fn=_capture_run,
+    )
+
+    _ = service.preview_calibration_defaults(input_config_id="input-1")
+
+    assert captured_enabled == [False]

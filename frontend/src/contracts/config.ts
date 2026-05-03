@@ -66,6 +66,13 @@ export type RunConfigResult = {
   warnings: unknown[];
 };
 
+export type PreviewCalibrationResult = {
+  service_bcp0?: number | null;
+  emergency_bcp0?: number | null;
+  service_k_by_load_group?: Record<string, number>;
+  emergency_k_by_load_group?: Record<string, number>;
+};
+
 export type OpenProjectResult = {
   input_config_id: string;
   config: LoadConfigResult;

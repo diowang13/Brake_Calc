@@ -328,6 +328,10 @@ export function CalibrationConfigCard({
   pressureAriaLabel,
   firstPointKAriaLabel,
   secondPointKAriaLabel
+  ,
+  pressureReferenceText,
+  firstPointReferenceText,
+  secondPointReferenceText
 }: {
   title: string;
   status: string;
@@ -352,6 +356,9 @@ export function CalibrationConfigCard({
   pressureAriaLabel: string;
   firstPointKAriaLabel: string;
   secondPointKAriaLabel: string;
+  pressureReferenceText?: string;
+  firstPointReferenceText?: string;
+  secondPointReferenceText?: string;
 }): ReactElement {
   return (
     <div
@@ -388,7 +395,10 @@ export function CalibrationConfigCard({
             onChange={onChangePressureValue}
             inputMode="decimal"
           />
-          <InfoCard title="理论参考值" body="待接入基础机械模型计算结果后，在此显示理论参考值。" />
+          <InfoCard
+            title="理论参考值"
+            body={pressureReferenceText ?? "待接入基础机械模型计算结果后，在此显示理论参考值。"}
+          />
         </div>
         {warning ? (
           <div
@@ -435,7 +445,10 @@ export function CalibrationConfigCard({
                 onChange={onChangeFirstPointKValue}
                 inputMode="decimal"
               />
-              <InfoCard title="理论参考值" body="待接入基础机械模型计算结果后，在此显示理论参考值。" />
+              <InfoCard
+                title="理论参考值"
+                body={firstPointReferenceText ?? "待接入基础机械模型计算结果后，在此显示理论参考值。"}
+              />
             </div>
           </div>
           <div
@@ -467,7 +480,10 @@ export function CalibrationConfigCard({
                 onChange={onChangeSecondPointKValue}
                 inputMode="decimal"
               />
-              <InfoCard title="理论参考值" body="待接入基础机械模型计算结果后，在此显示理论参考值。" />
+              <InfoCard
+                title="理论参考值"
+                body={secondPointReferenceText ?? "待接入基础机械模型计算结果后，在此显示理论参考值。"}
+              />
             </div>
           </div>
         </div>

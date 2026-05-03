@@ -132,3 +132,14 @@ def run_config(
         finished_at=str(request["finished_at"]),
     )
     return _serialize(result)
+
+
+def preview_calibration(
+    input_config_id: str,
+    *,
+    calculation_service: object,
+) -> dict[str, object]:
+    result = calculation_service.preview_calibration_defaults(  # type: ignore[attr-defined]
+        input_config_id=input_config_id,
+    )
+    return _serialize(result)

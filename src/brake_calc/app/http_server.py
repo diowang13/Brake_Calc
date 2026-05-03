@@ -16,6 +16,7 @@ from brake_calc.app.api import (
     list_projects,
     load_config,
     open_latest_project_config,
+    preview_calibration,
     run_config,
     save_config,
 )
@@ -214,6 +215,25 @@ def run_config_route(input_config_id: str) -> dict[str, object]:
                 "started_at": now,
                 "finished_at": now,
             },
+            calculation_service=calculation_service,
+        )
+    except LookupError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except Exception as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    finally:
+        connection.close()
+
+
+@app.post("/api/configs/{input_config_id}/preview-calibration")
+def preview_calibration_route(input_config_id: str) -> dict[str, object]:
+    db_path = _get_database_path()
+    calculation_service, connection = _build_calculation_service(db_path)
+    try:
+        return preview_calibration(
+            input_config_id,
             calculation_service=calculation_service,
         )
     except LookupError as exc:

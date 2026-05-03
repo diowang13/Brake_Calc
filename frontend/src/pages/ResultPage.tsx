@@ -443,6 +443,8 @@ export function ResultPage({
   controllerType,
   controllerOrder,
   runtimeStatus,
+  warnings,
+  autoAdjustments,
   pressureMatrixView,
   onChangePressureMatrixView,
   onBackToWorkbench,
@@ -453,14 +455,22 @@ export function ResultPage({
   controllerType: "car" | "bogie";
   controllerOrder: string[];
   runtimeStatus: "idle" | "succeeded" | "failed";
+  warnings: Array<{ code?: string; message?: string }>;
+  autoAdjustments: Array<{ code?: string; message?: string }>;
   pressureMatrixView: "load" | "controller";
   onChangePressureMatrixView: (view: "load" | "controller") => void;
   onBackToWorkbench: () => void;
   onBackToOverview: () => void;
 }): ReactElement {
   const parkingRowsByLoadGroup = Object.entries(report.parking_brake_check_results_by_load_group);
-  const warnings = Array.isArray(report.warnings) ? report.warnings : [];
-  const autoAdjustments = Array.isArray(report.auto_adjustments) ? report.auto_adjustments : [];
+  const warningList =
+    warnings.length > 0 ? warnings : Array.isArray(report.warnings) ? report.warnings : [];
+  const autoAdjustmentList =
+    autoAdjustments.length > 0
+      ? autoAdjustments
+      : Array.isArray(report.auto_adjustments)
+        ? report.auto_adjustments
+        : [];
   const parkingReference = report.parking_brake_check_result ?? parkingRowsByLoadGroup[0]?.[1];
   const parkingPerCarEntries = parkingReference ? Object.entries(parkingReference.per_car) : [];
   const parkingCars = parkingPerCarEntries.map(([carName]) => carName);
@@ -676,9 +686,33 @@ export function ResultPage({
           }}
         >
           <SummaryCard icon="✓" title="运行状态" body={runStatusText} />
-          <SummaryCard icon="!" title="警告" body={`当前存在 ${warnings.length} 条警告。`} />
-          <SummaryCard icon="↻" title="自动调整" body={`已触发 ${autoAdjustments.length} 条自动调整。`} />
+          <SummaryCard icon="!" title="警告" body={`当前存在 ${warningList.length} 条警告。`} />
+          <SummaryCard icon="↻" title="自动调整" body={`已触发 ${autoAdjustmentList.length} 条自动调整。`} />
         </div>
+        {warningList.length > 0 ? (
+          <div style={{ marginTop: "14px", display: "grid", gap: "8px" }}>
+            {warningList.map((item, index) => (
+              <div
+                key={`warn-${index}`}
+                style={{ border: "1px solid #e0c4aa", borderRadius: "10px", background: "#fff", padding: "10px 12px" }}
+              >
+                {item.message ?? item.code ?? `warning_${index + 1}`}
+              </div>
+            ))}
+          </div>
+        ) : null}
+        {autoAdjustmentList.length > 0 ? (
+          <div style={{ marginTop: "12px", display: "grid", gap: "8px" }}>
+            {autoAdjustmentList.map((item, index) => (
+              <div
+                key={`adj-${index}`}
+                style={{ border: "1px solid #e0c4aa", borderRadius: "10px", background: "#fff", padding: "10px 12px" }}
+              >
+                {item.message ?? item.code ?? `adjustment_${index + 1}`}
+              </div>
+            ))}
+          </div>
+        ) : null}
       </section>
 
       <section style={panelStyle}>

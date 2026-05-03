@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+from copy import deepcopy
 from datetime import datetime
 from typing import Any, Callable, Protocol
 
@@ -432,6 +433,57 @@ class CalculationService:
         input_config = self._input_config_repository.get(input_config_id)
         assert input_config is not None
         return self._validation_service.validate_yaml_text(input_config.yaml_text)
+
+    def preview_calibration_defaults(self, *, input_config_id: str) -> dict[str, object]:
+        input_config = self._input_config_repository.get(input_config_id)
+        if input_config is None:
+            raise LookupError("input_config_not_found")
+        validation = self._validation_service.validate_yaml_text(input_config.yaml_text)
+        if not validation.valid or validation.normalized_inputs is None:
+            error_lines = [f"{item.path}: {item.message}" for item in validation.errors]
+            raise ValueError("input_config_invalid: " + "; ".join(error_lines))
+        preview_payload = deepcopy(validation.normalized_inputs)
+        pressure_calibration = preview_payload.get("pressure_calibration")
+        if isinstance(pressure_calibration, dict):
+            pressure_calibration["enabled"] = False
+        report = self._run_workflow_fn(Inputs.model_validate(preview_payload))
+        payload = self._dump_report(report)
+        controller_code_params = payload.get("controller_code_params")
+        if not isinstance(controller_code_params, dict):
+            return {}
+        pressure_conversion = controller_code_params.get("pressure_conversion")
+        if not isinstance(pressure_conversion, dict):
+            return {}
+
+        def _extract(scope: str) -> tuple[float | None, dict[str, float]]:
+            source = pressure_conversion.get(scope)
+            if not isinstance(source, dict):
+                return None, {}
+            per_load: dict[str, float] = {}
+            bcp0: float | None = None
+            for load_group, per_controller_unknown in source.items():
+                if not isinstance(per_controller_unknown, dict):
+                    continue
+                first_entry = next(iter(per_controller_unknown.values()), None)
+                if not isinstance(first_entry, dict):
+                    continue
+                k_used = first_entry.get("k_used_for_code")
+                if isinstance(k_used, (int, float)):
+                    per_load[str(load_group)] = float(k_used)
+                if bcp0 is None:
+                    bcp0_used = first_entry.get("BCP0_used_for_code")
+                    if isinstance(bcp0_used, (int, float)):
+                        bcp0 = float(bcp0_used)
+            return bcp0, per_load
+
+        service_bcp0, service_k = _extract("FSB")
+        emergency_bcp0, emergency_k = _extract("EB")
+        return {
+            "service_bcp0": service_bcp0,
+            "emergency_bcp0": emergency_bcp0,
+            "service_k_by_load_group": service_k,
+            "emergency_k_by_load_group": emergency_k,
+        }
 
     @staticmethod
     def _dump_report(report: Report | dict[str, object]) -> dict[str, object]:

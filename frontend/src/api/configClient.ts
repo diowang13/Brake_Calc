@@ -4,6 +4,7 @@ import type {
   ListProjectsResult,
   LoadConfigResult,
   OpenProjectResult,
+  PreviewCalibrationResult,
   RunConfigResult,
   SaveConfigRequestPayload,
   SaveConfigResult,
@@ -70,6 +71,20 @@ export async function runConfig(inputConfigId: string): Promise<RunConfigResult>
     );
   }
   return (await response.json()) as RunConfigResult;
+}
+
+export async function previewCalibration(inputConfigId: string): Promise<PreviewCalibrationResult> {
+  const response = await fetch(`${API_BASE_URL}/api/configs/${inputConfigId}/preview-calibration`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({}),
+  });
+  if (!response.ok) {
+    throw new Error(`preview_calibration_failed:${response.status}`);
+  }
+  return (await response.json()) as PreviewCalibrationResult;
 }
 
 export async function openProject(projectCode: string): Promise<OpenProjectResult> {

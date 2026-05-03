@@ -6,6 +6,7 @@ from brake_calc.app.api import (
     list_projects,
     load_config,
     open_latest_project_config,
+    preview_calibration,
     run_config,
     save_config,
     validate_config,
@@ -106,6 +107,14 @@ class FakeCalculationService:
             },
         )()
 
+    def preview_calibration_defaults(self, **_: object) -> object:
+        return {
+            "service_bcp0": 25.0,
+            "emergency_bcp0": 30.0,
+            "service_k_by_load_group": {"AW0": 1014.0, "AW3": 1204.0},
+            "emergency_k_by_load_group": {"AW0": 980.0, "AW3": 1123.0},
+        }
+
 
 def test_api_validate_maps_service_result() -> None:
     response = validate_config(
@@ -153,6 +162,10 @@ def test_api_save_load_import_download_and_run_map_service_results() -> None:
         },
         calculation_service=FakeCalculationService(),
     )
+    preview_response = preview_calibration(
+        "input-1",
+        calculation_service=FakeCalculationService(),
+    )
     opened = open_latest_project_config("LINE-001", config_service=config_service)
     listed = list_projects(config_service=config_service)
 
@@ -161,6 +174,7 @@ def test_api_save_load_import_download_and_run_map_service_results() -> None:
     assert imported["form_state"]["schema_version"] == 1
     assert downloaded["filename"] == "LINE-001_input_20260425_1234.yaml"
     assert run_response["status"] == "succeeded"
+    assert preview_response["service_bcp0"] == 25.0
     assert opened["input_config_id"] == "input-1"
     assert listed["items"][0]["project_code"] == "LINE-001"
     assert config_service.last_saved_request is not None
