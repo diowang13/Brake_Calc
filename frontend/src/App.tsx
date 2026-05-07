@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import {
   downloadYaml,
   importYaml,
+  listProjectVersions,
   listProjects,
   loadConfig,
   openProject,
@@ -23,8 +24,13 @@ import {
   shellStyle
 } from "./app/styles";
 import { screens, type ScreenKey } from "./app/screens";
-import type { ImportYamlResult, LoadConfigResult, SupplementPresence } from "./contracts/config";
-import type { ProjectListItem } from "./contracts/config";
+import type {
+  ImportYamlResult,
+  LoadConfigResult,
+  ProjectListItem,
+  ProjectVersionListItem,
+  SupplementPresence
+} from "./contracts/config";
 import type { Report } from "./contracts/report";
 import { HomePage } from "./pages/HomePage";
 import { ImportSummaryPage } from "./pages/ImportSummaryPage";
@@ -274,6 +280,12 @@ export function App(): ReactElement {
   const [runtimeFormState, setRuntimeFormState] = useState<Record<string, unknown> | null>(null);
   const [runtimeStatus, setRuntimeStatus] = useState<"idle" | "succeeded" | "failed">("idle");
   const [projects, setProjects] = useState<ProjectListItem[]>([]);
+  const [isProjectSelectorOpen, setIsProjectSelectorOpen] = useState(false);
+  const [selectedProjectCodeForSelector, setSelectedProjectCodeForSelector] = useState("");
+  const [projectVersionOptions, setProjectVersionOptions] = useState<ProjectVersionListItem[]>([]);
+  const [selectedInputConfigIdForSelector, setSelectedInputConfigIdForSelector] = useState<string | null>(null);
+  const [projectVersionPageIndex, setProjectVersionPageIndex] = useState(0);
+  const [isProjectVersionsLoading, setIsProjectVersionsLoading] = useState(false);
   const [requireReloadForWorkbench, setRequireReloadForWorkbench] = useState(false);
   const [appDialog, setAppDialog] = useState<AppDialogState | null>(null);
 
@@ -368,6 +380,76 @@ export function App(): ReactElement {
   };
   const currentScreen = screens.find((screen) => screen.key === activeScreen) ?? screens[0];
   const hasResultAvailable = runtimeStatus === "succeeded";
+  const projectVersionPageSize = 10;
+  const projectVersionPageCount = Math.max(
+    1,
+    Math.ceil(projectVersionOptions.length / projectVersionPageSize)
+  );
+  const currentProjectVersionPageIndex =
+    projectVersionPageIndex >= projectVersionPageCount ? projectVersionPageCount - 1 : projectVersionPageIndex;
+  const pagedProjectVersionOptions = projectVersionOptions.slice(
+    currentProjectVersionPageIndex * projectVersionPageSize,
+    (currentProjectVersionPageIndex + 1) * projectVersionPageSize
+  );
+
+  const formatTimestamp = (value: string): string => {
+    const parsed = new Date(value);
+    if (!Number.isFinite(parsed.getTime())) {
+      return value;
+    }
+    const year = parsed.getFullYear();
+    const month = String(parsed.getMonth() + 1).padStart(2, "0");
+    const day = String(parsed.getDate()).padStart(2, "0");
+    const hour = String(parsed.getHours()).padStart(2, "0");
+    const minute = String(parsed.getMinutes()).padStart(2, "0");
+    const second = String(parsed.getSeconds()).padStart(2, "0");
+    return `${year}-${month}-${day} ${hour}:${minute}:${second}`;
+  };
+
+  const openProjectByInputConfigId = async (inputConfigId: string): Promise<void> => {
+    const loaded = await loadConfig(inputConfigId);
+    setActiveInputConfigId(inputConfigId);
+    setOverviewData(loaded);
+    setImportProjectName(loaded.project.project_name);
+    setImportProjectCode(loaded.project.project_code);
+    applyImportedVehicleConfig(loaded.form_state);
+    hydrateRuntimeFromLoadedConfig(loaded);
+    setHasImportedConfig(true);
+    setRequireReloadForWorkbench(false);
+    setActiveScreen("overview");
+  };
+
+  const handleOpenProjectSelector = (): void => {
+    const firstProjectCode = projects[0]?.project_code ?? "";
+    setSelectedProjectCodeForSelector(firstProjectCode);
+    setProjectVersionOptions([]);
+    setSelectedInputConfigIdForSelector(null);
+    setProjectVersionPageIndex(0);
+    setIsProjectSelectorOpen(true);
+  };
+
+  useEffect(() => {
+    if (!isProjectSelectorOpen || selectedProjectCodeForSelector.length === 0) {
+      return;
+    }
+    setIsProjectVersionsLoading(true);
+    setProjectVersionOptions([]);
+    setSelectedInputConfigIdForSelector(null);
+    setProjectVersionPageIndex(0);
+    listProjectVersions(selectedProjectCodeForSelector)
+      .then((result) => {
+        setProjectVersionOptions(result.items);
+        setSelectedInputConfigIdForSelector(result.items[0]?.input_config_id ?? null);
+      })
+      .catch((error) => {
+        const detail = error instanceof Error ? error.message : "unknown_error";
+        setIsProjectSelectorOpen(false);
+        showAlertDialog("加载版本列表失败", `加载版本列表失败：${detail}`);
+      })
+      .finally(() => {
+        setIsProjectVersionsLoading(false);
+      });
+  }, [isProjectSelectorOpen, selectedProjectCodeForSelector]);
 
   const parseEnabledFromYaml = (yamlText: string, sectionName: string): boolean | null => {
     const lines = yamlText.split(/\r?\n/);
@@ -823,6 +905,7 @@ export function App(): ReactElement {
       return (
         <HomePage
           onCreateProject={() => setActiveScreen("wizard")}
+          onOpenProjectSelector={handleOpenProjectSelector}
           onOpenProject={(projectCode) => {
             openProject(projectCode)
               .then((result) => {
@@ -1146,6 +1229,165 @@ export function App(): ReactElement {
                   确认
                 </button>
               ) : null}
+            </div>
+          </section>
+        </div>
+      ) : null}
+      {isProjectSelectorOpen ? (
+        <div
+          style={{
+            position: "fixed",
+            inset: 0,
+            background: "rgba(31, 27, 22, 0.35)",
+            display: "grid",
+            placeItems: "center",
+            zIndex: 1100,
+            padding: "16px",
+          }}
+        >
+          <section
+            role="dialog"
+            aria-modal="true"
+            aria-label="打开既有项目"
+            style={{
+              width: "min(880px, 100%)",
+              borderRadius: "20px",
+              border: "1px solid #d5c9ba",
+              background: "#fffdf9",
+              boxShadow: "0 20px 48px rgba(59, 39, 20, 0.22)",
+              padding: "22px",
+              display: "grid",
+              gap: "16px",
+            }}
+          >
+            <h3 style={{ margin: 0, fontSize: "22px", color: "#1f1b16" }}>打开既有项目</h3>
+            <label style={{ display: "grid", gap: "8px", color: "#4a4238", fontSize: "14px" }}>
+              项目编号
+              <select
+                value={selectedProjectCodeForSelector}
+                onChange={(event) => setSelectedProjectCodeForSelector(event.target.value)}
+                style={{
+                  border: "1px solid #d5c9ba",
+                  borderRadius: "10px",
+                  padding: "10px 12px",
+                  background: "#fff",
+                }}
+              >
+                {projects.map((item) => (
+                  <option key={item.project_code} value={item.project_code}>
+                    {item.project_name} / {item.project_code}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <div style={{ border: "1px solid #eadfce", borderRadius: "14px", overflow: "hidden" }}>
+              <div
+                style={{
+                  display: "grid",
+                  gridTemplateColumns: "120px 220px 1fr",
+                  gap: "8px",
+                  padding: "10px 14px",
+                  background: "#f9f3ea",
+                  color: "#6b6259",
+                  fontSize: "13px",
+                  fontWeight: 600,
+                }}
+              >
+                <span>版本</span>
+                <span>生成时间</span>
+                <span>最近运行状态</span>
+              </div>
+              {isProjectVersionsLoading ? (
+                <div style={{ padding: "14px", color: "#6b6259" }}>正在加载版本列表...</div>
+              ) : projectVersionOptions.length === 0 ? (
+                <div style={{ padding: "14px", color: "#6b6259" }}>该项目暂无可用版本。</div>
+              ) : (
+                pagedProjectVersionOptions.map((item) => (
+                  <label
+                    key={item.input_config_id}
+                    style={{
+                      display: "grid",
+                      gridTemplateColumns: "120px 220px 1fr",
+                      gap: "8px",
+                      alignItems: "center",
+                      padding: "12px 14px",
+                      borderTop: "1px solid #f1e7d8",
+                      background:
+                        selectedInputConfigIdForSelector === item.input_config_id ? "#f8f2eb" : "#fffdf9",
+                      cursor: "pointer",
+                    }}
+                  >
+                    <span>
+                      <input
+                        type="radio"
+                        name="project_version"
+                        checked={selectedInputConfigIdForSelector === item.input_config_id}
+                        onChange={() => setSelectedInputConfigIdForSelector(item.input_config_id)}
+                        style={{ marginRight: "8px" }}
+                      />
+                      {`V${item.version}`}
+                    </span>
+                    <span>{formatTimestamp(item.created_at)}</span>
+                    <span>
+                      {item.latest_run?.status === "succeeded"
+                        ? "最近运行成功"
+                        : item.latest_run?.status === "failed"
+                          ? "最近运行失败"
+                          : "暂无运行记录"}
+                    </span>
+                  </label>
+                ))
+              )}
+            </div>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", color: "#6b6259" }}>
+              <span>{`第 ${currentProjectVersionPageIndex + 1} / ${projectVersionPageCount} 页`}</span>
+              <div style={{ display: "flex", gap: "8px" }}>
+                <button
+                  type="button"
+                  style={secondaryActionStyle}
+                  disabled={currentProjectVersionPageIndex === 0}
+                  onClick={() => setProjectVersionPageIndex(currentProjectVersionPageIndex - 1)}
+                >
+                  上一页
+                </button>
+                <button
+                  type="button"
+                  style={secondaryActionStyle}
+                  disabled={currentProjectVersionPageIndex >= projectVersionPageCount - 1}
+                  onClick={() => setProjectVersionPageIndex(currentProjectVersionPageIndex + 1)}
+                >
+                  下一页
+                </button>
+              </div>
+            </div>
+            <div style={{ display: "flex", justifyContent: "flex-end", gap: "10px" }}>
+              <button
+                type="button"
+                style={secondaryActionStyle}
+                onClick={() => setIsProjectSelectorOpen(false)}
+              >
+                取消
+              </button>
+              <button
+                type="button"
+                style={primaryActionStyle}
+                disabled={selectedInputConfigIdForSelector === null || isProjectVersionsLoading}
+                onClick={() => {
+                  if (selectedInputConfigIdForSelector === null) {
+                    return;
+                  }
+                  openProjectByInputConfigId(selectedInputConfigIdForSelector)
+                    .then(() => {
+                      setIsProjectSelectorOpen(false);
+                    })
+                    .catch((error) => {
+                      const detail = error instanceof Error ? error.message : "unknown_error";
+                      showAlertDialog("打开版本失败", `打开版本失败：${detail}`);
+                    });
+                }}
+              >
+                打开选中版本
+              </button>
             </div>
           </section>
         </div>

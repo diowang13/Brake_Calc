@@ -156,6 +156,13 @@ class FakeInputConfigRepository:
             return None
         return sorted(candidates, key=lambda item: item.version, reverse=True)[0]
 
+    def list_for_project(self, project_id: str) -> list[FakeInputConfig]:
+        return sorted(
+            [item for item in self.items.values() if item.project_id == project_id],
+            key=lambda item: item.version,
+            reverse=True,
+        )
+
 
 def test_config_service_saves_project_and_input_config() -> None:
     service = ConfigService(
@@ -272,3 +279,44 @@ def test_config_service_persists_revision_metadata_in_saved_config() -> None:
     loaded = service.load_config(revised.input_config_id)
     assert loaded.source_input_config_id == baseline.input_config_id
     assert loaded.revision_reason == "外部条件变更"
+
+
+def test_config_service_lists_project_versions_in_desc_order() -> None:
+    service = ConfigService(
+        project_repository=FakeProjectRepository(),
+        input_config_repository=FakeInputConfigRepository(),
+    )
+    service.save_config(
+        SaveConfigRequest(
+            project=ProjectPayload(
+                project_name="Line 1",
+                project_code="LINE-001",
+                email=None,
+                note="baseline",
+            ),
+            yaml_text="schema_version: 1\nv0: 80\n",
+            form_state={"schema_version": 1, "v0": 80},
+            validation_status="valid",
+            errors=[],
+            created_at="2026-04-25T12:00:00Z",
+        )
+    )
+    service.save_config(
+        SaveConfigRequest(
+            project=ProjectPayload(
+                project_name="Line 1",
+                project_code="LINE-001",
+                email=None,
+                note="revised",
+            ),
+            yaml_text="schema_version: 1\nv0: 90\n",
+            form_state={"schema_version": 1, "v0": 90},
+            validation_status="valid",
+            errors=[],
+            created_at="2026-04-25T13:00:00Z",
+        )
+    )
+
+    listed = service.list_project_versions("LINE-001")
+
+    assert [item["version"] for item in listed] == [2, 1]

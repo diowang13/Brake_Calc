@@ -100,6 +100,11 @@ def list_projects(*, config_service: object) -> dict[str, object]:
     return {"items": items}
 
 
+def list_project_configs(project_code: str, *, config_service: object) -> dict[str, object]:
+    items = config_service.list_project_versions(project_code)  # type: ignore[attr-defined]
+    return {"items": items}
+
+
 def import_yaml(request: dict[str, object], *, import_service: object) -> dict[str, object]:
     return _serialize(import_service.import_yaml(str(request["yaml_text"])))  # type: ignore[attr-defined]
 

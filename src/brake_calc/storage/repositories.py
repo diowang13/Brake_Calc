@@ -309,6 +309,22 @@ class InputConfigRepository:
         ).fetchone()
         return _row_to_input_config(row)
 
+    def list_for_project(self, project_id: str) -> list[InputConfigRecord]:
+        rows = self._connection.execute(
+            """
+            SELECT
+                id, project_id, version, schema_version, yaml_text,
+                form_state_json, yaml_sha256, validation_status,
+                validation_errors_json, source, created_at, exported_filename,
+                source_input_config_id, revision_reason
+            FROM input_configs
+            WHERE project_id = ?
+            ORDER BY version DESC
+            """,
+            (project_id,),
+        ).fetchall()
+        return [item for item in (_row_to_input_config(row) for row in rows) if item is not None]
+
     def update_validation(
         self,
         *,

@@ -100,3 +100,19 @@ export type ProjectListItem = {
 export type ListProjectsResult = {
   items: ProjectListItem[];
 };
+
+export type ProjectVersionListItem = {
+  input_config_id: string;
+  version: number;
+  created_at: string;
+  latest_run?: {
+    calculation_run_id: string;
+    status: string;
+    report: Record<string, unknown> | null;
+    created_at: string;
+  } | null;
+};
+
+export type ListProjectVersionsResult = {
+  items: ProjectVersionListItem[];
+};

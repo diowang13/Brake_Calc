@@ -64,6 +64,7 @@ class InputConfigRepositoryProtocol(Protocol):
     ) -> "InputConfigRecordProtocol": ...
     def get(self, input_config_id: str) -> "InputConfigRecordProtocol | None": ...
     def get_latest_for_project(self, project_id: str) -> "InputConfigRecordProtocol | None": ...
+    def list_for_project(self, project_id: str) -> list["InputConfigRecordProtocol"]: ...
 
 
 class ProjectRecordProtocol(Protocol):
@@ -309,6 +310,20 @@ class ConfigService:
                 }
             )
         return result
+
+    def list_project_versions(self, project_code: str) -> list[dict[str, object]]:
+        project = self._project_repository.get_by_project_code(project_code)
+        if project is None:
+            raise LookupError("project_not_found")
+        configs = self._input_config_repository.list_for_project(project.id)
+        return [
+            {
+                "input_config_id": item.id,
+                "version": item.version,
+                "created_at": item.created_at,
+            }
+            for item in configs
+        ]
 
 
 class YamlImportService:

@@ -114,7 +114,8 @@ export function FieldBlock({
   error,
   hint,
   suffix,
-  inputMode = "text"
+  inputMode = "text",
+  disabled = false
 }: {
   label: string;
   value?: string;
@@ -125,6 +126,7 @@ export function FieldBlock({
   hint?: string;
   suffix?: string;
   inputMode?: "text" | "decimal" | "numeric";
+  disabled?: boolean;
 }): ReactElement {
   const isInteractive = typeof onChange === "function";
 
@@ -138,7 +140,7 @@ export function FieldBlock({
               minHeight: "42px",
               borderRadius: "12px",
               border: error ? "1px solid #c64532" : "1px solid #ccbca8",
-              background: "#fff",
+              background: disabled ? "#f2eee8" : "#fff",
               display: "flex",
               alignItems: "center",
               overflow: "hidden"
@@ -152,6 +154,7 @@ export function FieldBlock({
               onBlur={onBlur}
               placeholder={placeholder}
               inputMode={inputMode}
+              disabled={disabled}
               style={{
                 flex: 1,
                 minWidth: 0,
@@ -159,7 +162,8 @@ export function FieldBlock({
                 outline: "none",
                 background: "transparent",
                 padding: "10px 12px",
-                fontSize: "14px"
+                fontSize: "14px",
+                color: disabled ? "#8a8178" : "#1f1b16"
               }}
             />
             {suffix ? (
@@ -203,12 +207,14 @@ export function SelectFieldBlock({
   label,
   value,
   options,
-  onChange
+  onChange,
+  disabled = false
 }: {
   label: string;
   value: string;
   options: Array<{ label: string; value: string }>;
   onChange?: (value: string) => void;
+  disabled?: boolean;
 }): ReactElement {
   const isInteractive = typeof onChange === "function";
 
@@ -221,7 +227,7 @@ export function SelectFieldBlock({
             minHeight: "42px",
             borderRadius: "12px",
             border: "1px solid #ccbca8",
-            background: "#fff",
+            background: disabled ? "#f2eee8" : "#fff",
             display: "flex",
             alignItems: "center",
             overflow: "hidden"
@@ -231,6 +237,7 @@ export function SelectFieldBlock({
             aria-label={label}
             value={value}
             onChange={(event) => onChange(event.target.value)}
+            disabled={disabled}
             style={{
               flex: 1,
               minWidth: 0,
@@ -267,6 +274,7 @@ export function PointRow({
   unitLabel,
   pressureValue,
   massValue,
+  massHint,
   onChangePressure,
   onChangeMass,
   onDelete,
@@ -275,6 +283,7 @@ export function PointRow({
   unitLabel: string;
   pressureValue?: string;
   massValue?: string;
+  massHint?: string;
   onChangePressure?: (value: string) => void;
   onChangeMass?: (value: string) => void;
   onDelete?: () => void;
@@ -300,6 +309,19 @@ export function PointRow({
         <FieldBlock label="压力 (kPa)" value={pressureValue} onChange={onChangePressure} />
         <FieldBlock label={unitLabel} value={massValue} onChange={onChangeMass} />
       </div>
+      {massHint ? (
+        <p
+          style={{
+            margin: "8px 0 0",
+            color: "#c64532",
+            fontSize: "12px",
+            lineHeight: 1.6,
+            fontWeight: 700
+          }}
+        >
+          {massHint}
+        </p>
+      ) : null}
     </div>
   );
 }
@@ -331,7 +353,8 @@ export function CalibrationConfigCard({
   ,
   pressureReferenceText,
   firstPointReferenceText,
-  secondPointReferenceText
+  secondPointReferenceText,
+  disabled = false
 }: {
   title: string;
   status: string;
@@ -359,6 +382,7 @@ export function CalibrationConfigCard({
   pressureReferenceText?: string;
   firstPointReferenceText?: string;
   secondPointReferenceText?: string;
+  disabled?: boolean;
 }): ReactElement {
   return (
     <div
@@ -377,8 +401,18 @@ export function CalibrationConfigCard({
         <p style={{ margin: 0, color: "#6b6259", lineHeight: 1.6 }}>{summary}</p>
       </div>
       <div style={{ display: "flex", gap: "12px", flexWrap: "wrap" }}>
-        <TogglePill label="AW3-AW0 模式" active={mode === "aw3_aw0"} onClick={() => onChangeMode("aw3_aw0")} />
-        <TogglePill label="AW3-AW2 模式" active={mode === "aw3_aw2"} onClick={() => onChangeMode("aw3_aw2")} />
+        <TogglePill
+          label="AW3-AW0 模式"
+          active={mode === "aw3_aw0"}
+          onClick={() => onChangeMode("aw3_aw0")}
+          disabled={disabled}
+        />
+        <TogglePill
+          label="AW3-AW2 模式"
+          active={mode === "aw3_aw2"}
+          onClick={() => onChangeMode("aw3_aw2")}
+          disabled={disabled}
+        />
       </div>
       <div
         style={{
@@ -394,6 +428,7 @@ export function CalibrationConfigCard({
             value={pressureValue}
             onChange={onChangePressureValue}
             inputMode="decimal"
+            disabled={disabled}
           />
           <InfoCard
             title="理论参考值"
@@ -435,6 +470,7 @@ export function CalibrationConfigCard({
                     { label: "快速", value: "FB" }
                   ]}
                   onChange={onChangeFirstPointBrakeType}
+                  disabled={disabled}
                 />
               ) : (
                 <InfoCard title="制动类型固定为 EB" body="紧急控制系数标定的试验点不提供 brake_type 切换。" />
@@ -444,6 +480,7 @@ export function CalibrationConfigCard({
                 value={firstPointKValue}
                 onChange={onChangeFirstPointKValue}
                 inputMode="decimal"
+                disabled={disabled}
               />
               <InfoCard
                 title="理论参考值"
@@ -470,6 +507,7 @@ export function CalibrationConfigCard({
                     { label: "快速", value: "FB" }
                   ]}
                   onChange={onChangeSecondPointBrakeType}
+                  disabled={disabled}
                 />
               ) : (
                 <InfoCard title="制动类型固定为 EB" body="紧急控制系数标定的试验点不提供 brake_type 切换。" />
@@ -479,6 +517,7 @@ export function CalibrationConfigCard({
                 value={secondPointKValue}
                 onChange={onChangeSecondPointKValue}
                 inputMode="decimal"
+                disabled={disabled}
               />
               <InfoCard
                 title="理论参考值"
@@ -495,21 +534,65 @@ export function CalibrationConfigCard({
 export function TogglePill({
   label,
   active,
-  onClick
+  onClick,
+  disabled = false
 }: {
   label: string;
   active: boolean;
   onClick: () => void;
+  disabled?: boolean;
 }): ReactElement {
   return (
     <button
       type="button"
       aria-pressed={active}
       onClick={onClick}
-      style={active ? primaryActionStyle : secondaryActionStyle}
+      disabled={disabled}
+      style={
+        disabled
+          ? { ...secondaryActionStyle, opacity: 0.55, cursor: "not-allowed" }
+          : active
+            ? primaryActionStyle
+            : secondaryActionStyle
+      }
     >
       {label}
     </button>
+  );
+}
+
+export function CheckboxToggle({
+  label,
+  checked,
+  onChange,
+  disabled = false
+}: {
+  label: string;
+  checked: boolean;
+  onChange: (checked: boolean) => void;
+  disabled?: boolean;
+}): ReactElement {
+  return (
+    <label
+      style={{
+        display: "inline-flex",
+        alignItems: "center",
+        gap: "8px",
+        cursor: disabled ? "not-allowed" : "pointer",
+        color: disabled ? "#8a8178" : "#1f1b16",
+        fontWeight: 700
+      }}
+    >
+      <input
+        aria-label={label}
+        type="checkbox"
+        checked={checked}
+        disabled={disabled}
+        onChange={(event) => onChange(event.target.checked)}
+        style={{ width: "16px", height: "16px" }}
+      />
+      {label}
+    </label>
   );
 }
 

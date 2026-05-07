@@ -9,6 +9,7 @@ import {
 import {
   ActiveInfoTabs,
   CalibrationConfigCard,
+  CheckboxToggle,
   FieldBlock,
   InfoCard,
   NavSection,
@@ -276,6 +277,7 @@ export function WorkbenchPage({
   const [parkingEtaPiValue, setParkingEtaPiValue] = useState("");
   const [parkingLoValue, setParkingLoValue] = useState("");
   const [parkingEtaOValue, setParkingEtaOValue] = useState("");
+  const [parkingCylinderManualInputEnabled, setParkingCylinderManualInputEnabled] = useState(false);
   const [pressureCalibrationEnabled, setPressureCalibrationEnabled] = useState(false);
   const [serviceCalibrationBcp0Value, setServiceCalibrationBcp0Value] = useState("");
   const [serviceCalibrationPointOneKValue, setServiceCalibrationPointOneKValue] = useState("");
@@ -542,8 +544,17 @@ export function WorkbenchPage({
     setParkingFs2Value(getNestedStringText(importedFormState, ["parking_brake_check", "cylinder", "Fs2"]));
     setParkingLpiValue(getNestedStringText(importedFormState, ["parking_brake_check", "cylinder", "Lpi"]));
     setParkingEtaPiValue(getNestedStringText(importedFormState, ["parking_brake_check", "cylinder", "eta_pi"]));
-    setParkingLoValue(getNestedStringText(importedFormState, ["parking_brake_check", "cylinder", "Lo"]));
-    setParkingEtaOValue(getNestedStringText(importedFormState, ["parking_brake_check", "cylinder", "eta_o"]));
+    const importedParkingLo = getNestedStringText(importedFormState, ["parking_brake_check", "cylinder", "Lo"]);
+    const importedParkingEtaO = getNestedStringText(importedFormState, ["parking_brake_check", "cylinder", "eta_o"]);
+    const importedMechLo = getNestedStringText(importedFormState, ["mech_params", "Lo"]);
+    const importedMechEtaO = getNestedStringText(importedFormState, ["mech_params", "eta_o"]);
+    setParkingLoValue(importedParkingLo);
+    setParkingEtaOValue(importedParkingEtaO);
+    setParkingCylinderManualInputEnabled(
+      importedParkingLo.trim() !== "" &&
+        importedParkingEtaO.trim() !== "" &&
+        (importedParkingLo !== importedMechLo || importedParkingEtaO !== importedMechEtaO)
+    );
     const pressureCalibration = toRecord(importedFormState.pressure_calibration);
     setPressureCalibrationEnabled(pressureCalibration?.enabled === true);
     const serviceBrake = toRecord(pressureCalibration?.service_brake);
@@ -596,6 +607,18 @@ export function WorkbenchPage({
     onChangeEmergencyRequirementMode,
     onChangeFastBrakeEnabled,
   ]);
+
+  useEffect(() => {
+    if (parkingCylinderManualInputEnabled) {
+      return;
+    }
+    if (mechLoValue.trim() !== "") {
+      setParkingLoValue(mechLoValue);
+    }
+    if (mechEtaOValue.trim() !== "") {
+      setParkingEtaOValue(mechEtaOValue);
+    }
+  }, [mechLoValue, mechEtaOValue, parkingCylinderManualInputEnabled]);
 
   const compactSpeedBlockStyle = {
     width: "25%",
@@ -908,7 +931,12 @@ export function WorkbenchPage({
     if (label === "压力 (kPa)") {
       return "air_spring.powered_bogie.points";
     }
-    if (label === "质量 (ton)" || label === "质量 (kN)") {
+    if (
+      label === "质量 (ton)" ||
+      label === "质量 (kN)" ||
+      label === "单根空簧簧上质量 (ton)" ||
+      label === "单根空簧簧上质量 (kN)"
+    ) {
       return "air_spring.powered_bogie.points";
     }
     if (label.startsWith("制动类型代号")) {
@@ -1392,6 +1420,8 @@ export function WorkbenchPage({
     }
     return controllerConfigType;
   }, [controllerConfigType, importedFormState]);
+  const springsPerController = effectiveControllerConfigType === "car" ? 4 : 2;
+  const controllerScopeLabel = effectiveControllerConfigType === "car" ? "每控制器（通常每车）" : "每控制器";
 
   const importedTargetSummary = useMemo(() => {
     if (!hasImportedConfig) {
@@ -1813,11 +1843,11 @@ export function WorkbenchPage({
                   }}
                 >
                   <h4 style={{ margin: "0 0 12px" }}>快速制动</h4>
-                  <div style={{ display: "flex", gap: "10px", flexWrap: "wrap", marginBottom: "16px" }}>
-                    <TogglePill
+                  <div style={{ marginBottom: "16px" }}>
+                    <CheckboxToggle
                       label="启用快速制动"
-                      active={fastBrakeEnabled}
-                      onClick={() => onChangeFastBrakeEnabled(!fastBrakeEnabled)}
+                      checked={fastBrakeEnabled}
+                      onChange={onChangeFastBrakeEnabled}
                     />
                   </div>
                   <p style={{ margin: 0, color: "#6b6259", lineHeight: 1.6 }}>
@@ -2223,10 +2253,33 @@ export function WorkbenchPage({
                 </div>
                 {airSpringInputMode === "fitted_from_points" ? (
                   <div style={{ display: "grid", gap: "12px" }}>
+                    <div
+                      style={{
+                        border: "1px solid #d5c9ba",
+                        borderRadius: "14px",
+                        padding: "12px 14px",
+                        background: "#fff"
+                      }}
+                    >
+                      <strong style={{ display: "block", marginBottom: "6px" }}>口径提醒</strong>
+                      <p style={{ margin: 0, color: "#c64532", lineHeight: 1.6 }}>
+                        请录入单根空簧的簧上质量，不要录入整架簧上质量。当前{controllerScopeLabel}
+                        按 {springsPerController} 根空簧计算，若你拿到的是每控制器簧上质量，请先除以 {springsPerController}。
+                      </p>
+                    </div>
                     {airSpringPoints.map((point, index) => (
                       <PointRow
                         key={`air-spring-point-${index}`}
-                        unitLabel={airSpringMassUnit === "ton" ? "质量 (ton)" : "质量 (kN)"}
+                        unitLabel={
+                          airSpringMassUnit === "ton"
+                            ? "单根空簧簧上质量 (ton)"
+                            : "单根空簧簧上质量 (kN)"
+                        }
+                        massHint={
+                          airSpringMassUnit === "ton"
+                            ? `按单根空簧口径录入；${controllerScopeLabel} ${springsPerController} 根空簧（本项目）。`
+                            : `按单根空簧口径录入；${controllerScopeLabel} ${springsPerController} 根空簧（本项目）。kN 仅用于前端辅助换算。`
+                        }
                         index={index + 1}
                         pressureValue={point.pressure}
                         massValue={point.mass}
@@ -2354,7 +2407,7 @@ export function WorkbenchPage({
               </p>
               <div style={{ display: "flex", gap: "10px", flexWrap: "wrap", marginBottom: "16px" }}>
                 <TogglePill
-                  label="启用 parking_brake_check"
+                  label="启用停放校核"
                   active={parkingEnabled}
                   onClick={() => {
                     setParkingEnabled(true);
@@ -2363,7 +2416,7 @@ export function WorkbenchPage({
                   }}
                 />
                 <TogglePill
-                  label="停用 parking_brake_check"
+                  label="停用停放校核"
                   active={!parkingEnabled}
                   onClick={() => {
                     setParkingEnabled(false);
@@ -2398,16 +2451,19 @@ export function WorkbenchPage({
                       label="要求安全系数 required_safety_margin (-)"
                       value={parkingRequiredSafetyMarginValue}
                       onChange={setParkingRequiredSafetyMarginValue}
+                      disabled={!parkingEnabled}
                     />
                     <FieldBlock
                       label="静摩擦系数 xi0 / static_friction_coefficient (-)"
                       value={parkingStaticFrictionCoefficientValue}
                       onChange={setParkingStaticFrictionCoefficientValue}
+                      disabled={!parkingEnabled}
                     />
                     <FieldBlock
                       label="每车停放缸数量 n_parking_cylinders_by_car (-)"
                       value={parkingCylindersByCarValue}
                       onChange={setParkingCylindersByCarValue}
+                      disabled={!parkingEnabled}
                     />
                   </div>
                 </div>
@@ -2426,26 +2482,31 @@ export function WorkbenchPage({
                       label="最大风速 wind_speed_max (m/s)"
                       value={parkingWindSpeedMaxValue}
                       onChange={setParkingWindSpeedMaxValue}
+                      disabled={!parkingEnabled}
                     />
                     <FieldBlock
                       label="风阻系数 wind_resistance_coefficient (-)"
                       value={parkingWindResistanceCoefficientValue}
                       onChange={setParkingWindResistanceCoefficientValue}
+                      disabled={!parkingEnabled}
                     />
                     <FieldBlock
                       label="AW0 坡度 grade_by_load_group.AW0 (‰)"
                       value={parkingGradeAw0Value}
                       onChange={setParkingGradeAw0Value}
+                      disabled={!parkingEnabled}
                     />
                     <FieldBlock
                       label="AW2 坡度 grade_by_load_group.AW2 (‰)"
                       value={parkingGradeAw2Value}
                       onChange={setParkingGradeAw2Value}
+                      disabled={!parkingEnabled}
                     />
                     <FieldBlock
                       label="AW3 坡度 grade_by_load_group.AW3 (‰)"
                       value={parkingGradeAw3Value}
                       onChange={setParkingGradeAw3Value}
+                      disabled={!parkingEnabled}
                     />
                   </div>
                 </div>
@@ -2459,14 +2520,39 @@ export function WorkbenchPage({
                   }}
                 >
                   <h4 style={{ margin: "0 0 12px" }}>停放缸参数</h4>
+                  <div style={{ marginBottom: "12px" }}>
+                    <CheckboxToggle
+                      label="人工输入执行机构外部倍率/效率"
+                      checked={parkingCylinderManualInputEnabled}
+                      disabled={!parkingEnabled}
+                      onChange={(checked) => {
+                        setParkingCylinderManualInputEnabled(checked);
+                        if (!checked) {
+                          setParkingLoValue(mechLoValue);
+                          setParkingEtaOValue(mechEtaOValue);
+                        }
+                        onDirtyChange(true);
+                      }}
+                    />
+                  </div>
                   <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px" }}>
-                    <FieldBlock label="停放弹簧输出力 Fp (kN)" value={parkingFpValue} onChange={setParkingFpValue} />
-                    <FieldBlock label="单元复位力 Fs1 (kN)" value={parkingFs1Value} onChange={setParkingFs1Value} />
-                    <FieldBlock label="单元复位力 Fs2 (kN)" value={parkingFs2Value} onChange={setParkingFs2Value} />
-                    <FieldBlock label="停放缸内部倍率 Lpi (-)" value={parkingLpiValue} onChange={setParkingLpiValue} />
-                    <FieldBlock label="停放缸内部效率 eta_pi (-)" value={parkingEtaPiValue} onChange={setParkingEtaPiValue} />
-                    <FieldBlock label="执行机构外部倍率 Lo (-)" value={parkingLoValue} onChange={setParkingLoValue} />
-                    <FieldBlock label="执行机构外部效率 eta_o (-)" value={parkingEtaOValue} onChange={setParkingEtaOValue} />
+                    <FieldBlock label="停放弹簧输出力 Fp (kN)" value={parkingFpValue} onChange={setParkingFpValue} disabled={!parkingEnabled} />
+                    <FieldBlock label="单元复位力 Fs1 (kN)" value={parkingFs1Value} onChange={setParkingFs1Value} disabled={!parkingEnabled} />
+                    <FieldBlock label="单元复位力 Fs2 (kN)" value={parkingFs2Value} onChange={setParkingFs2Value} disabled={!parkingEnabled} />
+                    <FieldBlock label="停放缸内部倍率 Lpi (-)" value={parkingLpiValue} onChange={setParkingLpiValue} disabled={!parkingEnabled} />
+                    <FieldBlock label="停放缸内部效率 eta_pi (-)" value={parkingEtaPiValue} onChange={setParkingEtaPiValue} disabled={!parkingEnabled} />
+                    <FieldBlock
+                      label="执行机构外部倍率 Lo (-)"
+                      value={parkingLoValue}
+                      onChange={setParkingLoValue}
+                      disabled={!parkingEnabled || !parkingCylinderManualInputEnabled}
+                    />
+                    <FieldBlock
+                      label="执行机构外部效率 eta_o (-)"
+                      value={parkingEtaOValue}
+                      onChange={setParkingEtaOValue}
+                      disabled={!parkingEnabled || !parkingCylinderManualInputEnabled}
+                    />
                   </div>
                 </div>
               </div>
@@ -2481,7 +2567,7 @@ export function WorkbenchPage({
               </p>
               <div style={{ display: "flex", gap: "10px", flexWrap: "wrap", marginBottom: "16px" }}>
                 <TogglePill
-                  label="启用 pressure_calibration"
+                  label="启用标定"
                   active={pressureCalibrationEnabled}
                   onClick={() => {
                     const wasDisabled = !pressureCalibrationEnabled;
@@ -2506,7 +2592,7 @@ export function WorkbenchPage({
                   }}
                 />
                 <TogglePill
-                  label="停用 pressure_calibration"
+                  label="停用标定"
                   active={!pressureCalibrationEnabled}
                   onClick={() => {
                     setPressureCalibrationEnabled(false);
@@ -2579,6 +2665,7 @@ export function WorkbenchPage({
                         ].toFixed(0)}`
                       : undefined
                   }
+                  disabled={!pressureCalibrationEnabled}
                 />
                 {effectiveControllerConfigType === "bogie" ? (
                   <CalibrationConfigCard
@@ -2634,6 +2721,7 @@ export function WorkbenchPage({
                           ].toFixed(0)}`
                         : undefined
                     }
+                    disabled={!pressureCalibrationEnabled}
                   />
                 ) : (
                   <InfoCard

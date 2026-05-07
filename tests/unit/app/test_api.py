@@ -3,6 +3,7 @@ from __future__ import annotations
 from brake_calc.app.api import (
     download_yaml,
     import_yaml,
+    list_project_configs,
     list_projects,
     load_config,
     open_latest_project_config,
@@ -77,6 +78,23 @@ class FakeConfigService:
                 "latest_input_config_id": "input-1",
                 "controller_type": "bogie",
             }
+        ]
+
+    def list_project_versions(self, project_code: str) -> list[dict[str, object]]:
+        assert project_code == "LINE-001"
+        return [
+            {
+                "input_config_id": "input-2",
+                "version": 2,
+                "created_at": "2026-04-25T13:00:00Z",
+                "latest_run": {"status": "succeeded"},
+            },
+            {
+                "input_config_id": "input-1",
+                "version": 1,
+                "created_at": "2026-04-25T12:00:00Z",
+                "latest_run": None,
+            },
         ]
 
 
@@ -168,6 +186,7 @@ def test_api_save_load_import_download_and_run_map_service_results() -> None:
     )
     opened = open_latest_project_config("LINE-001", config_service=config_service)
     listed = list_projects(config_service=config_service)
+    listed_configs = list_project_configs("LINE-001", config_service=config_service)
 
     assert saved["input_config_id"] == "input-1"
     assert loaded["project"]["project_code"] == "LINE-001"
@@ -177,6 +196,7 @@ def test_api_save_load_import_download_and_run_map_service_results() -> None:
     assert preview_response["service_bcp0"] == 25.0
     assert opened["input_config_id"] == "input-1"
     assert listed["items"][0]["project_code"] == "LINE-001"
+    assert listed_configs["items"][0]["version"] == 2
     assert config_service.last_saved_request is not None
     last_errors = getattr(config_service.last_saved_request, "errors")
     assert len(last_errors) == 0

@@ -84,6 +84,42 @@ def test_input_config_repository_returns_latest_config_for_project(tmp_path: Pat
     assert loaded == latest
 
 
+def test_input_config_repository_lists_versions_in_desc_order(tmp_path: Path) -> None:
+    project_repository, repository = make_repositories(tmp_path / "storage.sqlite3")
+    project = project_repository.create(
+        project_name="Line 1",
+        project_code="LINE-001",
+        email=None,
+        note="",
+        created_at="2026-04-25T10:00:00Z",
+    )
+    first = repository.create(
+        project_id=project.id,
+        schema_version=1,
+        yaml_text="schema_version: 1\nv0: 80\n",
+        form_state={"schema_version": 1, "v0": 80},
+        validation_status="valid",
+        validation_errors=[],
+        source="manual_save",
+        created_at="2026-04-25T10:05:00Z",
+    )
+    second = repository.create(
+        project_id=project.id,
+        schema_version=1,
+        yaml_text="schema_version: 1\nv0: 90\n",
+        form_state={"schema_version": 1, "v0": 90},
+        validation_status="valid",
+        validation_errors=[],
+        source="manual_save",
+        created_at="2026-04-25T10:10:00Z",
+    )
+
+    listed = repository.list_for_project(project.id)
+
+    assert [item.version for item in listed] == [2, 1]
+    assert [item.id for item in listed] == [second.id, first.id]
+
+
 def test_input_config_repository_persists_validation_result(tmp_path: Path) -> None:
     project_repository, repository = make_repositories(tmp_path / "storage.sqlite3")
     project = project_repository.create(

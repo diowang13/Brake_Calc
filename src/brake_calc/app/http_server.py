@@ -13,6 +13,7 @@ from datetime import datetime, timezone
 from brake_calc.app.api import (
     download_yaml,
     import_yaml,
+    list_project_configs,
     list_projects,
     load_config,
     open_latest_project_config,
@@ -180,6 +181,30 @@ def list_projects_route() -> dict[str, object]:
                 latest = None
             item["latest_run"] = latest
         return payload
+    except Exception as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    finally:
+        connection.close()
+
+
+@app.get("/api/projects/{project_code}/configs")
+def list_project_configs_route(project_code: str) -> dict[str, object]:
+    db_path = _get_database_path()
+    config_service, connection = _build_config_service(db_path)
+    try:
+        payload = list_project_configs(project_code, config_service=config_service)
+        for item in payload.get("items", []):
+            if not isinstance(item, dict):
+                continue
+            input_config_id = item.get("input_config_id")
+            if isinstance(input_config_id, str):
+                latest = _attach_latest_run_payload(db_path, {}, input_config_id).get("latest_run")
+            else:
+                latest = None
+            item["latest_run"] = latest
+        return payload
+    except LookupError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
     except Exception as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     finally:

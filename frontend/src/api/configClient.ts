@@ -1,6 +1,7 @@
 import type {
   DownloadYamlResult,
   ImportYamlResult,
+  ListProjectVersionsResult,
   ListProjectsResult,
   LoadConfigResult,
   OpenProjectResult,
@@ -122,4 +123,12 @@ export async function listProjects(): Promise<ListProjectsResult> {
     throw new Error(`list_projects_failed:${response.status}`);
   }
   return (await response.json()) as ListProjectsResult;
+}
+
+export async function listProjectVersions(projectCode: string): Promise<ListProjectVersionsResult> {
+  const response = await fetch(`${API_BASE_URL}/api/projects/${encodeURIComponent(projectCode)}/configs`);
+  if (!response.ok) {
+    throw new Error(`list_project_versions_failed:${response.status}`);
+  }
+  return (await response.json()) as ListProjectVersionsResult;
 }

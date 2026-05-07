@@ -12,11 +12,13 @@ import type { ProjectListItem } from "../contracts/config";
 export function HomePage({
   onCreateProject,
   onOpenProject,
+  onOpenProjectSelector,
   onImportYamlFile,
   projects
 }: {
   onCreateProject: () => void;
   onOpenProject: (projectCode: string) => void;
+  onOpenProjectSelector: () => void;
   onImportYamlFile: (yamlText: string) => void;
   projects: ProjectListItem[];
 }): ReactElement {
@@ -66,9 +68,6 @@ export function HomePage({
             latest_run: { calculation_run_id: "", status: "failed", report: null, created_at: "" },
           },
         ];
-  const firstOpenableProjectCode =
-    projects.find((item) => item.latest_input_config_id !== null)?.project_code ?? null;
-
   return (
     <div style={{ display: "grid", gap: "20px" }}>
       <section
@@ -97,13 +96,9 @@ export function HomePage({
             <button
               type="button"
               style={secondaryActionStyle}
-              onClick={() => {
-                if (firstOpenableProjectCode !== null) {
-                  onOpenProject(firstOpenableProjectCode);
-                }
-              }}
-              disabled={firstOpenableProjectCode === null}
-              title={firstOpenableProjectCode === null ? "当前无可打开的已保存配置" : undefined}
+              onClick={onOpenProjectSelector}
+              disabled={projects.length === 0}
+              title={projects.length === 0 ? "当前无可打开项目" : undefined}
             >
               打开既有项目
             </button>
