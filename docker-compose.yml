@@ -1,0 +1,27 @@
+services:
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: brake-calc-app
+    environment:
+      BRAKE_CALC_DB_PATH: /data/brake_calc.db
+    volumes:
+      - brake_calc_data:/data
+    ports:
+      - "8000:8000"
+    restart: unless-stopped
+
+  web:
+    build:
+      context: .
+      dockerfile: deploy/nginx/Dockerfile
+    container_name: brake-calc-web
+    depends_on:
+      - app
+    ports:
+      - "8080:80"
+    restart: unless-stopped
+
+volumes:
+  brake_calc_data:

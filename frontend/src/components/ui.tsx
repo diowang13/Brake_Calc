@@ -432,7 +432,7 @@ export function CalibrationConfigCard({
           />
           <InfoCard
             title="理论参考值"
-            body={pressureReferenceText ?? "待接入基础机械模型计算结果后，在此显示理论参考值。"}
+            body={pressureReferenceText ?? "暂无理论参考值"}
           />
         </div>
         {warning ? (
@@ -484,7 +484,7 @@ export function CalibrationConfigCard({
               />
               <InfoCard
                 title="理论参考值"
-                body={firstPointReferenceText ?? "待接入基础机械模型计算结果后，在此显示理论参考值。"}
+                body={firstPointReferenceText ?? "暂无理论参考值"}
               />
             </div>
           </div>
@@ -521,7 +521,7 @@ export function CalibrationConfigCard({
               />
               <InfoCard
                 title="理论参考值"
-                body={secondPointReferenceText ?? "待接入基础机械模型计算结果后，在此显示理论参考值。"}
+                body={secondPointReferenceText ?? "暂无理论参考值"}
               />
             </div>
           </div>

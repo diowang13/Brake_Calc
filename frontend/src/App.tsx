@@ -1144,10 +1144,7 @@ export function App(): ReactElement {
     <main style={shellStyle}>
       <div style={shellInnerStyle}>
         <section style={headerPanelStyle}>
-          <h1 style={{ margin: "0 0 8px", fontSize: "24px" }}>brake-calc 前端应用壳</h1>
-          <p style={{ margin: 0, color: "#6b6259" }}>
-            第一阶段先让 5 个核心页面的真实 React 壳跑起来，再逐步替换为正式页面实现。
-          </p>
+          <h1 style={{ margin: "0 0 8px", fontSize: "24px" }}>brake-calc 制动压力计算平台</h1>
         </section>
 
         <nav
