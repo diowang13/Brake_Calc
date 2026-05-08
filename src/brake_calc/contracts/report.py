@@ -111,6 +111,7 @@ BrakeSummary = dict[str, dict[str, float]]
 SpeedCheckMatrix = dict[str, dict[str, dict[str, float]]]
 ControllerCodeParams = dict[str, object]
 CalibrationSummary = dict[str, object]
+MassDynFormulaByBogieType = dict[str, object]
 
 
 class Report(BaseModel):
@@ -137,6 +138,10 @@ class Report(BaseModel):
     calibration_summary: CalibrationSummary = Field(
         default_factory=dict,
         description="单位: -",
+    )
+    mass_dyn_formula_by_bogie_type: MassDynFormulaByBogieType = Field(
+        default_factory=dict,
+        description="单位: ton/kPa, ton",
     )
     parking_brake_check_result: ParkingBrakeCheckResult | None = Field(
         default=None,

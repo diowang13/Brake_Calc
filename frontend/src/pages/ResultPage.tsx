@@ -144,6 +144,13 @@ function formatOptional(value: number | undefined, fractionDigits = 2): string {
   return value.toFixed(fractionDigits);
 }
 
+function formatMaybeNumber(value: number | undefined, fractionDigits = 2): string {
+  if (typeof value !== "number" || Number.isNaN(value)) {
+    return "-";
+  }
+  return value.toFixed(fractionDigits);
+}
+
 type CalibrationCurvePoint = {
   label: string;
   force_kN: number;
@@ -519,6 +526,7 @@ export function ResultPage({
   });
   const loadSummary = report.load_summary ?? {};
   const pressureByLoad = report.controller_pressure_standards ?? {};
+  const massDynFormulaByBogieType = report.mass_dyn_formula_by_bogie_type ?? {};
   const pressureBrakeTypeSet = new Set<string>();
   Object.values(pressureByLoad).forEach((perBrakeType) => {
     Object.keys(perBrakeType).forEach((brakeType) => pressureBrakeTypeSet.add(brakeType));
@@ -634,6 +642,27 @@ export function ResultPage({
         : "尚未运行，请先回到总览并进入修订后运行。";
   const hasCalibrationSummary = serviceSummary !== null || emergencySummary !== null;
   const isParkingEnabled = parkingReference !== undefined && parkingReference !== null;
+  const massFormulaCards = [
+    { key: "trailer_bogie", label: "拖架" },
+    { key: "powered_bogie", label: "动架" },
+  ]
+    .map(({ key, label }) => {
+      const item = massDynFormulaByBogieType[key];
+      if (item === undefined) {
+        return null;
+      }
+      return {
+        key,
+        label,
+        aw0Spring: item.aw0?.spring_kPa,
+        aw0Mass: item.aw0?.mass_dyn_t,
+        aw3Spring: item.aw3?.spring_kPa,
+        aw3Mass: item.aw3?.mass_dyn_t,
+        kValue: item.k,
+        bValue: item.b,
+      };
+    })
+    .filter((item): item is NonNullable<typeof item> => item !== null);
 
   return (
     <div style={{ display: "grid", gap: "18px" }}>
@@ -707,6 +736,61 @@ export function ResultPage({
             ))}
           </div>
         ) : null}
+      </section>
+
+      <section style={panelStyle}>
+        <h3 style={{ marginTop: 0 }}>载荷参数</h3>
+        <p style={{ margin: "0 0 16px", color: "#6b6259", lineHeight: 1.6 }}>
+          依据 AW0/AW3 的标准空簧压力与动态载荷，分别拟合动架与拖架的质量换算公式。
+        </p>
+        <div style={{ display: "grid", gap: "14px" }}>
+          {massFormulaCards.length === 0 ? (
+            <InfoSummary title="暂无数据" body="当前报告未返回按 bogie_type 的载荷拟合参数。" />
+          ) : (
+            massFormulaCards.map((item) => (
+              <div
+                key={item.key}
+                style={{
+                  border: "1px solid #d5c9ba",
+                  borderRadius: "16px",
+                  padding: "14px",
+                  background: "#fff",
+                  display: "grid",
+                  gridTemplateColumns: "1fr 1fr",
+                  gap: "14px",
+                }}
+              >
+                <div style={{ display: "grid", gap: "10px" }}>
+                  <strong style={{ fontSize: "16px" }}>{item.label}</strong>
+                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "10px" }}>
+                    <ParameterCard title="AW0空簧" value={`${formatMaybeNumber(item.aw0Spring, 0)} kPa`} />
+                    <ParameterCard title="AW0动态载荷" value={`${formatMaybeNumber(item.aw0Mass, 2)} ton`} />
+                    <ParameterCard title="AW3空簧" value={`${formatMaybeNumber(item.aw3Spring, 0)} kPa`} />
+                    <ParameterCard title="AW3动态载荷" value={`${formatMaybeNumber(item.aw3Mass, 2)} ton`} />
+                  </div>
+                </div>
+                <div
+                  style={{
+                    border: "1px dashed #c7a27f",
+                    borderRadius: "14px",
+                    padding: "14px",
+                    background: "#fffaf4",
+                    display: "grid",
+                    gap: "8px",
+                    alignContent: "start"
+                  }}
+                >
+                  <strong>空簧到载荷计算公式</strong>
+                  <div style={{ fontFamily: "Consolas, monospace", fontSize: "15px", color: "#1f1b16" }}>
+                    {`mass_dyn_t = ${typeof item.kValue === "number" ? item.kValue.toFixed(6) : "-"} * spring_kPa + ${
+                      typeof item.bValue === "number" ? item.bValue.toFixed(6) : "-"
+                    }`}
+                  </div>
+                </div>
+              </div>
+            ))
+          )}
+        </div>
       </section>
 
       <section style={panelStyle}>

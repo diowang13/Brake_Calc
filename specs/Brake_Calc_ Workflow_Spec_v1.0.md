@@ -19,7 +19,7 @@
 
 ### 2.1 主要输出
 
-- `report`：最终结构化报告对象，包含压力标准、理论速度检查、控制器开发参数、校核结果、告警、自动调整记录、限幅事件与 trace
+- `report`：最终结构化报告对象，包含压力标准、理论速度检查、控制器开发参数、`mass_dyn_formula_by_bogie_type`、校核结果、告警、自动调整记录、限幅事件与 trace；
 - `BCP_calibrated_by_controller` / `controller_pressure_standards`：每个控制器的目标控制压力/压力标准，单位 `kPa`
     - 输出按**实验条件载荷**（AW0 / AW2 / AW3）× **制动类型向量**（见 Inputs `brake_types`）组织，形成压力标准矩阵
     - 结构示意：`BCP_calibrated_by_controller[load_group][brake_type][controller] = pressure`
@@ -27,9 +27,9 @@
     - V1 Markdown 报告至少包含：
       - 顶层标题固定为：`Summary / Key Tables / Checks / Controller Development Parameters`
       - `Summary`：配置摘要与自动调整记录
-      - `Key Tables`：`Pressure / Dynamic Load Matrix` 紧凑矩阵，同时展示动态载荷、空簧压力和各制动类型 BCP
+      - `Key Tables`：`Pressure / Dynamic Load Matrix` 紧凑矩阵，同时展示动态载荷、空簧压力和各制动类型 BCP；公式来源于 AW0/AW3 的标准空簧与动态载荷点
       - `Checks`：理论速度检查、停放制动力校核结果、电制动摘要
-      - `Controller Development Parameters`：`Calibration Summary`、动态载荷公式、压力转换参数、力到压力公式
+      - `Controller Development Parameters`：`Calibration Summary`、动态载荷公式、压力转换参数、力到压力公式，展示“空簧压力→动态载荷拟合公式（动架/拖架）”
       - `delta_BCP` 保留为结构化兼容字段，但不作为 Markdown 主视图展示
 
 
@@ -382,10 +382,11 @@
 | `AirSpringPressure_by_controller` | `[load_group, controller]` | kPa | s4 | s9 |
 | `AirSpringFit_by_bogie_type` | `[bogie_type] -> {k, b, source_mode}` | kPa/ton, kPa | s4 | s9 |
 | `brake_summary` | `[brake_type] -> {beta}` | m/s² | s9 | report |
-| `load_summary` | `[load_group, controller] -> {mass_dynamic, spring_pressure}` | ton, kPa | s9 | report |
+| `load_summary` | `[load_group, controller] -> {mass_dynamic, spring_pressure}`（同一 `load_group` 内同 `bogie_type` 控制器值应一致，S9 拟合可按 bogie_type 取代表值） | ton, kPa | s9 | report |
 | `controller_pressure_standards` | `[load_group, brake_type, controller]` | kPa | s9 | report / Markdown |
 | `theoretical_speed_checks` | `[brake_type, speed_kmh] -> {requirement_a_mean, theoretical_distance_m, beta_used}` | m/s², m | s9 | report / Markdown |
 | `controller_code_params` | `{dynamic_mass_formula, pressure_conversion}` | mixed | s9 | report / Markdown |
+| `mass_dyn_formula_by_bogie_type` | `[bogie_type] -> {k, b, aw0: {spring_kPa, mass_dyn_t}, aw3: {spring_kPa, mass_dyn_t}, formula}` | ton/kPa, ton | s9 | report / Markdown |
 | `calibration_summary` | `{service_brake, emergency_brake}`，每组包含 `{BCP0, BCP0_for_code, point_pair_mode, input_points, curve_points, linear_formula_for_code}` | mixed | s9 | report / Markdown |
 | `parking_brake_check_result` | `{per_car, whole_train, pass}`（兼容字段，默认取首个已配置载荷组结果） | mixed | s9 | report / Markdown |
 | `parking_brake_check_results_by_load_group` | `[load_group] -> {per_car, whole_train, pass}` | mixed | s9 | report / Markdown |
@@ -620,14 +621,14 @@ flowchart TD
 - 作用：汇总正式报告数据，供本地调试、Hermes 返回和 Markdown 导出使用。
 - report 内容包括：
   - `brake_summary`：各 `brake_type` 的 `beta`
-  - `load_summary`：各 `load_group × controller` 的 `mass_dynamic` 与 `spring_pressure`
+  - `load_summary`：各 `load_group × controller` 的 `mass_dynamic` 与 `spring_pressure`；该字段作为 mass_dyn_formula_by_bogie_type 的输入来源
   - `controller_pressure_standards` / `BCP_calibrated_by_controller`：各 `load_group × brake_type × controller` 的 BC 压力标准
   - `theoretical_speed_checks`：按 `V_list` 或默认 `v0` 输出 `FSB`、`EB`、`FB` 的理论速度检查值
     - `FSB`：使用其自身响应模型
     - `EB`：使用其自身响应模型
     - `FB`：控制目标减速度取 `Beta_EB`，但理论速度检查时使用 `FB` 自身的响应模型（`t1 + impulse_rate`）
     - `ratio_of_FSB` 类型不单独生成理论速度检查
-  - `controller_code_params`：控制器开发用动态载荷公式和压力转换圆整参数
+  - `controller_code_params`：控制器开发用动态载荷公式和压力转换圆整参数；还需包括“按 AW0/AW3 两点拟合的 mass_dyn_t = k * spring_kPa + b（按 bogie_type 输出）”
   - `calibration_summary`：标定试验点、生成的 `k_sb(f)` / `k_eb(f)`、`BCP0_sb` / `BCP0_eb`、以及 AW0/AW2/AW3 对应的 `k_for_code`
     - 对 Markdown 主视图：
       - 必须展示最终生效的 `BCP0` 与 `BCP0_for_code`
@@ -899,7 +900,7 @@ workflow:
   - id: s9
     use: summarize_and_checks
     needs: [s8]
-    desc: 汇总压力标准、理论速度检查、控制器开发参数、告警、clamp 事件与 trace，生成结构化 report；CLI 可选导出 Markdown
+    desc: 汇总压力标准、理论速度检查、控制器开发参数、告警、clamp 事件与 trace，生成结构化 report；CLI 可选导出 Markdown；新增输出 mass_dyn_formula_by_bogie_type（动架/拖架各一条）。
 ```
 
 ## 9. 与 Mathcad 范例对齐（待补）

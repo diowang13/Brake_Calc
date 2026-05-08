@@ -24,6 +24,16 @@ export type Report = {
   load_summary?: Record<string, Record<string, { mass_dynamic?: number; spring_pressure?: number }>>;
   controller_pressure_standards?: Record<string, Record<string, Record<string, number>>>;
   controller_code_params?: Record<string, unknown>;
+  mass_dyn_formula_by_bogie_type?: Record<
+    string,
+    {
+      k?: number;
+      b?: number;
+      aw0?: { spring_kPa?: number; mass_dyn_t?: number };
+      aw3?: { spring_kPa?: number; mass_dyn_t?: number };
+      formula?: string;
+    }
+  >;
   calibration_summary?: Record<string, unknown>;
   auto_adjustments?: Array<{ code?: string; message?: string }>;
   warnings?: Array<{ code?: string; message?: string }>;

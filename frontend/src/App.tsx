@@ -29,6 +29,7 @@ import type {
   LoadConfigResult,
   ProjectListItem,
   ProjectVersionListItem,
+  SaveConfigRequestPayload,
   SupplementPresence
 } from "./contracts/config";
 import type { Report } from "./contracts/report";

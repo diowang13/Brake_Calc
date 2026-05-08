@@ -1421,7 +1421,7 @@ export function WorkbenchPage({
     return controllerConfigType;
   }, [controllerConfigType, importedFormState]);
   const springsPerController = effectiveControllerConfigType === "car" ? 4 : 2;
-  const controllerScopeLabel = effectiveControllerConfigType === "car" ? "每控制器（通常每车）" : "每控制器";
+  const controllerScopeLabel = "每控制器";
 
   const importedTargetSummary = useMemo(() => {
     if (!hasImportedConfig) {

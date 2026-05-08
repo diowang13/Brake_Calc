@@ -25,6 +25,62 @@ from brake_calc.errors import InputValidationError
 logger = logging.getLogger(__name__)
 
 
+def _resolve_controller_bogie_type_map(inputs: Inputs) -> dict[str, str]:
+    """构造 controller 到 bogie_type 的映射。"""
+    if inputs.controller_type == "bogie":
+        assert inputs.vehicle_config.bogies is not None
+        return {entry.name: entry.bogie_type for entry in inputs.vehicle_config.bogies}
+
+    assert inputs.vehicle_config.cars is not None
+    return {
+        entry.name: "powered_bogie" if entry.car_type == "powered_car" else "trailer_bogie"
+        for entry in inputs.vehicle_config.cars
+    }
+
+
+def _build_mass_dyn_formula_by_bogie_type(
+    *,
+    load_summary: dict[str, dict[str, dict[str, float]]],
+    controller_bogie_type_map: dict[str, str],
+) -> dict[str, dict[str, object]]:
+    """按 AW0/AW3 两点拟合 mass_dyn_t = k * spring_kPa + b。"""
+    result: dict[str, dict[str, object]] = {}
+    aw0 = load_summary.get("AW0", {})
+    aw3 = load_summary.get("AW3", {})
+    for bogie_type in ("powered_bogie", "trailer_bogie"):
+        controller_name = next(
+            (
+                name
+                for name, resolved_bogie_type in controller_bogie_type_map.items()
+                if resolved_bogie_type == bogie_type and name in aw0 and name in aw3
+            ),
+            None,
+        )
+        if controller_name is None:
+            continue
+        aw0_spring = aw0[controller_name]["spring_pressure"]
+        aw0_mass = aw0[controller_name]["mass_dynamic"]
+        aw3_spring = aw3[controller_name]["spring_pressure"]
+        aw3_mass = aw3[controller_name]["mass_dynamic"]
+
+        spring_delta = aw3_spring - aw0_spring
+        if spring_delta == 0:
+            k_value = 0.0
+            b_value = aw0_mass
+        else:
+            k_value = (aw3_mass - aw0_mass) / spring_delta
+            b_value = aw0_mass - k_value * aw0_spring
+
+        result[bogie_type] = {
+            "k": round(k_value, 6),
+            "b": round(b_value, 6),
+            "aw0": {"spring_kPa": aw0_spring, "mass_dyn_t": aw0_mass},
+            "aw3": {"spring_kPa": aw3_spring, "mass_dyn_t": aw3_mass},
+            "formula": f"mass_dyn_t = {k_value:.6g} * spring_kPa + {b_value:.6g}",
+        }
+    return result
+
+
 def _round_pressure_matrix(
     matrix: dict[str, dict[str, dict[str, float]]],
 ) -> dict[str, dict[str, dict[str, float]]]:
@@ -155,6 +211,11 @@ def run(ctx: Context) -> Context:
                     ctx.AirSpringPressure_by_controller[load_group][controller]
                 ),
             }
+    controller_bogie_type_map = _resolve_controller_bogie_type_map(inputs)
+    mass_dyn_formula_by_bogie_type = _build_mass_dyn_formula_by_bogie_type(
+        load_summary=load_summary,
+        controller_bogie_type_map=controller_bogie_type_map,
+    )
 
     speed_values = inputs.V_list if inputs.V_list is not None else [inputs.v0]
     theoretical_speed_checks: dict[str, dict[str, dict[str, float]]] = {}
@@ -274,6 +335,7 @@ def run(ctx: Context) -> Context:
             "pressure_conversion": pressure_conversion,
         },
         calibration_summary=calibration_summary,
+        mass_dyn_formula_by_bogie_type=mass_dyn_formula_by_bogie_type,
         parking_brake_check_result=parking_brake_check_result,
         parking_brake_check_results_by_load_group=parking_brake_check_results_by_load_group,
         electric_brake_summary=electric_brake_summary,

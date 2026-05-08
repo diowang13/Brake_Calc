@@ -72,6 +72,15 @@ def test_s9_report_includes_business_and_controller_development_outputs() -> Non
             "expression"
         ].startswith("mass_dynamic_ton = ")
     )
+    assert out.report.mass_dyn_formula_by_bogie_type["powered_bogie"]["aw0"]["spring_kPa"] == pytest.approx(
+        out.report.load_summary["AW0"]["powered_bogie_1"]["spring_pressure"]
+    )
+    assert out.report.mass_dyn_formula_by_bogie_type["powered_bogie"]["aw3"]["mass_dyn_t"] == pytest.approx(
+        out.report.load_summary["AW3"]["powered_bogie_1"]["mass_dynamic"]
+    )
+    assert (
+        "mass_dyn_t = " in out.report.mass_dyn_formula_by_bogie_type["powered_bogie"]["formula"]
+    )
     assert out.report.calibration_summary == {}
 
 
