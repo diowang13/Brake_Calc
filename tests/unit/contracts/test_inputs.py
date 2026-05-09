@@ -178,6 +178,59 @@ def test_inputs_accept_car_controller_shape() -> None:
     assert model.vehicle_config.cars[0].car_type == "powered_car"
 
 
+def test_inputs_accept_instance_display_name_and_mass_static_override() -> None:
+    payload = make_valid_bogie_payload()
+    payload["vehicle_config"]["bogies"][0]["display_name"] = "1号动架"
+    payload["vehicle_config"]["bogies"][0]["mass_static_override"] = {
+        "AW0": 10.5,
+        "AW2": 11.5,
+        "AW3": 12.5,
+    }
+
+    model = Inputs.model_validate(payload)
+
+    assert model.vehicle_config.bogies[0].display_name == "1号动架"
+    assert model.vehicle_config.bogies[0].mass_static_override.AW0 == 10.5
+
+
+def test_inputs_accept_car_instance_display_name_and_mass_static_override() -> None:
+    payload = make_valid_car_payload()
+    payload["vehicle_config"]["cars"][0]["display_name"] = "1号动车"
+    payload["vehicle_config"]["cars"][0]["mass_static_override"] = {
+        "AW0": 20.5,
+        "AW2": 22.5,
+        "AW3": 24.5,
+    }
+
+    model = Inputs.model_validate(payload)
+
+    assert model.vehicle_config.cars[0].display_name == "1号动车"
+    assert model.vehicle_config.cars[0].mass_static_override.AW3 == 24.5
+
+
+def test_inputs_require_complete_mass_static_override_shape() -> None:
+    payload = make_valid_bogie_payload()
+    payload["vehicle_config"]["bogies"][0]["mass_static_override"] = {
+        "AW0": 10.5,
+        "AW3": 12.5,
+    }
+
+    with pytest.raises(ValueError, match="AW2"):
+        Inputs.model_validate(payload)
+
+
+def test_inputs_require_positive_mass_static_override_values() -> None:
+    payload = make_valid_bogie_payload()
+    payload["vehicle_config"]["bogies"][0]["mass_static_override"] = {
+        "AW0": 10.5,
+        "AW2": 0.0,
+        "AW3": 12.5,
+    }
+
+    with pytest.raises(ValueError, match="mass_static_override"):
+        Inputs.model_validate(payload)
+
+
 def test_inputs_accept_caliper_cylinder_shape() -> None:
     payload = make_valid_bogie_payload()
     payload["mech_params"]["cylinder_type"] = "caliper_cylinder"

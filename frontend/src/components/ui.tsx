@@ -343,6 +343,7 @@ export function CalibrationConfigCard({
   secondPointLoadGroup,
   firstPointBrakeType,
   secondPointBrakeType,
+  brakeTypeOptions,
   onChangeFirstPointBrakeType,
   onChangeSecondPointBrakeType,
   pressureValue,
@@ -372,6 +373,7 @@ export function CalibrationConfigCard({
   secondPointLoadGroup: "AW0" | "AW2";
   firstPointBrakeType: string;
   secondPointBrakeType: string;
+  brakeTypeOptions?: Array<{ label: string; value: string }>;
   onChangeFirstPointBrakeType?: (value: string) => void;
   onChangeSecondPointBrakeType?: (value: string) => void;
   pressureValue: string;
@@ -388,6 +390,10 @@ export function CalibrationConfigCard({
   secondPointReferenceText?: string;
   disabled?: boolean;
 }): ReactElement {
+  const resolvedBrakeTypeOptions = brakeTypeOptions ?? [
+    { label: "常用", value: "FSB" },
+    { label: "快速", value: "FB" }
+  ];
   return (
     <div
       style={{
@@ -469,10 +475,7 @@ export function CalibrationConfigCard({
                 <SelectFieldBlock
                   label="制动类型"
                   value={firstPointBrakeType}
-                  options={[
-                    { label: "常用", value: "FSB" },
-                    { label: "快速", value: "FB" }
-                  ]}
+                  options={resolvedBrakeTypeOptions}
                   onChange={onChangeFirstPointBrakeType}
                   disabled={disabled}
                 />
@@ -506,10 +509,7 @@ export function CalibrationConfigCard({
                 <SelectFieldBlock
                   label="制动类型"
                   value={secondPointBrakeType}
-                  options={[
-                    { label: "常用", value: "FSB" },
-                    { label: "快速", value: "FB" }
-                  ]}
+                  options={resolvedBrakeTypeOptions}
                   onChange={onChangeSecondPointBrakeType}
                   disabled={disabled}
                 />

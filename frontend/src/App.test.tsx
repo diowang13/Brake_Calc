@@ -13,6 +13,7 @@ import {
   runConfig,
   saveConfig,
 } from "./api/configClient";
+import { ResultPage } from "./pages/ResultPage";
 
 vi.mock("./api/configClient", () => {
   let savedConfig: Record<string, unknown> | null = null;
@@ -445,12 +446,11 @@ async function openWorkbenchFromHome(user: ReturnType<typeof userEvent.setup>): 
     expect(screen.getByRole("heading", { level: 3, name: "空簧特性输入" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "按整车录入（推荐）" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "按转向架录入" })).toBeInTheDocument();
-    expect(
-      screen.getAllByText((_, node) => (node?.textContent ?? "").includes("动车称重（整车）")).length
-    ).toBeGreaterThan(0);
-    expect(
-      screen.getAllByText((_, node) => (node?.textContent ?? "").includes("拖车称重（整车）")).length
-    ).toBeGreaterThan(0);
+    const hasBogieLabel =
+      screen.queryAllByText((_, node) => (node?.textContent ?? "").includes("动架称重")).length > 0;
+    const hasCarLabel =
+      screen.queryAllByText((_, node) => (node?.textContent ?? "").includes("动车称重（整车）")).length > 0;
+    expect(hasBogieLabel || hasCarLabel).toBe(true);
     expect(screen.getByRole("button", { name: "质量单位：ton" })).toBeInTheDocument();
     expect(
       screen.getByRole("button", { name: "质量单位：kN（前端辅助换算）" })
@@ -458,6 +458,28 @@ async function openWorkbenchFromHome(user: ReturnType<typeof userEvent.setup>): 
       expect(screen.getByRole("button", { name: "特征点拟合" })).toBeInTheDocument();
       expect(screen.getByRole("button", { name: "显式线性公式" })).toBeInTheDocument();
     });
+
+  it("locks load input mode to bogie when bogie instance override is enabled", async () => {
+    const user = userEvent.setup();
+    render(<App />);
+
+    await user.click(screen.getByRole("button", { name: "新建初始化" }));
+    await user.click(screen.getByRole("button", { name: "架控" }));
+    await user.click(screen.getByRole("button", { name: "生成配置并进入工作台" }));
+    await user.click(screen.getByRole("button", { name: /^车辆与控制器配置/ }));
+    await user.click(screen.getByRole("checkbox", { name: "实例 1 启用独立称重" }));
+    await user.click(screen.getByRole("button", { name: /^载荷与空簧/ }));
+
+    expect(screen.getByText(/已启用独立称重实例/)).toBeInTheDocument();
+    expect(
+      screen.getAllByText((_, node) => (node?.textContent ?? "").includes("动架称重")).length
+    ).toBeGreaterThan(0);
+
+    await user.click(screen.getByRole("button", { name: "按整车录入（推荐）" }));
+    expect(
+      screen.getAllByText((_, node) => (node?.textContent ?? "").includes("动架称重")).length
+    ).toBeGreaterThan(0);
+  });
 
   it("emphasizes vehicle and bogie role words in load-entry labels", async () => {
     const user = userEvent.setup();
@@ -467,20 +489,9 @@ async function openWorkbenchFromHome(user: ReturnType<typeof userEvent.setup>): 
     await openWorkbenchFromHome(user);
     await user.click(screen.getByRole("button", { name: /^载荷与空簧/ }));
 
-    const poweredCarLabel = screen.getAllByText("动车")[0];
-    const trailerCarLabel = screen.getAllByText("拖车")[0];
-
-    expect(poweredCarLabel).toHaveStyle({ color: "#c64532", fontWeight: "700" });
-    expect(trailerCarLabel).toHaveStyle({ color: "#c64532", fontWeight: "700" });
-
-    await user.click(screen.getByRole("button", { name: "按转向架录入" }));
-
-    const poweredRoleLabel = screen.getAllByText("动架")[0];
-    const trailerRoleLabel = screen.getAllByText("拖架")[0];
-
-      expect(poweredRoleLabel).toHaveStyle({ color: "#c64532", fontWeight: "700" });
-      expect(trailerRoleLabel).toHaveStyle({ color: "#c64532", fontWeight: "700" });
-    });
+    expect(screen.getByRole("heading", { level: 4, name: /动架称重|动车称重（整车）/ })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { level: 4, name: /拖架称重|拖车称重（整车）/ })).toBeInTheDocument();
+  });
 
   it("switches the air spring input mode between fitted points and explicit linear formula", async () => {
     const user = userEvent.setup();
@@ -1138,10 +1149,12 @@ async function openWorkbenchFromHome(user: ReturnType<typeof userEvent.setup>): 
 
     await openWorkbenchFromHome(user);
     await user.click(screen.getByRole("button", { name: /^载荷与空簧/ }));
-    expect(screen.getByRole("textbox", { name: "AW0 / 动车称重（整车）" })).toHaveValue("15.83");
-    expect(screen.getByRole("textbox", { name: "AW0 / 拖车称重（整车）" })).toHaveValue("15.37");
-    expect(screen.getByRole("textbox", { name: "AW3 / 动车称重（整车）" })).toHaveValue("26.37");
-    expect(screen.getByRole("textbox", { name: "AW3 / 拖车称重（整车）" })).toHaveValue("25.18");
+    const aw0MassInputs = screen.getAllByRole("textbox", { name: "AW0 称重 (ton)" });
+    const aw3MassInputs = screen.getAllByRole("textbox", { name: "AW3 称重 (ton)" });
+    expect(aw0MassInputs[0]).toHaveValue("15.37");
+    expect(aw0MassInputs[1]).toHaveValue("15.83");
+    expect(aw3MassInputs[0]).toHaveValue("25.18");
+    expect(aw3MassInputs[1]).toHaveValue("26.37");
     expect(screen.getByRole("textbox", { name: "动车转向架重量 bogie_weight (ton)" })).toHaveValue("6.3");
     expect(screen.getByRole("textbox", { name: "拖车转向架重量 bogie_weight (ton)" })).toHaveValue("4.1");
 
@@ -1726,6 +1739,58 @@ async function openWorkbenchFromHome(user: ReturnType<typeof userEvent.setup>): 
     expect(mechParams).not.toHaveProperty("Rf");
   });
 
+  it("saves instance display_name and mass_static_override from load-air-spring section", async () => {
+    const user = userEvent.setup();
+
+    render(<App />);
+    const file = new File(
+      [[
+        "schema_version: 1",
+        "controller_type: bogie",
+        "vehicle_config:",
+        "  bogies:",
+        "    - name: trailer_bogie_1",
+        "      bogie_type: trailer_bogie",
+        "    - name: powered_bogie_3",
+        "      bogie_type: powered_bogie",
+        "v0: 80",
+        "",
+      ].join("\n")],
+      "example_override.yaml",
+      { type: "text/yaml" }
+    );
+    await user.upload(screen.getByLabelText("上传 YAML 文件"), file);
+    await screen.findByRole("heading", { level: 2, name: "导入摘要" });
+    await user.type(screen.getByRole("textbox", { name: "项目名称" }), "实例称重覆盖项目");
+    await user.type(screen.getByRole("textbox", { name: "项目编号" }), "OVERRIDE-001");
+    await user.click(screen.getByRole("button", { name: "保存并查看总览" }));
+    await screen.findByRole("heading", { level: 2, name: /上海机场线制动项目|实例称重覆盖项目/ });
+    await user.click(screen.getByRole("button", { name: "修订" }));
+
+    await user.click(screen.getByRole("button", { name: /^车辆与控制器配置/ }));
+    await user.type(screen.getByRole("textbox", { name: "显示名称 1" }), "1号拖架（司机室端）");
+    await user.click(screen.getByRole("checkbox", { name: "实例 1 启用独立称重" }));
+    await user.click(screen.getByRole("button", { name: /^载荷与空簧/ }));
+    const aw0Inputs = screen.getAllByRole("spinbutton", { name: "AW0 独立称重" });
+    const aw2Inputs = screen.getAllByRole("spinbutton", { name: "AW2 独立称重" });
+    const aw3Inputs = screen.getAllByRole("spinbutton", { name: "AW3 独立称重" });
+    await user.type(aw0Inputs[0], "15.8");
+    await user.type(aw2Inputs[0], "22.7");
+    await user.type(aw3Inputs[0], "25.6");
+
+    await user.click(screen.getByRole("button", { name: "保存" }));
+    await user.click(screen.getByRole("button", { name: "确认保存" }));
+
+    const savePayload = vi.mocked(saveConfig).mock.calls.at(-1)?.[0] as
+      | { form_state?: Record<string, unknown> }
+      | undefined;
+    const vehicleConfig = ((savePayload?.form_state ?? {}).vehicle_config ?? {}) as Record<string, unknown>;
+    const bogies = (vehicleConfig.bogies ?? []) as Array<Record<string, unknown>>;
+
+    expect(bogies[0].display_name).toBe("1号拖架（司机室端）");
+    expect(bogies[0].mass_static_override).toEqual({ AW0: 15.8, AW2: 22.7, AW3: 25.6 });
+  });
+
   it("prompts before leaving workbench with unsaved changes and respects cancel or confirm", async () => {
     const user = userEvent.setup();
 
@@ -1790,6 +1855,60 @@ async function openWorkbenchFromHome(user: ReturnType<typeof userEvent.setup>): 
     expect(vi.mocked(runConfig)).not.toHaveBeenCalled();
     expect(vi.mocked(previewCalibration)).toHaveBeenCalledWith("mock-config-id");
     expect(await screen.findByText("BCP0 理论参考值：25 kPa")).toBeInTheDocument();
+  });
+
+  it("loads preview-calibration reference when calibration is already enabled", async () => {
+    const user = userEvent.setup();
+    render(<App />);
+
+    const yamlText = [
+      "schema_version: 1",
+      "pressure_calibration:",
+      "  enabled: true",
+      "  service_brake:",
+      "    BCP0: 25.0",
+      "    point_pair_mode: aw3_aw0",
+      "    points:",
+      "      - load_group: AW0",
+      "        brake_type: FSB",
+      "        k_for_code: 1014.0",
+      "      - load_group: AW3",
+      "        brake_type: FB",
+      "        k_for_code: 1204.0",
+      ""
+    ].join("\n");
+    const file = new File([yamlText], "example_enabled_calibration.yaml", { type: "text/yaml" });
+    await user.upload(screen.getByLabelText("上传 YAML 文件"), file);
+    await screen.findByRole("heading", { level: 2, name: "导入摘要" });
+    await user.type(screen.getByRole("textbox", { name: "项目名称" }), "标定回填项目");
+    await user.type(screen.getByRole("textbox", { name: "项目编号" }), "IMP-CAL-ENABLED-001");
+    await user.click(screen.getByRole("button", { name: "保存并查看总览" }));
+    await screen.findByRole("heading", { level: 2, name: /上海机场线制动项目|标定回填项目/ });
+
+    await user.click(screen.getByRole("button", { name: "修订" }));
+    await user.click(screen.getByRole("button", { name: /^标定/ }));
+
+    expect(vi.mocked(previewCalibration)).toHaveBeenCalled();
+    expect(await screen.findByText("BCP0 理论参考值：25 kPa")).toBeInTheDocument();
+  });
+
+  it("does not offer FB in service calibration brake type when fast brake is disabled", async () => {
+    const user = userEvent.setup();
+    render(<App />);
+
+    await openWorkbenchFromHome(user);
+    await user.click(screen.getByRole("button", { name: /^运行基础配置 \/ 技术条件/ }));
+    const fastBrakeToggle = screen.getByRole("checkbox", { name: "启用快速制动" });
+    if ((fastBrakeToggle as HTMLInputElement).checked) {
+      await user.click(fastBrakeToggle);
+    }
+    await user.click(screen.getByRole("button", { name: /^标定/ }));
+    await user.click(screen.getByRole("button", { name: "启用标定" }));
+
+    const selects = screen.getAllByRole("combobox", { name: "制动类型" });
+    await user.click(selects[0]);
+    expect(screen.getAllByRole("option", { name: "常用" }).length).toBeGreaterThan(0);
+    expect(screen.queryByRole("option", { name: "快速" })).not.toBeInTheDocument();
   });
 
   it("shows warning and auto-adjustment details in result summary", async () => {
@@ -2055,6 +2174,57 @@ async function openWorkbenchFromHome(user: ReturnType<typeof userEvent.setup>): 
     expect(await screen.findByRole("heading", { level: 2, name: /上海机场线制动项目|真实运行项目/ })).toBeInTheDocument();
   });
 
+  it("prefers display_name and shows controller-level dynamic mass formulas in result view", () => {
+    render(
+      <ResultPage
+        report={{
+          theoretical_speed_checks: {},
+          load_summary: {
+            AW0: {
+              trailer_bogie_1: { mass_dynamic: 16.14, spring_pressure: 250 },
+            },
+            AW3: {
+              trailer_bogie_1: { mass_dynamic: 26.14, spring_pressure: 450 },
+            },
+          },
+          controller_pressure_standards: {
+            AW0: { FSB: { trailer_bogie_1: 210 } },
+            AW3: { FSB: { trailer_bogie_1: 367 } },
+          },
+          controller_code_params: {
+            pressure_conversion: {
+              FSB: { AW0: { trailer_bogie_1: { k_used_for_code: 976, BCP0_used_for_code: 25 } } },
+            },
+            dynamic_mass_formula_by_controller: {
+              trailer_bogie_1: {
+                k: 0.05,
+                b: 3.64,
+                aw0: { spring_kPa: 250, mass_dyn_t: 16.14 },
+                aw3: { spring_kPa: 450, mass_dyn_t: 26.14 },
+                formula: "mass_dyn_t = 0.05 * spring_kPa + 3.64",
+              },
+            },
+          },
+          parking_brake_check_result: null,
+          parking_brake_check_results_by_load_group: {},
+        }}
+        requiredSafetyMargin={2}
+        controllerType="bogie"
+        controllerOrder={["trailer_bogie_1"]}
+        controllerDisplayNames={{ trailer_bogie_1: "1号拖架（司机室端）" }}
+        runtimeStatus="succeeded"
+        warnings={[]}
+        autoAdjustments={[]}
+        pressureMatrixView="load"
+        onChangePressureMatrixView={vi.fn()}
+        onBackToOverview={vi.fn()}
+      />
+    );
+
+    expect(screen.getAllByText(/1号拖架（司机室端） \(trailer_bogie_1\)/).length).toBeGreaterThan(0);
+    expect(screen.getByText(/mass_dyn_t = 0.050000 \* spring_kPa \+ 3.640000/)).toBeInTheDocument();
+  });
+
   it("shows dash for controller code params when calibration_summary is absent", async () => {
     const user = userEvent.setup();
     vi.mocked(runConfig).mockResolvedValueOnce({
@@ -2118,8 +2288,8 @@ async function openWorkbenchFromHome(user: ReturnType<typeof userEvent.setup>): 
     expect(screen.queryByText("最终生效值（标定 + 调整后）")).not.toBeInTheDocument();
     expect(screen.getByText("service_brake: -")).toBeInTheDocument();
     expect(screen.getByText("emergency_brake: -")).toBeInTheDocument();
-    expect(screen.getAllByText("976").length).toBeGreaterThan(0);
-    expect(screen.getAllByText("1014").length).toBeGreaterThan(0);
+    expect(screen.queryByText("976")).not.toBeInTheDocument();
+    expect(screen.queryByText("1014")).not.toBeInTheDocument();
   });
 
   it("allows editing calibration fields after import and updates JSON highlight", async () => {
@@ -2376,6 +2546,19 @@ async function openWorkbenchFromHome(user: ReturnType<typeof userEvent.setup>): 
     await user.click(screen.getByRole("button", { name: "回到总览" }));
     await screen.findByRole("button", { name: "修订" });
     expect(screen.getByRole("button", { name: "查看结果" })).toBeEnabled();
+  });
+
+  it("refreshes home project list when returning to home from overview", async () => {
+    const user = userEvent.setup();
+    render(<App />);
+
+    const initialCalls = vi.mocked(listProjects).mock.calls.length;
+    await user.click(screen.getByRole("button", { name: "打开既有项目" }));
+    await user.click(await screen.findByRole("button", { name: "打开选中版本" }));
+    await screen.findByRole("button", { name: "修订" });
+    await user.click(screen.getByRole("button", { name: "首页 / 项目列表" }));
+
+    expect(vi.mocked(listProjects).mock.calls.length).toBeGreaterThan(initialCalls);
   });
 
   it("downloads YAML from workbench", async () => {

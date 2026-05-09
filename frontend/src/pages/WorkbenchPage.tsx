@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, type ReactElement } from "react";
+import { useEffect, useMemo, useRef, useState, type ReactElement, type ReactNode } from "react";
 
 import {
   ghostActionStyle,
@@ -17,14 +17,24 @@ import {
   TogglePill
 } from "../components/ui";
 
+export type MassStaticOverrideDraft = {
+  AW0: string;
+  AW2: string;
+  AW3: string;
+};
+
 export type CarControllerRow = {
   name: string;
+  displayName?: string;
   type: "powered_car" | "trailer_car";
+  massStaticOverride?: MassStaticOverrideDraft | null;
 };
 
 export type BogieControllerRow = {
   name: string;
+  displayName?: string;
   type: "powered_bogie" | "trailer_bogie";
+  massStaticOverride?: MassStaticOverrideDraft | null;
 };
 
 function CountCard({
@@ -217,17 +227,6 @@ export function WorkbenchPage({
     }
     return typeof cursor === "number" ? String(cursor) : "";
   };
-  const renderLoadRoleLabel = (
-    prefix: string,
-    role: "动车" | "拖车" | "动架" | "拖架",
-    suffix: "称重（整车）" | "称重"
-  ): ReactElement => (
-    <span>
-      {prefix}
-      <span style={bogieRoleEmphasisStyle}>{role}</span>
-      {suffix}
-    </span>
-  );
   const renderBogieWeightLabel = (role: "动架" | "拖架"): ReactElement => (
     <span>
       <span style={bogieRoleEmphasisStyle}>{role}</span>
@@ -256,7 +255,7 @@ export function WorkbenchPage({
   const [serviceCalibrationMode, setServiceCalibrationMode] = useState<CalibrationMode>("aw3_aw0");
   const [emergencyCalibrationMode, setEmergencyCalibrationMode] = useState<CalibrationMode>("aw3_aw0");
   const [servicePointOneBrakeType, setServicePointOneBrakeType] = useState<"FSB" | "FB">("FSB");
-  const [servicePointTwoBrakeType, setServicePointTwoBrakeType] = useState<"FSB" | "FB">("FB");
+  const [servicePointTwoBrakeType, setServicePointTwoBrakeType] = useState<"FSB" | "FB">("FSB");
   const [massAw0PoweredValue, setMassAw0PoweredValue] = useState("");
   const [massAw0TrailerValue, setMassAw0TrailerValue] = useState("");
   const [massAw2PoweredValue, setMassAw2PoweredValue] = useState("");
@@ -394,6 +393,7 @@ export function WorkbenchPage({
     if (importedFormState === null) {
       return;
     }
+    let hasFbInImportedConfig = false;
     setV0Value(getNestedStringText(importedFormState, ["v0"]));
     setFsbMeanValue(getNestedStringText(importedFormState, ["requirement", "FSB", "value"]));
     setFsbT1Value(getNestedStringText(importedFormState, ["response_time", "FSB", "t1"]));
@@ -446,6 +446,7 @@ export function WorkbenchPage({
       const hasFb = brakeTypesRaw
         .map((item) => toRecord(item))
         .some((item) => item !== null && String(item.name ?? "") === "FB");
+      hasFbInImportedConfig = hasFb;
       onChangeFastBrakeEnabled(hasFb);
     }
     setMassAw0PoweredValue(
@@ -603,11 +604,17 @@ export function WorkbenchPage({
     const emergencyPointTwo = toRecord(
       emergencyPoints.find((point) => toRecord(point)?.load_group === (emergencyModeForLookup === "aw3_aw0" ? "AW0" : "AW2"))
     ) ?? toRecord(emergencyPoints.find((point) => toRecord(point)?.load_group !== "AW3")) ?? toRecord(emergencyPoints[1]);
-    if (servicePointOne?.brake_type === "FSB" || servicePointOne?.brake_type === "FB") {
-      setServicePointOneBrakeType(servicePointOne.brake_type);
+    if (
+      servicePointOne?.brake_type === "FSB" ||
+      (hasFbInImportedConfig && servicePointOne?.brake_type === "FB")
+    ) {
+      setServicePointOneBrakeType(servicePointOne.brake_type === "FB" ? "FB" : "FSB");
     }
-    if (servicePointTwo?.brake_type === "FSB" || servicePointTwo?.brake_type === "FB") {
-      setServicePointTwoBrakeType(servicePointTwo.brake_type);
+    if (
+      servicePointTwo?.brake_type === "FSB" ||
+      (hasFbInImportedConfig && servicePointTwo?.brake_type === "FB")
+    ) {
+      setServicePointTwoBrakeType(servicePointTwo.brake_type === "FB" ? "FB" : "FSB");
     }
     setServiceCalibrationPointOneKValue(
       typeof servicePointOne?.k_for_code === "number" ? String(servicePointOne.k_for_code) : ""
@@ -630,6 +637,18 @@ export function WorkbenchPage({
   ]);
 
   useEffect(() => {
+    if (fastBrakeEnabled) {
+      return;
+    }
+    if (servicePointOneBrakeType === "FB") {
+      setServicePointOneBrakeType("FSB");
+    }
+    if (servicePointTwoBrakeType === "FB") {
+      setServicePointTwoBrakeType("FSB");
+    }
+  }, [fastBrakeEnabled, servicePointOneBrakeType, servicePointTwoBrakeType]);
+
+  useEffect(() => {
     if (parkingCylinderManualInputEnabled) {
       return;
     }
@@ -640,6 +659,25 @@ export function WorkbenchPage({
       setParkingEtaOValue(mechEtaOValue);
     }
   }, [mechLoValue, mechEtaOValue, parkingCylinderManualInputEnabled]);
+
+  useEffect(() => {
+    if (!pressureCalibrationEnabled || calibrationReference.loaded) {
+      return;
+    }
+    void onRequestCalibrationReference()
+      .then((reference) => {
+        setCalibrationReference({
+          loaded: true,
+          serviceBcp0: reference.serviceBcp0,
+          emergencyBcp0: reference.emergencyBcp0,
+          serviceKByLoadGroup: reference.serviceKByLoadGroup ?? {},
+          emergencyKByLoadGroup: reference.emergencyKByLoadGroup ?? {},
+        });
+      })
+      .catch(() => {
+        setCalibrationReference((current) => ({ ...current, loaded: true }));
+      });
+  }, [pressureCalibrationEnabled, calibrationReference.loaded, onRequestCalibrationReference]);
 
   const compactSpeedBlockStyle = {
     width: "25%",
@@ -1021,13 +1059,45 @@ export function WorkbenchPage({
       controllerConfigType === "bogie"
         ? { n_bogies_by_controller: 1, n_springs_by_controller: 2, n_cylinders_by_controller: 4 }
         : { n_bogies_by_controller: 2, n_springs_by_controller: 4, n_cylinders_by_controller: 8 };
+    const buildMassStaticOverride = (
+      override: MassStaticOverrideDraft | null | undefined
+    ): Record<string, number> | undefined => {
+      if (override === null || override === undefined) {
+        return undefined;
+      }
+      const aw0 = toNumberOrUndefined(override.AW0);
+      const aw2 = toNumberOrUndefined(override.AW2);
+      const aw3 = toNumberOrUndefined(override.AW3);
+      if (aw0 === undefined || aw2 === undefined || aw3 === undefined) {
+        return undefined;
+      }
+      return { AW0: aw0, AW2: aw2, AW3: aw3 };
+    };
     const vehicleConfig =
       controllerConfigType === "bogie"
         ? {
-            bogies: bogieControllerRows.map((row) => ({ name: row.name, bogie_type: row.type })),
+            bogies: bogieControllerRows.map((row) => ({
+              name: row.name,
+              ...(row.displayName && row.displayName.trim().length > 0
+                ? { display_name: row.displayName.trim() }
+                : {}),
+              bogie_type: row.type,
+              ...(buildMassStaticOverride(row.massStaticOverride) !== undefined
+                ? { mass_static_override: buildMassStaticOverride(row.massStaticOverride) }
+                : {}),
+            })),
           }
         : {
-            cars: carControllerRows.map((row) => ({ name: row.name, car_type: row.type })),
+            cars: carControllerRows.map((row) => ({
+              name: row.name,
+              ...(row.displayName && row.displayName.trim().length > 0
+                ? { display_name: row.displayName.trim() }
+                : {}),
+              car_type: row.type,
+              ...(buildMassStaticOverride(row.massStaticOverride) !== undefined
+                ? { mass_static_override: buildMassStaticOverride(row.massStaticOverride) }
+                : {}),
+            })),
           };
     const servicePointOneK = toNumberOrUndefined(serviceCalibrationPointOneKValue);
     const servicePointTwoK = toNumberOrUndefined(serviceCalibrationPointTwoKValue);
@@ -1223,8 +1293,8 @@ export function WorkbenchPage({
         Fs2: requiredParkingFs2,
         Lpi: requiredParkingLpi,
         eta_pi: requiredParkingEtaPi,
-        Lo: toNumberOrUndefined(parkingLoValue),
-        eta_o: toNumberOrUndefined(parkingEtaOValue),
+        Lo: toNumberOrUndefined(parkingCylinderManualInputEnabled ? parkingLoValue : mechLoValue),
+        eta_o: toNumberOrUndefined(parkingCylinderManualInputEnabled ? parkingEtaOValue : mechEtaOValue),
       };
     }
 
@@ -1534,6 +1604,27 @@ export function WorkbenchPage({
   }, [controllerConfigType, importedFormState]);
   const springsPerController = effectiveControllerConfigType === "car" ? 4 : 2;
   const controllerScopeLabel = "每控制器";
+  const hasInstanceMassOverrideEnabled =
+    effectiveControllerConfigType === "car"
+      ? carControllerRows.some((row) => row.massStaticOverride !== null && row.massStaticOverride !== undefined)
+      : bogieControllerRows.some((row) => row.massStaticOverride !== null && row.massStaticOverride !== undefined);
+  const requiredLoadInputMode = effectiveControllerConfigType === "car" ? "car" : "bogie";
+  const previousSectionRef = useRef<WorkbenchSectionKey | null>(null);
+
+  useEffect(() => {
+    const wasInLoadAirSpring = previousSectionRef.current === "load-air-spring";
+    const entersLoadAirSpring = activeSection === "load-air-spring" && !wasInLoadAirSpring;
+    if (entersLoadAirSpring && loadInputMode !== requiredLoadInputMode) {
+      onChangeLoadInputMode(requiredLoadInputMode);
+    }
+    previousSectionRef.current = activeSection;
+  }, [activeSection, loadInputMode, onChangeLoadInputMode, requiredLoadInputMode]);
+
+  useEffect(() => {
+    if (hasInstanceMassOverrideEnabled && loadInputMode !== requiredLoadInputMode) {
+      onChangeLoadInputMode(requiredLoadInputMode);
+    }
+  }, [hasInstanceMassOverrideEnabled, loadInputMode, onChangeLoadInputMode, requiredLoadInputMode]);
 
   const importedTargetSummary = useMemo(() => {
     if (!hasImportedConfig) {
@@ -1638,7 +1729,7 @@ export function WorkbenchPage({
     setLastChangedPath("vehicle_config.cars");
     onChangeCarControllerRows(
       carControllerRows.map((row, rowIndex) =>
-        rowIndex === index ? { name: `${type}_${index + 1}`, type } : row
+        rowIndex === index ? { ...row, name: `${type}_${index + 1}`, type } : row
       )
     );
   };
@@ -1648,7 +1739,101 @@ export function WorkbenchPage({
     setLastChangedPath("vehicle_config.bogies");
     onChangeBogieControllerRows(
       bogieControllerRows.map((row, rowIndex) =>
-        rowIndex === index ? { name: `${type}_${index + 1}`, type } : row
+        rowIndex === index ? { ...row, name: `${type}_${index + 1}`, type } : row
+      )
+    );
+  };
+
+  const updateCarControllerDisplayName = (index: number, displayName: string): void => {
+    onDirtyChange(true);
+    setLastChangedPath("vehicle_config.cars");
+    onChangeCarControllerRows(
+      carControllerRows.map((row, rowIndex) => (rowIndex === index ? { ...row, displayName } : row))
+    );
+  };
+
+  const updateBogieControllerDisplayName = (index: number, displayName: string): void => {
+    onDirtyChange(true);
+    setLastChangedPath("vehicle_config.bogies");
+    onChangeBogieControllerRows(
+      bogieControllerRows.map((row, rowIndex) => (rowIndex === index ? { ...row, displayName } : row))
+    );
+  };
+
+  const toggleCarMassStaticOverride = (index: number, enabled: boolean): void => {
+    onDirtyChange(true);
+    setLastChangedPath("vehicle_config.cars");
+    onChangeCarControllerRows(
+      carControllerRows.map((row, rowIndex) =>
+        rowIndex === index
+          ? {
+              ...row,
+              massStaticOverride: enabled ? row.massStaticOverride ?? { AW0: "", AW2: "", AW3: "" } : null,
+            }
+          : row
+      )
+    );
+  };
+
+  const toggleBogieMassStaticOverride = (index: number, enabled: boolean): void => {
+    onDirtyChange(true);
+    setLastChangedPath("vehicle_config.bogies");
+    onChangeBogieControllerRows(
+      bogieControllerRows.map((row, rowIndex) =>
+        rowIndex === index
+          ? {
+              ...row,
+              massStaticOverride: enabled ? row.massStaticOverride ?? { AW0: "", AW2: "", AW3: "" } : null,
+            }
+          : row
+      )
+    );
+  };
+
+  const updateCarMassStaticOverrideValue = (
+    index: number,
+    loadGroup: keyof MassStaticOverrideDraft,
+    value: string
+  ): void => {
+    onDirtyChange(true);
+    setLastChangedPath("vehicle_config.cars");
+    onChangeCarControllerRows(
+      carControllerRows.map((row, rowIndex) =>
+        rowIndex === index
+          ? {
+              ...row,
+              massStaticOverride: {
+                AW0: row.massStaticOverride?.AW0 ?? "",
+                AW2: row.massStaticOverride?.AW2 ?? "",
+                AW3: row.massStaticOverride?.AW3 ?? "",
+                [loadGroup]: value,
+              },
+            }
+          : row
+      )
+    );
+  };
+
+  const updateBogieMassStaticOverrideValue = (
+    index: number,
+    loadGroup: keyof MassStaticOverrideDraft,
+    value: string
+  ): void => {
+    onDirtyChange(true);
+    setLastChangedPath("vehicle_config.bogies");
+    onChangeBogieControllerRows(
+      bogieControllerRows.map((row, rowIndex) =>
+        rowIndex === index
+          ? {
+              ...row,
+              massStaticOverride: {
+                AW0: row.massStaticOverride?.AW0 ?? "",
+                AW2: row.massStaticOverride?.AW2 ?? "",
+                AW3: row.massStaticOverride?.AW3 ?? "",
+                [loadGroup]: value,
+              },
+            }
+          : row
       )
     );
   };
@@ -2179,6 +2364,11 @@ export function WorkbenchPage({
                             value={row.name}
                             onChange={(value) => updateCarControllerName(index, value)}
                           />
+                          <FieldBlock
+                            label={`显示名称 ${index + 1}`}
+                            value={row.displayName ?? ""}
+                            onChange={(value) => updateCarControllerDisplayName(index, value)}
+                          />
                           <div>
                             <strong style={{ fontSize: "14px" }}>车辆类型</strong>
                             <div style={{ display: "flex", gap: "10px", flexWrap: "wrap", marginTop: "8px" }}>
@@ -2194,6 +2384,11 @@ export function WorkbenchPage({
                               />
                             </div>
                           </div>
+                          <CheckboxToggle
+                            label={`实例 ${index + 1} 启用独立称重`}
+                            checked={row.massStaticOverride !== null && row.massStaticOverride !== undefined}
+                            onChange={(checked) => toggleCarMassStaticOverride(index, checked)}
+                          />
                         </div>
                       ))
                     : bogieControllerRows.map((row, index) => (
@@ -2214,6 +2409,11 @@ export function WorkbenchPage({
                             value={row.name}
                             onChange={(value) => updateBogieControllerName(index, value)}
                           />
+                          <FieldBlock
+                            label={`显示名称 ${index + 1}`}
+                            value={row.displayName ?? ""}
+                            onChange={(value) => updateBogieControllerDisplayName(index, value)}
+                          />
                           <div>
                             <strong style={{ fontSize: "14px" }}>转向架类型</strong>
                             <div style={{ display: "flex", gap: "10px", flexWrap: "wrap", marginTop: "8px" }}>
@@ -2229,6 +2429,11 @@ export function WorkbenchPage({
                               />
                             </div>
                           </div>
+                          <CheckboxToggle
+                            label={`实例 ${index + 1} 启用独立称重`}
+                            checked={row.massStaticOverride !== null && row.massStaticOverride !== undefined}
+                            onChange={(checked) => toggleBogieMassStaticOverride(index, checked)}
+                          />
                         </div>
                       ))}
                 </div>
@@ -2255,76 +2460,174 @@ export function WorkbenchPage({
                   <TogglePill
                     label="按整车录入（推荐）"
                     active={loadInputMode === "car"}
-                    onClick={() => onChangeLoadInputMode("car")}
+                    onClick={() => {
+                      if (!hasInstanceMassOverrideEnabled) {
+                        onChangeLoadInputMode("car");
+                      }
+                    }}
                   />
                   <TogglePill
                     label="按转向架录入"
                     active={loadInputMode === "bogie"}
-                    onClick={() => onChangeLoadInputMode("bogie")}
+                    onClick={() => {
+                      if (!hasInstanceMassOverrideEnabled) {
+                        onChangeLoadInputMode("bogie");
+                      }
+                    }}
                   />
                 </div>
+                {hasInstanceMassOverrideEnabled ? (
+                  <p style={{ margin: "0 0 16px", color: "#c64532", lineHeight: 1.6 }}>
+                    已启用独立称重实例，当前项目锁定为
+                    {requiredLoadInputMode === "car" ? "按整车录入" : "按转向架录入"}口径。
+                  </p>
+                ) : null}
                 <div style={{ display: "grid", gap: "12px" }}>
-                  <FieldBlock
-                    label={`AW0 / ${loadInputMode === "car" ? "动车称重（整车）" : "动架称重"}`}
-                    labelContent={
-                      loadInputMode === "car"
-                        ? renderLoadRoleLabel("AW0 / ", "动车", "称重（整车）")
-                        : renderLoadRoleLabel("AW0 / ", "动架", "称重")
-                    }
-                    value={massAw0PoweredValue}
-                    onChange={setMassAw0PoweredValue}
-                  />
-                  <FieldBlock
-                    label={`AW0 / ${loadInputMode === "car" ? "拖车称重（整车）" : "拖架称重"}`}
-                    labelContent={
-                      loadInputMode === "car"
-                        ? renderLoadRoleLabel("AW0 / ", "拖车", "称重（整车）")
-                        : renderLoadRoleLabel("AW0 / ", "拖架", "称重")
-                    }
-                    value={massAw0TrailerValue}
-                    onChange={setMassAw0TrailerValue}
-                  />
-                  <FieldBlock
-                    label={`AW2 / ${loadInputMode === "car" ? "动车称重（整车）" : "动架称重"}`}
-                    labelContent={
-                      loadInputMode === "car"
-                        ? renderLoadRoleLabel("AW2 / ", "动车", "称重（整车）")
-                        : renderLoadRoleLabel("AW2 / ", "动架", "称重")
-                    }
-                    value={massAw2PoweredValue}
-                    onChange={setMassAw2PoweredValue}
-                  />
-                  <FieldBlock
-                    label={`AW2 / ${loadInputMode === "car" ? "拖车称重（整车）" : "拖架称重"}`}
-                    labelContent={
-                      loadInputMode === "car"
-                        ? renderLoadRoleLabel("AW2 / ", "拖车", "称重（整车）")
-                        : renderLoadRoleLabel("AW2 / ", "拖架", "称重")
-                    }
-                    value={massAw2TrailerValue}
-                    onChange={setMassAw2TrailerValue}
-                  />
-                  <FieldBlock
-                    label={`AW3 / ${loadInputMode === "car" ? "动车称重（整车）" : "动架称重"}`}
-                    labelContent={
-                      loadInputMode === "car"
-                        ? renderLoadRoleLabel("AW3 / ", "动车", "称重（整车）")
-                        : renderLoadRoleLabel("AW3 / ", "动架", "称重")
-                    }
-                    value={massAw3PoweredValue}
-                    onChange={setMassAw3PoweredValue}
-                  />
-                  <FieldBlock
-                    label={`AW3 / ${loadInputMode === "car" ? "拖车称重（整车）" : "拖架称重"}`}
-                    labelContent={
-                      loadInputMode === "car"
-                        ? renderLoadRoleLabel("AW3 / ", "拖车", "称重（整车）")
-                        : renderLoadRoleLabel("AW3 / ", "拖架", "称重")
-                    }
-                    value={massAw3TrailerValue}
-                    onChange={setMassAw3TrailerValue}
-                  />
+                  <div style={{ border: "1px solid #d5c9ba", borderRadius: "14px", padding: "14px", background: "#fff" }}>
+                    <h4 style={{ margin: "0 0 10px" }}>
+                      {loadInputMode === "car" ? "拖车称重（整车）" : "拖架称重"}
+                    </h4>
+                    <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: "12px" }}>
+                      <FieldBlock
+                        label="AW0 称重 (ton)"
+                        value={massAw0TrailerValue}
+                        onChange={setMassAw0TrailerValue}
+                      />
+                      <FieldBlock
+                        label="AW2 称重 (ton)"
+                        value={massAw2TrailerValue}
+                        onChange={setMassAw2TrailerValue}
+                      />
+                      <FieldBlock
+                        label="AW3 称重 (ton)"
+                        value={massAw3TrailerValue}
+                        onChange={setMassAw3TrailerValue}
+                      />
+                    </div>
+                  </div>
+                  <div style={{ border: "1px solid #d5c9ba", borderRadius: "14px", padding: "14px", background: "#fff" }}>
+                    <h4 style={{ margin: "0 0 10px" }}>
+                      {loadInputMode === "car" ? "动车称重（整车）" : "动架称重"}
+                    </h4>
+                    <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: "12px" }}>
+                      <FieldBlock
+                        label="AW0 称重 (ton)"
+                        value={massAw0PoweredValue}
+                        onChange={setMassAw0PoweredValue}
+                      />
+                      <FieldBlock
+                        label="AW2 称重 (ton)"
+                        value={massAw2PoweredValue}
+                        onChange={setMassAw2PoweredValue}
+                      />
+                      <FieldBlock
+                        label="AW3 称重 (ton)"
+                        value={massAw3PoweredValue}
+                        onChange={setMassAw3PoweredValue}
+                      />
+                    </div>
+                  </div>
                 </div>
+                {((): ReactNode => {
+                  const overrides =
+                    effectiveControllerConfigType === "car"
+                      ? carControllerRows
+                          .map((row, index) => ({ row, index }))
+                          .filter((item) => item.row.massStaticOverride !== null && item.row.massStaticOverride !== undefined)
+                      : bogieControllerRows
+                          .map((row, index) => ({ row, index }))
+                          .filter((item) => item.row.massStaticOverride !== null && item.row.massStaticOverride !== undefined);
+                  if (overrides.length === 0) {
+                    return null;
+                  }
+
+                  const renderOverrideRows = (
+                    title: string,
+                    items: Array<{ row: CarControllerRow | BogieControllerRow; index: number }>
+                  ): ReactNode => {
+                    if (items.length === 0) {
+                      return null;
+                    }
+                    return (
+                      <div style={{ border: "1px solid #d5c9ba", borderRadius: "14px", padding: "14px", background: "#fff" }}>
+                        <h4 style={{ margin: "0 0 10px" }}>{title}</h4>
+                        <div style={{ display: "grid", gap: "12px" }}>
+                          {items.map(({ row, index }) => (
+                            <div
+                              key={`mass-override-${row.name}-${index}`}
+                              style={{ border: "1px solid #eadbcc", borderRadius: "12px", padding: "12px" }}
+                            >
+                              <strong>{row.displayName?.trim() ? row.displayName : row.name}</strong>
+                              <div
+                                style={{
+                                  marginTop: "10px",
+                                  display: "grid",
+                                  gridTemplateColumns: "repeat(3, 1fr)",
+                                  gap: "12px",
+                                }}
+                              >
+                                <FieldBlock
+                                  label="AW0 独立称重"
+                                  value={row.massStaticOverride?.AW0 ?? ""}
+                                  onChange={(value) =>
+                                    effectiveControllerConfigType === "car"
+                                      ? updateCarMassStaticOverrideValue(index, "AW0", value)
+                                      : updateBogieMassStaticOverrideValue(index, "AW0", value)
+                                  }
+                                  inputMode="decimal"
+                                />
+                                <FieldBlock
+                                  label="AW2 独立称重"
+                                  value={row.massStaticOverride?.AW2 ?? ""}
+                                  onChange={(value) =>
+                                    effectiveControllerConfigType === "car"
+                                      ? updateCarMassStaticOverrideValue(index, "AW2", value)
+                                      : updateBogieMassStaticOverrideValue(index, "AW2", value)
+                                  }
+                                  inputMode="decimal"
+                                />
+                                <FieldBlock
+                                  label="AW3 独立称重"
+                                  value={row.massStaticOverride?.AW3 ?? ""}
+                                  onChange={(value) =>
+                                    effectiveControllerConfigType === "car"
+                                      ? updateCarMassStaticOverrideValue(index, "AW3", value)
+                                      : updateBogieMassStaticOverrideValue(index, "AW3", value)
+                                  }
+                                  inputMode="decimal"
+                                />
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    );
+                  };
+
+                  const trailer = overrides.filter((item) =>
+                    effectiveControllerConfigType === "car"
+                      ? item.row.type === "trailer_car"
+                      : item.row.type === "trailer_bogie"
+                  );
+                  const powered = overrides.filter((item) =>
+                    effectiveControllerConfigType === "car"
+                      ? item.row.type === "powered_car"
+                      : item.row.type === "powered_bogie"
+                  );
+                  return (
+                    <div style={{ marginTop: "16px", display: "grid", gap: "12px" }}>
+                      <h4 style={{ margin: 0 }}>实例独立称重录入</h4>
+                      {renderOverrideRows(
+                        effectiveControllerConfigType === "car" ? "拖车独立称重" : "拖架独立称重",
+                        trailer
+                      )}
+                      {renderOverrideRows(
+                        effectiveControllerConfigType === "car" ? "动车独立称重" : "动架独立称重",
+                        powered
+                      )}
+                    </div>
+                  );
+                })()}
               </section>
 
               <section style={panelStyle}>
@@ -2772,17 +3075,25 @@ export function WorkbenchPage({
                   secondPointLoadGroup={serviceCalibrationMode === "aw3_aw0" ? "AW0" : "AW2"}
                   firstPointBrakeType={servicePointOneBrakeType}
                   secondPointBrakeType={servicePointTwoBrakeType}
+                  brakeTypeOptions={
+                    fastBrakeEnabled
+                      ? [
+                          { label: "常用", value: "FSB" },
+                          { label: "快速", value: "FB" },
+                        ]
+                      : [{ label: "常用", value: "FSB" }]
+                  }
                   firstPointKAriaLabel="常用试验点1 k_for_code"
                   secondPointKAriaLabel="常用试验点2 k_for_code"
                   firstPointKValue={serviceCalibrationPointOneKValue}
                   secondPointKValue={serviceCalibrationPointTwoKValue}
                   onChangeFirstPointBrakeType={(value) => {
-                    setServicePointOneBrakeType(value === "FB" ? "FB" : "FSB");
+                    setServicePointOneBrakeType(fastBrakeEnabled && value === "FB" ? "FB" : "FSB");
                     onDirtyChange(true);
                     setLastChangedPath("pressure_calibration.service_brake.points[0].brake_type");
                   }}
                   onChangeSecondPointBrakeType={(value) => {
-                    setServicePointTwoBrakeType(value === "FB" ? "FB" : "FSB");
+                    setServicePointTwoBrakeType(fastBrakeEnabled && value === "FB" ? "FB" : "FSB");
                     onDirtyChange(true);
                     setLastChangedPath("pressure_calibration.service_brake.points[1].brake_type");
                   }}

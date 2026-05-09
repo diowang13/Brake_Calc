@@ -5,11 +5,7 @@ from __future__ import annotations
 import logging
 
 from brake_calc.contracts.context import Context
-from brake_calc.contracts.inputs import (
-    ExplicitLinearAirSpringConfig,
-    FittedAirSpringConfig,
-    Inputs,
-)
+from brake_calc.contracts.inputs import ExplicitLinearAirSpringConfig, FittedAirSpringConfig, Inputs
 from brake_calc.domain.mass import (
     calc_air_spring_pressure,
     calc_dynamic_mass,
@@ -21,16 +17,28 @@ from brake_calc.errors import InputValidationError
 logger = logging.getLogger(__name__)
 
 
-def _iter_controllers(inputs: Inputs) -> list[tuple[str, str]]:
-    """返回控制器名称和对应的转向架类型。"""
+def _iter_controllers(inputs: Inputs) -> list[tuple[str, str, dict[str, float] | None]]:
+    """返回控制器名称、对应的转向架类型和实例级静态质量覆盖。"""
     if inputs.controller_type == "bogie":
         assert inputs.vehicle_config.bogies is not None
-        return [(bogie.name, bogie.bogie_type) for bogie in inputs.vehicle_config.bogies]
+        return [
+            (
+                bogie.name,
+                bogie.bogie_type,
+                (
+                    None
+                    if bogie.mass_static_override is None
+                    else bogie.mass_static_override.model_dump()
+                ),
+            )
+            for bogie in inputs.vehicle_config.bogies
+        ]
     assert inputs.vehicle_config.cars is not None
     return [
         (
             car.name,
             "powered_bogie" if car.car_type == "powered_car" else "trailer_bogie",
+            None if car.mass_static_override is None else car.mass_static_override.model_dump(),
         )
         for car in inputs.vehicle_config.cars
     ]
@@ -68,9 +76,14 @@ def run(ctx: Context) -> Context:
     for load_group in inputs.load_groups:
         per_controller: dict[str, dict[str, float]] = {}
         pressure_per_controller: dict[str, float] = {}
-        for controller_name, bogie_type in _iter_controllers(inputs):
+        for controller_name, bogie_type, mass_static_override in _iter_controllers(inputs):
             params = getattr(inputs.mass_params, bogie_type)
-            static_mass = params.mass_static[load_group] * inputs.n_bogies_by_controller
+            source_mass_static = (
+                mass_static_override[load_group]
+                if mass_static_override is not None
+                else params.mass_static[load_group] * inputs.n_bogies_by_controller
+            )
+            static_mass = source_mass_static
             sprung_mass_ton = static_mass - (params.bogie_weight * inputs.n_bogies_by_controller)
             fit = air_spring_fit_by_bogie_type[bogie_type]
             pressure_per_controller[controller_name] = calc_air_spring_pressure(
@@ -83,7 +96,11 @@ def run(ctx: Context) -> Context:
                 "mass_static": static_mass,
                 "mass_dynamic": calc_dynamic_mass(
                     static_mass=static_mass,
-                    aw0_static_mass=params.mass_static["AW0"] * inputs.n_bogies_by_controller,
+                    aw0_static_mass=(
+                        mass_static_override["AW0"]
+                        if mass_static_override is not None
+                        else params.mass_static["AW0"] * inputs.n_bogies_by_controller
+                    ),
                     rotational_mass_factor=rotational_mass_factor_for_bogie_type(bogie_type),
                 ),
             }

@@ -128,7 +128,9 @@ class BogieConfig(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     name: str = Field(..., description="单位: -")
+    display_name: str | None = Field(default=None, description="单位: -")
     bogie_type: BogieType = Field(..., description="单位: -")
+    mass_static_override: "MassStaticOverride | None" = Field(default=None, description="单位: ton")
 
 
 class CarConfig(BaseModel):
@@ -137,7 +139,9 @@ class CarConfig(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     name: str = Field(..., description="单位: -")
+    display_name: str | None = Field(default=None, description="单位: -")
     car_type: CarType = Field(..., description="单位: -")
+    mass_static_override: "MassStaticOverride | None" = Field(default=None, description="单位: ton")
 
 
 class VehicleConfig(BaseModel):
@@ -191,6 +195,23 @@ class MassParams(BaseModel):
 
     powered_bogie: BogieTypeMassParams = Field(..., description="单位: -")
     trailer_bogie: BogieTypeMassParams = Field(..., description="单位: -")
+
+
+class MassStaticOverride(BaseModel):
+    """实例级静态质量覆盖。"""
+
+    model_config = ConfigDict(extra="forbid")
+
+    AW0: float = Field(..., description="单位: ton")
+    AW2: float = Field(..., description="单位: ton")
+    AW3: float = Field(..., description="单位: ton")
+
+    @model_validator(mode="after")
+    def validate_values(self) -> "MassStaticOverride":
+        """校验实例级静态质量覆盖。"""
+        if self.AW0 <= 0 or self.AW2 <= 0 or self.AW3 <= 0:
+            raise ValueError("mass_static_override values must be > 0")
+        return self
 
 
 class AirSpringPoint(BaseModel):

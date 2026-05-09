@@ -58,13 +58,17 @@ function parseCount(value: string, fallback: number): number {
 function generateCarRows(poweredCount: number, trailerCount: number): CarControllerRow[] {
   const trailerRows = Array.from({ length: trailerCount }, (_, index) => ({
     name: `trailer_car_${index + 1}`,
-    type: "trailer_car" as const
+    type: "trailer_car" as const,
+    displayName: "",
+    massStaticOverride: null,
   }));
   const poweredRows = Array.from({ length: poweredCount }, (_, index) => {
     const controllerIndex = trailerCount + index + 1;
     return {
       name: `powered_car_${controllerIndex}`,
-      type: "powered_car" as const
+      type: "powered_car" as const,
+      displayName: "",
+      massStaticOverride: null,
     };
   });
 
@@ -74,13 +78,17 @@ function generateCarRows(poweredCount: number, trailerCount: number): CarControl
 function generateBogieRows(poweredCarCount: number, trailerCarCount: number): BogieControllerRow[] {
   const trailerRows = Array.from({ length: trailerCarCount * 2 }, (_, index) => ({
     name: `trailer_bogie_${index + 1}`,
-    type: "trailer_bogie" as const
+    type: "trailer_bogie" as const,
+    displayName: "",
+    massStaticOverride: null,
   }));
   const poweredRows = Array.from({ length: poweredCarCount * 2 }, (_, index) => {
     const controllerIndex = trailerRows.length + index + 1;
     return {
       name: `powered_bogie_${controllerIndex}`,
-      type: "powered_bogie" as const
+      type: "powered_bogie" as const,
+      displayName: "",
+      massStaticOverride: null,
     };
   });
 
@@ -98,12 +106,16 @@ function generateMixedBogieRows(
   Array.from({ length: mixedCarCount }).forEach(() => {
     rows.push({
       name: `trailer_bogie_${controllerIndex}`,
-      type: "trailer_bogie"
+      type: "trailer_bogie",
+      displayName: "",
+      massStaticOverride: null,
     });
     controllerIndex += 1;
     rows.push({
       name: `powered_bogie_${controllerIndex}`,
-      type: "powered_bogie"
+      type: "powered_bogie",
+      displayName: "",
+      massStaticOverride: null,
     });
     controllerIndex += 1;
   });
@@ -111,7 +123,9 @@ function generateMixedBogieRows(
   Array.from({ length: trailerCarCount * 2 }).forEach(() => {
     rows.push({
       name: `trailer_bogie_${controllerIndex}`,
-      type: "trailer_bogie"
+      type: "trailer_bogie",
+      displayName: "",
+      massStaticOverride: null,
     });
     controllerIndex += 1;
   });
@@ -119,7 +133,9 @@ function generateMixedBogieRows(
   Array.from({ length: poweredCarCount * 2 }).forEach(() => {
     rows.push({
       name: `powered_bogie_${controllerIndex}`,
-      type: "powered_bogie"
+      type: "powered_bogie",
+      displayName: "",
+      massStaticOverride: null,
     });
     controllerIndex += 1;
   });
@@ -131,11 +147,15 @@ function getDefaultCarRows(): CarControllerRow[] {
   return [
     {
       name: "trailer_car_1",
-      type: "trailer_car" as const
+      type: "trailer_car" as const,
+      displayName: "",
+      massStaticOverride: null,
     },
     {
       name: "powered_car_2",
-      type: "powered_car" as const
+      type: "powered_car" as const,
+      displayName: "",
+      massStaticOverride: null,
     }
   ];
 }
@@ -144,19 +164,27 @@ function getDefaultBogieRows(): BogieControllerRow[] {
   return [
     {
       name: "trailer_bogie_1",
-      type: "trailer_bogie" as const
+      type: "trailer_bogie" as const,
+      displayName: "",
+      massStaticOverride: null,
     },
     {
       name: "trailer_bogie_2",
-      type: "trailer_bogie" as const
+      type: "trailer_bogie" as const,
+      displayName: "",
+      massStaticOverride: null,
     },
     {
       name: "powered_bogie_3",
-      type: "powered_bogie" as const
+      type: "powered_bogie" as const,
+      displayName: "",
+      massStaticOverride: null,
     },
     {
       name: "powered_bogie_4",
-      type: "powered_bogie" as const
+      type: "powered_bogie" as const,
+      displayName: "",
+      massStaticOverride: null,
     }
   ];
 }
@@ -298,7 +326,7 @@ export function App(): ReactElement {
     setAppDialog({ kind: "confirm", title, message, onConfirm });
   };
 
-  useEffect(() => {
+  const refreshProjects = (): void => {
     listProjects()
       .then((result) => {
         setProjects(result.items);
@@ -306,6 +334,10 @@ export function App(): ReactElement {
       .catch(() => {
         setProjects([]);
       });
+  };
+
+  useEffect(() => {
+    refreshProjects();
   }, []);
 
   const hydrateRuntimeFromLoadedConfig = (loaded: LoadConfigResult): void => {
@@ -349,15 +381,30 @@ export function App(): ReactElement {
     if (cars !== null) {
       const rows = cars
         .map((item) => toRecord(item))
-        .filter((item) => item !== null)
-        .map((item) => ({
-          name: String(item.name ?? ""),
-          type:
-            item.car_type === "powered_car" || item.car_type === "trailer_car"
-              ? item.car_type
-              : null,
-        }))
-        .filter((item): item is CarControllerRow => item.type !== null);
+        .flatMap((item): CarControllerRow[] => {
+          if (item === null) {
+            return [];
+          }
+          if (item.car_type !== "powered_car" && item.car_type !== "trailer_car") {
+            return [];
+          }
+          const override = toRecord(item.mass_static_override);
+          return [
+            {
+              name: String(item.name ?? ""),
+              displayName: typeof item.display_name === "string" ? item.display_name : "",
+              type: item.car_type,
+              massStaticOverride:
+                override === null
+                  ? null
+                  : {
+                      AW0: typeof override.AW0 === "number" ? String(override.AW0) : "",
+                      AW2: typeof override.AW2 === "number" ? String(override.AW2) : "",
+                      AW3: typeof override.AW3 === "number" ? String(override.AW3) : "",
+                    },
+            },
+          ];
+        });
       if (rows.length > 0) {
         setCarControllerRows(rows);
       }
@@ -365,15 +412,30 @@ export function App(): ReactElement {
     if (bogies !== null) {
       const rows = bogies
         .map((item) => toRecord(item))
-        .filter((item) => item !== null)
-        .map((item) => ({
-          name: String(item.name ?? ""),
-          type:
-            item.bogie_type === "powered_bogie" || item.bogie_type === "trailer_bogie"
-              ? item.bogie_type
-              : null,
-        }))
-        .filter((item): item is BogieControllerRow => item.type !== null);
+        .flatMap((item): BogieControllerRow[] => {
+          if (item === null) {
+            return [];
+          }
+          if (item.bogie_type !== "powered_bogie" && item.bogie_type !== "trailer_bogie") {
+            return [];
+          }
+          const override = toRecord(item.mass_static_override);
+          return [
+            {
+              name: String(item.name ?? ""),
+              displayName: typeof item.display_name === "string" ? item.display_name : "",
+              type: item.bogie_type,
+              massStaticOverride:
+                override === null
+                  ? null
+                  : {
+                      AW0: typeof override.AW0 === "number" ? String(override.AW0) : "",
+                      AW2: typeof override.AW2 === "number" ? String(override.AW2) : "",
+                      AW3: typeof override.AW3 === "number" ? String(override.AW3) : "",
+                    },
+            },
+          ];
+        });
       if (rows.length > 0) {
         setBogieControllerRows(rows);
       }
@@ -899,6 +961,9 @@ export function App(): ReactElement {
     if (activeScreen === "import-summary" && (screen === "home" || screen === "wizard")) {
       showConfirmDialog("放弃导入确认", "当前导入尚未确认，离开将放弃导入。确认离开吗？", () => {
         setAppDialog(null);
+        if (screen === "home") {
+          refreshProjects();
+        }
         setActiveScreen(screen);
       });
       return;
@@ -909,6 +974,7 @@ export function App(): ReactElement {
         setHasUnsavedWorkbenchChanges(false);
         if (activeScreen === "workbench" && screen === "home") {
           setRequireReloadForWorkbench(true);
+          refreshProjects();
         }
         setActiveScreen(screen);
       });
@@ -916,6 +982,10 @@ export function App(): ReactElement {
     }
     if (activeScreen === "workbench" && screen === "home") {
       setRequireReloadForWorkbench(true);
+      refreshProjects();
+    }
+    if (screen === "home" && activeScreen !== "workbench") {
+      refreshProjects();
     }
     setActiveScreen(screen);
   };
@@ -1080,6 +1150,24 @@ export function App(): ReactElement {
 
     if (activeScreen === "result") {
       const runtimeParkingConfig = toRecord(runtimeFormState?.parking_brake_check);
+      const runtimeVehicleConfig = toRecord(runtimeFormState?.vehicle_config);
+      const controllerDisplayNames = (() => {
+        const items = [
+          ...(Array.isArray(runtimeVehicleConfig?.bogies) ? runtimeVehicleConfig.bogies : []),
+          ...(Array.isArray(runtimeVehicleConfig?.cars) ? runtimeVehicleConfig.cars : []),
+        ];
+        return Object.fromEntries(
+          items
+            .map((item) => toRecord(item))
+            .filter((item) => item !== null)
+            .map((item) => [
+              String(item.name ?? ""),
+              typeof item.display_name === "string" && item.display_name.trim().length > 0
+                ? item.display_name
+                : String(item.name ?? ""),
+            ])
+        );
+      })();
       const runtimeRequiredSafetyMargin =
         typeof runtimeParkingConfig?.required_safety_margin === "number"
           ? runtimeParkingConfig.required_safety_margin
@@ -1094,6 +1182,7 @@ export function App(): ReactElement {
               ? bogieControllerRows.map((item) => item.name)
               : carControllerRows.map((item) => item.name)
           }
+          controllerDisplayNames={controllerDisplayNames}
           runtimeStatus={runtimeStatus}
           warnings={runtimeWarnings}
           autoAdjustments={runtimeAutoAdjustments}

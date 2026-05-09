@@ -102,27 +102,26 @@ function getCalibrationBcp0(summary: Record<string, unknown> | null): number | n
   return typeof bcp0 === "number" ? bcp0 : null;
 }
 
-function getPressureConversionFirstEntry(
-  pressureConversion: Record<
+function getInitialPressureConversionEntry(
+  initialPressureConversion: Record<
     string,
-    Record<string, Record<string, { k_used_for_code?: number; BCP0_used_for_code?: number }>>
+    {
+      k_initial_for_code?: number;
+      BCP0_initial_for_code?: number;
+    }
   >,
   brakeType: string
-): { k_used_for_code: number | null; BCP0_used_for_code: number | null } {
-  const perLoad = pressureConversion[brakeType];
-  if (perLoad === undefined) {
-    return { k_used_for_code: null, BCP0_used_for_code: null };
+): { k_initial_for_code: number | null; BCP0_initial_for_code: number | null } {
+  const value = initialPressureConversion[brakeType];
+  if (value === undefined) {
+    return { k_initial_for_code: null, BCP0_initial_for_code: null };
   }
-  for (const perController of Object.values(perLoad)) {
-    for (const value of Object.values(perController)) {
-      return {
-        k_used_for_code: typeof value.k_used_for_code === "number" ? value.k_used_for_code : null,
-        BCP0_used_for_code:
-          typeof value.BCP0_used_for_code === "number" ? value.BCP0_used_for_code : null,
-      };
-    }
-  }
-  return { k_used_for_code: null, BCP0_used_for_code: null };
+  return {
+    k_initial_for_code:
+      typeof value.k_initial_for_code === "number" ? value.k_initial_for_code : null,
+    BCP0_initial_for_code:
+      typeof value.BCP0_initial_for_code === "number" ? value.BCP0_initial_for_code : null,
+  };
 }
 
 function getCurveKRange(summary: Record<string, unknown> | null): string {
@@ -448,6 +447,7 @@ export function ResultPage({
   requiredSafetyMargin,
   controllerType,
   controllerOrder,
+  controllerDisplayNames,
   runtimeStatus,
   warnings,
   autoAdjustments,
@@ -459,6 +459,7 @@ export function ResultPage({
   requiredSafetyMargin: number;
   controllerType: "car" | "bogie";
   controllerOrder: string[];
+  controllerDisplayNames: Record<string, string>;
   runtimeStatus: "idle" | "succeeded" | "failed";
   warnings: Array<{ code?: string; message?: string }>;
   autoAdjustments: Array<{ code?: string; message?: string }>;
@@ -527,6 +528,22 @@ export function ResultPage({
   const loadSummary = report.load_summary ?? {};
   const pressureByLoad = report.controller_pressure_standards ?? {};
   const massDynFormulaByBogieType = report.mass_dyn_formula_by_bogie_type ?? {};
+  const dynamicMassFormulaByController = (report.controller_code_params?.dynamic_mass_formula_by_controller ??
+    {}) as Record<
+    string,
+    {
+      bogie_type?: string;
+      k?: number;
+      b?: number;
+      aw0?: { spring_kPa?: number; mass_dyn_t?: number };
+      aw3?: { spring_kPa?: number; mass_dyn_t?: number };
+      formula?: string;
+    }
+  >;
+  const getControllerLabel = (controller: string): string =>
+    controllerDisplayNames[controller] && controllerDisplayNames[controller] !== controller
+      ? `${controllerDisplayNames[controller]} (${controller})`
+      : controller;
   const pressureBrakeTypeSet = new Set<string>();
   Object.values(pressureByLoad).forEach((perBrakeType) => {
     Object.keys(perBrakeType).forEach((brakeType) => pressureBrakeTypeSet.add(brakeType));
@@ -605,8 +622,8 @@ export function ResultPage({
           loadGroupSortKey(left.load) - loadGroupSortKey(right.load) || left.load.localeCompare(right.load)
       ),
     }));
-  const pressureConversion = (report.controller_code_params?.pressure_conversion ??
-    {}) as Record<string, Record<string, Record<string, { k_used_for_code?: number; BCP0_used_for_code?: number }>>>;
+  const initialPressureConversion = (report.controller_code_params?.pressure_conversion_initial ??
+    {}) as Record<string, { k_initial_for_code?: number; BCP0_initial_for_code?: number }>;
   const calibrationSummary = (report.calibration_summary ?? {}) as Record<string, unknown>;
   const serviceSummary =
     typeof calibrationSummary.service_brake === "object" && calibrationSummary.service_brake !== null
@@ -622,8 +639,8 @@ export function ResultPage({
   const emergencyCalibrationBcp0ForCode = getCalibrationBcp0ForCode(emergencySummary);
   const serviceCalibrationBcp0 = getCalibrationBcp0(serviceSummary);
   const emergencyCalibrationBcp0 = getCalibrationBcp0(emergencySummary);
-  const servicePressureBase = getPressureConversionFirstEntry(pressureConversion, "FSB");
-  const emergencyPressureBase = getPressureConversionFirstEntry(pressureConversion, "EB");
+  const serviceInitialPressure = getInitialPressureConversionEntry(initialPressureConversion, "FSB");
+  const emergencyInitialPressure = getInitialPressureConversionEntry(initialPressureConversion, "EB");
   const allCurvePoints = [...getCalibrationCurvePoints(serviceSummary), ...getCalibrationCurvePoints(emergencySummary)];
   const sharedDomain =
     allCurvePoints.length >= 2
@@ -643,26 +660,41 @@ export function ResultPage({
   const hasCalibrationSummary = serviceSummary !== null || emergencySummary !== null;
   const isParkingEnabled = parkingReference !== undefined && parkingReference !== null;
   const massFormulaCards = [
-    { key: "trailer_bogie", label: "拖架" },
-    { key: "powered_bogie", label: "动架" },
-  ]
-    .map(({ key, label }) => {
-      const item = massDynFormulaByBogieType[key];
-      if (item === undefined) {
-        return null;
-      }
-      return {
-        key,
-        label,
-        aw0Spring: item.aw0?.spring_kPa,
-        aw0Mass: item.aw0?.mass_dyn_t,
-        aw3Spring: item.aw3?.spring_kPa,
-        aw3Mass: item.aw3?.mass_dyn_t,
-        kValue: item.k,
-        bValue: item.b,
-      };
-    })
-    .filter((item): item is NonNullable<typeof item> => item !== null);
+    ...Object.entries(dynamicMassFormulaByController).map(([key, item]) => ({
+      key,
+      label: getControllerLabel(key),
+      aw0Spring: item.aw0?.spring_kPa,
+      aw0Mass: item.aw0?.mass_dyn_t,
+      aw3Spring: item.aw3?.spring_kPa,
+      aw3Mass: item.aw3?.mass_dyn_t,
+      kValue: item.k,
+      bValue: item.b,
+    })),
+  ];
+  const fallbackMassFormulaCards =
+    massFormulaCards.length > 0
+      ? massFormulaCards
+      : [
+          { key: "trailer_bogie", label: "拖架" },
+          { key: "powered_bogie", label: "动架" },
+        ]
+          .map(({ key, label }) => {
+            const item = massDynFormulaByBogieType[key];
+            if (item === undefined) {
+              return null;
+            }
+            return {
+              key,
+              label,
+              aw0Spring: item.aw0?.spring_kPa,
+              aw0Mass: item.aw0?.mass_dyn_t,
+              aw3Spring: item.aw3?.spring_kPa,
+              aw3Mass: item.aw3?.mass_dyn_t,
+              kValue: item.k,
+              bValue: item.b,
+            };
+          })
+          .filter((item): item is NonNullable<typeof item> => item !== null);
 
   return (
     <div style={{ display: "grid", gap: "18px" }}>
@@ -744,10 +776,10 @@ export function ResultPage({
           依据 AW0/AW3 的标准空簧压力与动态载荷，分别拟合动架与拖架的质量换算公式。
         </p>
         <div style={{ display: "grid", gap: "14px" }}>
-          {massFormulaCards.length === 0 ? (
-            <InfoSummary title="暂无数据" body="当前报告未返回按 bogie_type 的载荷拟合参数。" />
+          {fallbackMassFormulaCards.length === 0 ? (
+            <InfoSummary title="暂无数据" body="当前报告未返回动态载荷拟合参数。" />
           ) : (
-            massFormulaCards.map((item) => (
+            fallbackMassFormulaCards.map((item) => (
               <div
                 key={item.key}
                 style={{
@@ -894,7 +926,7 @@ export function ResultPage({
                           {row.load}
                         </td>
                       ) : null}
-                      <td style={rowStyle}>{row.controller}</td>
+                      <td style={rowStyle}>{getControllerLabel(row.controller)}</td>
                       <td style={rowStyle}>{row.mass}</td>
                       <td style={rowStyle}>{row.spring}</td>
                       {pressureBrakeTypes.map((brakeType) => (
@@ -939,7 +971,7 @@ export function ResultPage({
                     <tr key={`${controller}-${row.load}`}>
                       {rowIndex === 0 && controller !== "-" ? (
                         <td style={groupedTableCellStyle} rowSpan={controllerRowSpan}>
-                          {controller}
+                          {getControllerLabel(controller)}
                         </td>
                       ) : null}
                       <td style={{ ...rowStyle, ...loadToneStyle(row.load) }}>{row.load}</td>
@@ -971,32 +1003,32 @@ export function ResultPage({
               <ParameterCard
                 title="常用制动 k_for_code（原始）"
                 value={
-                  typeof servicePressureBase.k_used_for_code === "number"
-                    ? `${servicePressureBase.k_used_for_code}`
+                  typeof serviceInitialPressure.k_initial_for_code === "number"
+                    ? `${serviceInitialPressure.k_initial_for_code}`
                     : "-"
                 }
               />
               <ParameterCard
                 title="常用制动 BCP0_for_code（原始）"
                 value={
-                  typeof servicePressureBase.BCP0_used_for_code === "number"
-                    ? `${servicePressureBase.BCP0_used_for_code} kPa`
+                  typeof serviceInitialPressure.BCP0_initial_for_code === "number"
+                    ? `${serviceInitialPressure.BCP0_initial_for_code} kPa`
                     : "-"
                 }
               />
               <ParameterCard
                 title="紧急制动 k_for_code（原始）"
                 value={
-                  typeof emergencyPressureBase.k_used_for_code === "number"
-                    ? `${emergencyPressureBase.k_used_for_code}`
+                  typeof emergencyInitialPressure.k_initial_for_code === "number"
+                    ? `${emergencyInitialPressure.k_initial_for_code}`
                     : "-"
                 }
               />
               <ParameterCard
                 title="紧急制动 BCP0_for_code（原始）"
                 value={
-                  typeof emergencyPressureBase.BCP0_used_for_code === "number"
-                    ? `${emergencyPressureBase.BCP0_used_for_code} kPa`
+                  typeof emergencyInitialPressure.BCP0_initial_for_code === "number"
+                    ? `${emergencyInitialPressure.BCP0_initial_for_code} kPa`
                     : "-"
                 }
               />

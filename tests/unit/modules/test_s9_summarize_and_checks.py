@@ -67,21 +67,62 @@ def test_s9_report_includes_business_and_controller_development_outputs() -> Non
         ]["BCP0_used_for_code"]
         == 25
     )
+    assert out.report.controller_code_params["pressure_conversion_initial"]["FSB"][
+        "k_initial_for_code"
+    ] == 1077
+    assert out.report.controller_code_params["pressure_conversion_initial"]["EB"][
+        "BCP0_initial_for_code"
+    ] == 25
     assert (
         out.report.controller_code_params["dynamic_mass_formula"]["powered_bogie"][
             "expression"
         ].startswith("mass_dynamic_ton = ")
     )
-    assert out.report.mass_dyn_formula_by_bogie_type["powered_bogie"]["aw0"]["spring_kPa"] == pytest.approx(
-        out.report.load_summary["AW0"]["powered_bogie_1"]["spring_pressure"]
+    assert "dynamic_mass_formula_by_controller" in out.report.controller_code_params
+    assert (
+        out.report.controller_code_params["dynamic_mass_formula_by_controller"]["powered_bogie_1"][
+            "formula"
+        ].startswith("mass_dyn_t = ")
     )
-    assert out.report.mass_dyn_formula_by_bogie_type["powered_bogie"]["aw3"]["mass_dyn_t"] == pytest.approx(
-        out.report.load_summary["AW3"]["powered_bogie_1"]["mass_dynamic"]
+    assert (
+        out.report.mass_dyn_formula_by_bogie_type["powered_bogie"]["aw0"]["spring_kPa"]
+        == pytest.approx(out.report.load_summary["AW0"]["powered_bogie_1"]["spring_pressure"])
+    )
+    assert (
+        out.report.mass_dyn_formula_by_bogie_type["powered_bogie"]["aw3"]["mass_dyn_t"]
+        == pytest.approx(out.report.load_summary["AW3"]["powered_bogie_1"]["mass_dynamic"])
     )
     assert (
         "mass_dyn_t = " in out.report.mass_dyn_formula_by_bogie_type["powered_bogie"]["formula"]
     )
     assert out.report.calibration_summary == {}
+
+
+def test_s9_emits_dynamic_mass_formula_by_controller_when_instances_differ() -> None:
+    payload = make_valid_bogie_payload()
+    payload["vehicle_config"]["bogies"] = [
+        {
+            "name": "trailer_bogie_1",
+            "bogie_type": "trailer_bogie",
+            "mass_static_override": {"AW0": 15.8, "AW2": 22.7, "AW3": 25.6},
+        },
+        {
+            "name": "trailer_bogie_2",
+            "bogie_type": "trailer_bogie",
+            "mass_static_override": {"AW0": 15.3, "AW2": 22.2, "AW3": 25.1},
+        },
+    ]
+    payload["pressure_calibration"]["enabled"] = False
+    ctx = Context(validated_inputs=Inputs.model_validate(payload))
+    ctx = run_s8(run_s7(run_s6(run_s5(run_s4(run_s3(run_s2(ctx)))))))
+
+    out = run(ctx)
+
+    assert out.report is not None
+    formula_map = out.report.controller_code_params["dynamic_mass_formula_by_controller"]
+    assert "trailer_bogie_1" in formula_map
+    assert "trailer_bogie_2" in formula_map
+    assert formula_map["trailer_bogie_1"]["formula"] != formula_map["trailer_bogie_2"]["formula"]
 
 
 def test_s9_report_includes_calibration_summary_when_enabled() -> None:
@@ -125,8 +166,9 @@ def test_s9_calibration_summary_uses_final_adjusted_emergency_bcp0() -> None:
     assert out.report.calibration_summary["emergency_brake"]["BCP0"] == pytest.approx(
         round(adjusted_bcp0)
     )
-    assert out.report.calibration_summary["emergency_brake"]["BCP0_for_code"] == round_bcp0_for_code(
-        adjusted_bcp0
+    assert (
+        out.report.calibration_summary["emergency_brake"]["BCP0_for_code"]
+        == round_bcp0_for_code(adjusted_bcp0)
     )
 
 

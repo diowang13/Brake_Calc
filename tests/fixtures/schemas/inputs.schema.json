@@ -99,6 +99,31 @@
           "title": "Bogie Type",
           "type": "string"
         },
+        "display_name": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "\u5355\u4f4d: -",
+          "title": "Display Name"
+        },
+        "mass_static_override": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/MassStaticOverride"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "\u5355\u4f4d: ton"
+        },
         "name": {
           "description": "\u5355\u4f4d: -",
           "title": "Name",
@@ -202,6 +227,31 @@
           ],
           "title": "Car Type",
           "type": "string"
+        },
+        "display_name": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "\u5355\u4f4d: -",
+          "title": "Display Name"
+        },
+        "mass_static_override": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/MassStaticOverride"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "\u5355\u4f4d: ton"
         },
         "name": {
           "description": "\u5355\u4f4d: -",
@@ -393,6 +443,34 @@
         "trailer_bogie"
       ],
       "title": "MassParams",
+      "type": "object"
+    },
+    "MassStaticOverride": {
+      "additionalProperties": false,
+      "description": "\u5b9e\u4f8b\u7ea7\u9759\u6001\u8d28\u91cf\u8986\u76d6\u3002",
+      "properties": {
+        "AW0": {
+          "description": "\u5355\u4f4d: ton",
+          "title": "Aw0",
+          "type": "number"
+        },
+        "AW2": {
+          "description": "\u5355\u4f4d: ton",
+          "title": "Aw2",
+          "type": "number"
+        },
+        "AW3": {
+          "description": "\u5355\u4f4d: ton",
+          "title": "Aw3",
+          "type": "number"
+        }
+      },
+      "required": [
+        "AW0",
+        "AW2",
+        "AW3"
+      ],
+      "title": "MassStaticOverride",
       "type": "object"
     },
     "MechanicalParams": {

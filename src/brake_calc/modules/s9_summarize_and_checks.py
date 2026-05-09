@@ -3,10 +3,13 @@
 from __future__ import annotations
 
 import logging
+from typing import cast
 
 from brake_calc.contracts.context import Context
-from brake_calc.contracts.report import Report
+from brake_calc.contracts.inputs import Inputs, PressureCalibrationCase
+from brake_calc.contracts.report import ParkingBrakeCheckResult, Report
 from brake_calc.domain.calibration import build_point_pair_curve
+from brake_calc.domain.mass import rotational_mass_factor_for_bogie_type
 from brake_calc.domain.parking_brake import evaluate_parking_brake_check
 from brake_calc.domain.reporting import (
     derive_dynamic_mass_formula,
@@ -19,7 +22,6 @@ from brake_calc.domain.reporting import (
     summarize_electric_brake,
     theoretical_speed_check,
 )
-from brake_calc.domain.mass import rotational_mass_factor_for_bogie_type
 from brake_calc.errors import InputValidationError
 
 logger = logging.getLogger(__name__)
@@ -81,6 +83,40 @@ def _build_mass_dyn_formula_by_bogie_type(
     return result
 
 
+def _build_dynamic_mass_formula_by_controller(
+    *,
+    load_summary: dict[str, dict[str, dict[str, float]]],
+    controller_bogie_type_map: dict[str, str],
+) -> dict[str, dict[str, float | str | dict[str, float]]]:
+    """按 controller 构造实例级动态载荷公式。"""
+    result: dict[str, dict[str, float | str | dict[str, float]]] = {}
+    aw0 = load_summary.get("AW0", {})
+    aw3 = load_summary.get("AW3", {})
+    for controller_name, bogie_type in controller_bogie_type_map.items():
+        if controller_name not in aw0 or controller_name not in aw3:
+            continue
+        aw0_spring = aw0[controller_name]["spring_pressure"]
+        aw0_mass = aw0[controller_name]["mass_dynamic"]
+        aw3_spring = aw3[controller_name]["spring_pressure"]
+        aw3_mass = aw3[controller_name]["mass_dynamic"]
+        spring_delta = aw3_spring - aw0_spring
+        if spring_delta == 0:
+            k_value = 0.0
+            b_value = aw0_mass
+        else:
+            k_value = (aw3_mass - aw0_mass) / spring_delta
+            b_value = aw0_mass - k_value * aw0_spring
+        result[controller_name] = {
+            "bogie_type": bogie_type,
+            "k": round(k_value, 6),
+            "b": round(b_value, 6),
+            "aw0": {"spring_kPa": aw0_spring, "mass_dyn_t": aw0_mass},
+            "aw3": {"spring_kPa": aw3_spring, "mass_dyn_t": aw3_mass},
+            "formula": f"mass_dyn_t = {k_value:.6g} * spring_kPa + {b_value:.6g}",
+        }
+    return result
+
+
 def _round_pressure_matrix(
     matrix: dict[str, dict[str, dict[str, float]]],
 ) -> dict[str, dict[str, dict[str, float]]]:
@@ -111,27 +147,33 @@ def _build_calibration_summary(ctx: Context) -> dict[str, object]:
         return {}
 
     summary: dict[str, object] = {}
-    cases = {
+    cases: dict[str, PressureCalibrationCase | None] = {
         "service_brake": inputs.pressure_calibration.service_brake,
         "emergency_brake": inputs.pressure_calibration.emergency_brake,
     }
     for case_name, case in cases.items():
+        if case is None:
+            continue
         low_point, high_point = build_point_pair_curve(case, ctx.F_by_controller)
         representative_brake_type = "EB" if case_name == "emergency_brake" else "FSB"
-        representative_load_group = next(iter(ctx.BCP0_used_by_controller[representative_brake_type]))
+        representative_load_group = next(
+            iter(ctx.BCP0_used_by_controller[representative_brake_type])
+        )
         representative_controller = next(
             iter(ctx.BCP0_used_by_controller[representative_brake_type][representative_load_group])
         )
-        final_bcp0 = ctx.BCP0_used_by_controller[representative_brake_type][representative_load_group][
-            representative_controller
+        representative_bcp0_map = ctx.BCP0_used_by_controller[representative_brake_type][
+            representative_load_group
         ]
+        final_bcp0 = representative_bcp0_map[representative_controller]
         low_force_kn = round(low_point[0], 3)
         high_force_kn = round(high_point[0], 3)
         low_k_value = round(low_point[1], 6)
         high_k_value = round(high_point[1], 6)
+        intercept_for_code: float
         if high_point[0] == low_point[0]:
             slope_for_code = 0.0
-            intercept_for_code = round_k_for_code(low_point[1])
+            intercept_for_code = float(round_k_for_code(low_point[1]))
         else:
             slope_for_code = (
                 round_k_for_code(high_point[1]) - round_k_for_code(low_point[1])
@@ -216,6 +258,10 @@ def run(ctx: Context) -> Context:
         load_summary=load_summary,
         controller_bogie_type_map=controller_bogie_type_map,
     )
+    dynamic_mass_formula_by_controller = _build_dynamic_mass_formula_by_controller(
+        load_summary=load_summary,
+        controller_bogie_type_map=controller_bogie_type_map,
+    )
 
     speed_values = inputs.V_list if inputs.V_list is not None else [inputs.v0]
     theoretical_speed_checks: dict[str, dict[str, dict[str, float]]] = {}
@@ -270,8 +316,15 @@ def run(ctx: Context) -> Context:
         )
 
     pressure_conversion: dict[str, dict[str, dict[str, dict[str, float | int]]]] = {}
+    pressure_conversion_initial: dict[str, dict[str, float | int]] = {}
     force_to_pressure_formula: dict[str, dict[str, dict[str, dict[str, float | str]]]] = {}
     for brake_type, per_group in ctx.k_used_by_controller.items():
+        pressure_conversion_initial[brake_type] = {
+            "k_initial": ctx.k_initial,
+            "k_initial_for_code": round_k_for_code(ctx.k_initial),
+            "BCP0_initial": round_kpa(ctx.BCP0_initial),
+            "BCP0_initial_for_code": round_bcp0_for_code(ctx.BCP0_initial),
+        }
         pressure_conversion[brake_type] = {}
         force_to_pressure_formula[brake_type] = {}
         for load_group, per_controller in per_group.items():
@@ -301,7 +354,9 @@ def run(ctx: Context) -> Context:
     parking_brake_check_result = None
     parking_brake_check_results_by_load_group: dict[str, object] = {}
     if inputs.parking_brake_check.enabled:
-        configured_groups = list(inputs.parking_brake_check.environment.grade_by_load_group)
+        environment = inputs.parking_brake_check.environment
+        assert environment is not None
+        configured_groups = list(environment.grade_by_load_group)
         for load_group in configured_groups:
             parking_brake_check_results_by_load_group[load_group] = evaluate_parking_brake_check(
                 controller_type=inputs.controller_type,
@@ -331,13 +386,17 @@ def run(ctx: Context) -> Context:
         theoretical_speed_checks=theoretical_speed_checks,
         controller_code_params={
             "dynamic_mass_formula": dynamic_mass_formula,
+            "dynamic_mass_formula_by_controller": dynamic_mass_formula_by_controller,
             "force_to_pressure_formula": force_to_pressure_formula,
+            "pressure_conversion_initial": pressure_conversion_initial,
             "pressure_conversion": pressure_conversion,
         },
         calibration_summary=calibration_summary,
-        mass_dyn_formula_by_bogie_type=mass_dyn_formula_by_bogie_type,
-        parking_brake_check_result=parking_brake_check_result,
-        parking_brake_check_results_by_load_group=parking_brake_check_results_by_load_group,
+        mass_dyn_formula_by_bogie_type=cast(dict[str, object], mass_dyn_formula_by_bogie_type),
+        parking_brake_check_result=cast(ParkingBrakeCheckResult | None, parking_brake_check_result),
+        parking_brake_check_results_by_load_group=cast(
+            dict[str, ParkingBrakeCheckResult], parking_brake_check_results_by_load_group
+        ),
         electric_brake_summary=electric_brake_summary,
         auto_adjustments=auto_adjustments,
         warnings=ctx.warnings,

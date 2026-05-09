@@ -23,7 +23,28 @@ export type Report = {
   theoretical_speed_checks?: Record<string, Record<string, Record<string, number>>>;
   load_summary?: Record<string, Record<string, { mass_dynamic?: number; spring_pressure?: number }>>;
   controller_pressure_standards?: Record<string, Record<string, Record<string, number>>>;
-  controller_code_params?: Record<string, unknown>;
+  controller_code_params?: Record<string, unknown> & {
+    pressure_conversion_initial?: Record<
+      string,
+      {
+        k_initial?: number;
+        k_initial_for_code?: number;
+        BCP0_initial?: number;
+        BCP0_initial_for_code?: number;
+      }
+    >;
+    dynamic_mass_formula_by_controller?: Record<
+      string,
+      {
+        bogie_type?: string;
+        k?: number;
+        b?: number;
+        aw0?: { spring_kPa?: number; mass_dyn_t?: number };
+        aw3?: { spring_kPa?: number; mass_dyn_t?: number };
+        formula?: string;
+      }
+    >;
+  };
   mass_dyn_formula_by_bogie_type?: Record<
     string,
     {

@@ -77,3 +77,46 @@ def test_s4_uses_fixed_rotational_mass_factor_by_bogie_type() -> None:
 
     assert out.Mass_by_controller["AW0"]["powered_bogie_1"]["mass_dynamic"] == 11.0
     assert out.Mass_by_controller["AW0"]["trailer_bogie_1"]["mass_dynamic"] == 9.45
+
+
+def test_s4_prefers_bogie_mass_static_override_over_type_default() -> None:
+    payload = make_valid_bogie_payload()
+    payload["vehicle_config"]["bogies"] = [
+        {
+            "name": "trailer_bogie_1",
+            "bogie_type": "trailer_bogie",
+            "mass_static_override": {"AW0": 15.8, "AW2": 22.7, "AW3": 25.6},
+        },
+        {
+            "name": "trailer_bogie_2",
+            "bogie_type": "trailer_bogie",
+            "mass_static_override": {"AW0": 15.3, "AW2": 22.2, "AW3": 25.1},
+        },
+    ]
+    ctx = Context(validated_inputs=Inputs.model_validate(payload))
+    ctx = run_s3(run_s2(ctx))
+
+    out = run(ctx)
+
+    assert out.Mass_by_controller["AW0"]["trailer_bogie_1"]["mass_static"] == 15.8
+    assert out.Mass_by_controller["AW0"]["trailer_bogie_2"]["mass_static"] == 15.3
+    assert (
+        out.AirSpringPressure_by_controller["AW0"]["trailer_bogie_1"]
+        != out.AirSpringPressure_by_controller["AW0"]["trailer_bogie_2"]
+    )
+
+
+def test_s4_supports_car_mass_static_override_as_car_level_mass() -> None:
+    payload = make_valid_car_payload()
+    payload["vehicle_config"]["cars"][1]["mass_static_override"] = {
+        "AW0": 31.6,
+        "AW2": 45.4,
+        "AW3": 51.2,
+    }
+    ctx = Context(validated_inputs=Inputs.model_validate(payload))
+    ctx = run_s3(run_s2(ctx))
+
+    out = run(ctx)
+
+    assert out.Mass_by_controller["AW0"]["trailer_car_1"]["mass_static"] == 31.6
+    assert out.Mass_by_controller["AW0"]["trailer_car_1"]["mass_dynamic"] == 33.18
