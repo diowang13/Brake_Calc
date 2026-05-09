@@ -167,6 +167,10 @@ export function WorkbenchPage({
   yamlChangedLineIndexes: number[];
   yamlChangedPaths: string[];
 }): ReactElement {
+  const bogieRoleEmphasisStyle = {
+    color: "#c64532",
+    fontWeight: 700,
+  } as const;
   const toRecord = (value: unknown): Record<string, unknown> | null =>
     typeof value === "object" && value !== null ? (value as Record<string, unknown>) : null;
   const deepEqual = (left: unknown, right: unknown): boolean => {
@@ -213,6 +217,23 @@ export function WorkbenchPage({
     }
     return typeof cursor === "number" ? String(cursor) : "";
   };
+  const renderLoadRoleLabel = (
+    prefix: string,
+    role: "动车" | "拖车" | "动架" | "拖架",
+    suffix: "称重（整车）" | "称重"
+  ): ReactElement => (
+    <span>
+      {prefix}
+      <span style={bogieRoleEmphasisStyle}>{role}</span>
+      {suffix}
+    </span>
+  );
+  const renderBogieWeightLabel = (role: "动架" | "拖架"): ReactElement => (
+    <span>
+      <span style={bogieRoleEmphasisStyle}>{role}</span>
+      转向架重量 bogie_weight (ton)
+    </span>
+  );
 
   const [v0Value, setV0Value] = useState("");
   const [fsbMeanValue, setFsbMeanValue] = useState("");
@@ -1012,6 +1033,11 @@ export function WorkbenchPage({
     const servicePointTwoK = toNumberOrUndefined(serviceCalibrationPointTwoKValue);
     const emergencyPointOneK = toNumberOrUndefined(emergencyCalibrationPointOneKValue);
     const emergencyPointTwoK = toNumberOrUndefined(emergencyCalibrationPointTwoKValue);
+    const withRequiredFallback = (
+      primary: number | undefined,
+      fallback: number | undefined,
+      defaultValue = 0
+    ): number => primary ?? fallback ?? defaultValue;
     const serviceBcp0 =
       toNumberOrUndefined(serviceCalibrationBcp0Value) ??
       toNumberOrUndefined(getNestedNumberText(importedFormState, ["pressure_calibration", "service_brake", "BCP0"]));
@@ -1032,6 +1058,176 @@ export function WorkbenchPage({
     const trailerRotFactor = toNumberOrUndefined(
       getNestedNumberText(importedFormState, ["mass_params", "trailer_bogie", "rotational_mass_factor"])
     );
+    const requiredPoweredRotFactor = withRequiredFallback(
+      poweredRotFactor,
+      toNumberOrUndefined(getNestedNumberText(root, ["mass_params", "powered_bogie", "rotational_mass_factor"]))
+    );
+    const requiredTrailerRotFactor = withRequiredFallback(
+      trailerRotFactor,
+      toNumberOrUndefined(getNestedNumberText(root, ["mass_params", "trailer_bogie", "rotational_mass_factor"]))
+    );
+    const requiredServiceBcp0 = withRequiredFallback(
+      serviceBcp0,
+      toNumberOrUndefined(getNestedNumberText(root, ["pressure_calibration", "service_brake", "BCP0"]))
+    );
+    const requiredEmergencyBcp0 = withRequiredFallback(
+      emergencyBcp0,
+      toNumberOrUndefined(getNestedNumberText(root, ["pressure_calibration", "emergency_brake", "BCP0"]))
+    );
+    const requiredServicePointOneK = withRequiredFallback(
+      servicePointOneK,
+      toNumberOrUndefined(getNestedNumberText(root, ["pressure_calibration", "service_brake", "points", "0", "k_for_code"]))
+    );
+    const requiredServicePointTwoK = withRequiredFallback(
+      servicePointTwoK,
+      toNumberOrUndefined(getNestedNumberText(root, ["pressure_calibration", "service_brake", "points", "1", "k_for_code"]))
+    );
+    const requiredEmergencyPointOneK = withRequiredFallback(
+      emergencyPointOneK,
+      toNumberOrUndefined(getNestedNumberText(root, ["pressure_calibration", "emergency_brake", "points", "0", "k_for_code"]))
+    );
+    const requiredEmergencyPointTwoK = withRequiredFallback(
+      emergencyPointTwoK,
+      toNumberOrUndefined(getNestedNumberText(root, ["pressure_calibration", "emergency_brake", "points", "1", "k_for_code"]))
+    );
+    const requiredSafetyMargin = withRequiredFallback(
+      toNumberOrUndefined(parkingRequiredSafetyMarginValue),
+      toNumberOrUndefined(getNestedNumberText(root, ["parking_brake_check", "required_safety_margin"]))
+    );
+    const requiredStaticFrictionCoefficient = withRequiredFallback(
+      toNumberOrUndefined(parkingStaticFrictionCoefficientValue),
+      toNumberOrUndefined(getNestedNumberText(root, ["parking_brake_check", "static_friction_coefficient"]))
+    );
+    const requiredParkingCylindersByCar = withRequiredFallback(
+      toNumberOrUndefined(parkingCylindersByCarValue),
+      toNumberOrUndefined(getNestedNumberText(root, ["parking_brake_check", "n_parking_cylinders_by_car"]))
+    );
+    const requiredParkingWindSpeedMax = withRequiredFallback(
+      toNumberOrUndefined(parkingWindSpeedMaxValue),
+      toNumberOrUndefined(getNestedNumberText(root, ["parking_brake_check", "environment", "wind_speed_max"]))
+    );
+    const requiredParkingWindResistanceCoefficient = withRequiredFallback(
+      toNumberOrUndefined(parkingWindResistanceCoefficientValue),
+      toNumberOrUndefined(
+        getNestedNumberText(root, ["parking_brake_check", "environment", "wind_resistance_coefficient"])
+      )
+    );
+    const requiredParkingFp = withRequiredFallback(
+      toNumberOrUndefined(parkingFpValue),
+      toNumberOrUndefined(getNestedNumberText(root, ["parking_brake_check", "cylinder", "Fp"]))
+    );
+    const requiredParkingFs1 = withRequiredFallback(
+      toNumberOrUndefined(parkingFs1Value),
+      toNumberOrUndefined(getNestedNumberText(root, ["parking_brake_check", "cylinder", "Fs1"]))
+    );
+    const requiredParkingFs2 = withRequiredFallback(
+      toNumberOrUndefined(parkingFs2Value),
+      toNumberOrUndefined(getNestedNumberText(root, ["parking_brake_check", "cylinder", "Fs2"]))
+    );
+    const requiredParkingLpi = withRequiredFallback(
+      toNumberOrUndefined(parkingLpiValue),
+      toNumberOrUndefined(getNestedNumberText(root, ["parking_brake_check", "cylinder", "Lpi"]))
+    );
+    const requiredParkingEtaPi = withRequiredFallback(
+      toNumberOrUndefined(parkingEtaPiValue),
+      toNumberOrUndefined(getNestedNumberText(root, ["parking_brake_check", "cylinder", "eta_pi"]))
+    );
+    const mechParamsDraft: Record<string, unknown> = {
+      cylinder_type: baseBrakeCylinderType,
+      Sc: toNumberOrUndefined(mechScValue),
+      xi: toNumberOrUndefined(mechXiValue),
+      Li: toNumberOrUndefined(mechLiValue),
+      eta_i: toNumberOrUndefined(mechEtaIValue),
+      Lo: toNumberOrUndefined(mechLoValue),
+      eta_o: toNumberOrUndefined(mechEtaOValue),
+      Fs1: toNumberOrUndefined(mechFs1Value),
+      Fs2: toNumberOrUndefined(mechFs2Value),
+    };
+    if (baseBrakeCylinderType === "caliper_cylinder") {
+      mechParamsDraft.Dw = toNumberOrUndefined(mechDwValue);
+      mechParamsDraft.Rf = toNumberOrUndefined(mechRfValue);
+    }
+
+    const draftControllerConfigType = (() => {
+      const rawControllerType = root.controller_type;
+      if (rawControllerType === "car" || rawControllerType === "bogie") {
+        return rawControllerType;
+      }
+      return controllerConfigType;
+    })();
+
+    const pressureCalibrationDraft: Record<string, unknown> = {
+      enabled: pressureCalibrationEnabled,
+    };
+    if (pressureCalibrationEnabled) {
+      pressureCalibrationDraft.service_brake = {
+        ...(toRecord(toRecord(root.pressure_calibration)?.service_brake) ?? {}),
+        BCP0: requiredServiceBcp0,
+        point_pair_mode: serviceCalibrationMode,
+        points: [
+          {
+            load_group: "AW3",
+            brake_type: servicePointOneBrakeType,
+            k_for_code: requiredServicePointOneK,
+          },
+          {
+            load_group: serviceCalibrationMode === "aw3_aw0" ? "AW0" : "AW2",
+            brake_type: servicePointTwoBrakeType,
+            k_for_code: requiredServicePointTwoK,
+          },
+        ],
+      };
+      if (draftControllerConfigType === "bogie") {
+        pressureCalibrationDraft.emergency_brake = {
+          ...(toRecord(toRecord(root.pressure_calibration)?.emergency_brake) ?? {}),
+          BCP0: requiredEmergencyBcp0,
+          point_pair_mode: emergencyCalibrationMode,
+          points: [
+            {
+              load_group: "AW3",
+              brake_type: "EB",
+              k_for_code: requiredEmergencyPointOneK,
+            },
+            {
+              load_group: emergencyCalibrationMode === "aw3_aw0" ? "AW0" : "AW2",
+              brake_type: "EB",
+              k_for_code: requiredEmergencyPointTwoK,
+            },
+          ],
+        };
+      }
+    }
+
+    const parkingBrakeCheckDraft: Record<string, unknown> = {
+      enabled: parkingEnabled,
+    };
+    if (parkingEnabled) {
+      parkingBrakeCheckDraft.required_safety_margin = requiredSafetyMargin;
+      parkingBrakeCheckDraft.static_friction_coefficient = requiredStaticFrictionCoefficient;
+      parkingBrakeCheckDraft.n_parking_cylinders_by_car = requiredParkingCylindersByCar;
+      parkingBrakeCheckDraft.environment = {
+        ...(toRecord(toRecord(root.parking_brake_check)?.environment) ?? {}),
+        wind_speed_max: requiredParkingWindSpeedMax,
+        wind_resistance_coefficient: requiredParkingWindResistanceCoefficient,
+        grade_by_load_group: {
+          ...(toRecord(toRecord(toRecord(root.parking_brake_check)?.environment)?.grade_by_load_group) ?? {}),
+          AW0: toNumberOrUndefined(parkingGradeAw0Value),
+          AW2: toNumberOrUndefined(parkingGradeAw2Value),
+          AW3: toNumberOrUndefined(parkingGradeAw3Value),
+        },
+      };
+      parkingBrakeCheckDraft.cylinder = {
+        ...(toRecord(toRecord(root.parking_brake_check)?.cylinder) ?? {}),
+        Fp: requiredParkingFp,
+        Fs1: requiredParkingFs1,
+        Fs2: requiredParkingFs2,
+        Lpi: requiredParkingLpi,
+        eta_pi: requiredParkingEtaPi,
+        Lo: toNumberOrUndefined(parkingLoValue),
+        eta_o: toNumberOrUndefined(parkingEtaOValue),
+      };
+    }
+
     return {
       ...root,
       v0: v0Number ?? root.v0,
@@ -1091,7 +1287,7 @@ export function WorkbenchPage({
             ...(aw3Powered !== undefined ? { AW3: aw3Powered } : {}),
           },
           ...(poweredBogieWeight !== undefined ? { bogie_weight: poweredBogieWeight } : {}),
-          ...(poweredRotFactor !== undefined ? { rotational_mass_factor: poweredRotFactor } : {}),
+          rotational_mass_factor: requiredPoweredRotFactor,
         },
         trailer_bogie: {
           ...(toRecord(toRecord(root.mass_params)?.trailer_bogie) ?? {}),
@@ -1102,7 +1298,7 @@ export function WorkbenchPage({
             ...(aw3Trailer !== undefined ? { AW3: aw3Trailer } : {}),
           },
           ...(trailerBogieWeight !== undefined ? { bogie_weight: trailerBogieWeight } : {}),
-          ...(trailerRotFactor !== undefined ? { rotational_mass_factor: trailerRotFactor } : {}),
+          rotational_mass_factor: requiredTrailerRotFactor,
         },
       },
       vehicle_config: vehicleConfig,
@@ -1111,93 +1307,9 @@ export function WorkbenchPage({
         powered_bogie: buildAirSpringByType(toRecord(root.air_spring)?.powered_bogie),
         trailer_bogie: buildAirSpringByType(toRecord(root.air_spring)?.trailer_bogie),
       },
-      mech_params: {
-        ...(toRecord(root.mech_params) ?? {}),
-        cylinder_type: baseBrakeCylinderType,
-        Sc: toNumberOrUndefined(mechScValue),
-        xi: toNumberOrUndefined(mechXiValue),
-        Li: toNumberOrUndefined(mechLiValue),
-        eta_i: toNumberOrUndefined(mechEtaIValue),
-        Lo: toNumberOrUndefined(mechLoValue),
-        eta_o: toNumberOrUndefined(mechEtaOValue),
-        Fs1: toNumberOrUndefined(mechFs1Value),
-        Fs2: toNumberOrUndefined(mechFs2Value),
-        Dw: toNumberOrUndefined(mechDwValue),
-        Rf: toNumberOrUndefined(mechRfValue),
-      },
-      pressure_calibration: {
-        ...(toRecord(root.pressure_calibration) ?? {}),
-        enabled: pressureCalibrationEnabled,
-        service_brake: {
-          ...(toRecord(toRecord(root.pressure_calibration)?.service_brake) ?? {}),
-          ...(serviceBcp0 !== undefined ? { BCP0: serviceBcp0 } : {}),
-          point_pair_mode: serviceCalibrationMode,
-          points: [
-            {
-              load_group: "AW3",
-              brake_type: servicePointOneBrakeType,
-              ...(servicePointOneK !== undefined ? { k_for_code: servicePointOneK } : {}),
-            },
-            {
-              load_group: serviceCalibrationMode === "aw3_aw0" ? "AW0" : "AW2",
-              brake_type: servicePointTwoBrakeType,
-              ...(servicePointTwoK !== undefined ? { k_for_code: servicePointTwoK } : {}),
-            },
-          ],
-        },
-        emergency_brake: {
-          ...(toRecord(toRecord(root.pressure_calibration)?.emergency_brake) ?? {}),
-          ...(emergencyBcp0 !== undefined ? { BCP0: emergencyBcp0 } : {}),
-          point_pair_mode: emergencyCalibrationMode,
-          points: [
-            {
-              load_group: "AW3",
-              brake_type: "EB",
-              ...(emergencyPointOneK !== undefined ? { k_for_code: emergencyPointOneK } : {}),
-            },
-            {
-              load_group: emergencyCalibrationMode === "aw3_aw0" ? "AW0" : "AW2",
-              brake_type: "EB",
-              ...(emergencyPointTwoK !== undefined ? { k_for_code: emergencyPointTwoK } : {}),
-            },
-          ],
-        },
-      },
-      parking_brake_check: {
-        ...(toRecord(root.parking_brake_check) ?? {}),
-        enabled: parkingEnabled,
-        required_safety_margin:
-          parkingRequiredSafetyMarginValue.trim() === ""
-            ? undefined
-            : Number(parkingRequiredSafetyMarginValue),
-        static_friction_coefficient:
-          parkingStaticFrictionCoefficientValue.trim() === ""
-            ? undefined
-            : Number(parkingStaticFrictionCoefficientValue),
-        n_parking_cylinders_by_car:
-          parkingCylindersByCarValue.trim() === "" ? undefined : Number(parkingCylindersByCarValue),
-        environment: {
-          ...(toRecord(toRecord(root.parking_brake_check)?.environment) ?? {}),
-          wind_speed_max: toNumberOrUndefined(parkingWindSpeedMaxValue),
-          wind_resistance_coefficient: toNumberOrUndefined(parkingWindResistanceCoefficientValue),
-          grade_by_load_group: {
-            ...(toRecord(toRecord(toRecord(root.parking_brake_check)?.environment)?.grade_by_load_group) ?? {}),
-            AW0: toNumberOrUndefined(parkingGradeAw0Value),
-            AW2: toNumberOrUndefined(parkingGradeAw2Value),
-            AW3: toNumberOrUndefined(parkingGradeAw3Value),
-          },
-        },
-        cylinder: {
-          ...(toRecord(toRecord(root.parking_brake_check)?.cylinder) ?? {}),
-          Fp: toNumberOrUndefined(parkingFpValue),
-          Fs1: toNumberOrUndefined(parkingFs1Value),
-          Fs2: toNumberOrUndefined(parkingFs2Value),
-          Lpi: toNumberOrUndefined(parkingLpiValue),
-          eta_pi: toNumberOrUndefined(parkingEtaPiValue),
-          Lo: toNumberOrUndefined(parkingLoValue),
-          eta_o: toNumberOrUndefined(parkingEtaOValue),
-        },
-      },
+      mech_params: mechParamsDraft,
+      pressure_calibration: pressureCalibrationDraft,
+      parking_brake_check: parkingBrakeCheckDraft,
       electric_brake: {
         ...(toRecord(root.electric_brake) ?? {}),
         enabled: Boolean(toRecord(root.electric_brake)?.enabled ?? false),
@@ -2154,31 +2266,61 @@ export function WorkbenchPage({
                 <div style={{ display: "grid", gap: "12px" }}>
                   <FieldBlock
                     label={`AW0 / ${loadInputMode === "car" ? "动车称重（整车）" : "动架称重"}`}
+                    labelContent={
+                      loadInputMode === "car"
+                        ? renderLoadRoleLabel("AW0 / ", "动车", "称重（整车）")
+                        : renderLoadRoleLabel("AW0 / ", "动架", "称重")
+                    }
                     value={massAw0PoweredValue}
                     onChange={setMassAw0PoweredValue}
                   />
                   <FieldBlock
                     label={`AW0 / ${loadInputMode === "car" ? "拖车称重（整车）" : "拖架称重"}`}
+                    labelContent={
+                      loadInputMode === "car"
+                        ? renderLoadRoleLabel("AW0 / ", "拖车", "称重（整车）")
+                        : renderLoadRoleLabel("AW0 / ", "拖架", "称重")
+                    }
                     value={massAw0TrailerValue}
                     onChange={setMassAw0TrailerValue}
                   />
                   <FieldBlock
                     label={`AW2 / ${loadInputMode === "car" ? "动车称重（整车）" : "动架称重"}`}
+                    labelContent={
+                      loadInputMode === "car"
+                        ? renderLoadRoleLabel("AW2 / ", "动车", "称重（整车）")
+                        : renderLoadRoleLabel("AW2 / ", "动架", "称重")
+                    }
                     value={massAw2PoweredValue}
                     onChange={setMassAw2PoweredValue}
                   />
                   <FieldBlock
                     label={`AW2 / ${loadInputMode === "car" ? "拖车称重（整车）" : "拖架称重"}`}
+                    labelContent={
+                      loadInputMode === "car"
+                        ? renderLoadRoleLabel("AW2 / ", "拖车", "称重（整车）")
+                        : renderLoadRoleLabel("AW2 / ", "拖架", "称重")
+                    }
                     value={massAw2TrailerValue}
                     onChange={setMassAw2TrailerValue}
                   />
                   <FieldBlock
                     label={`AW3 / ${loadInputMode === "car" ? "动车称重（整车）" : "动架称重"}`}
+                    labelContent={
+                      loadInputMode === "car"
+                        ? renderLoadRoleLabel("AW3 / ", "动车", "称重（整车）")
+                        : renderLoadRoleLabel("AW3 / ", "动架", "称重")
+                    }
                     value={massAw3PoweredValue}
                     onChange={setMassAw3PoweredValue}
                   />
                   <FieldBlock
                     label={`AW3 / ${loadInputMode === "car" ? "拖车称重（整车）" : "拖架称重"}`}
+                    labelContent={
+                      loadInputMode === "car"
+                        ? renderLoadRoleLabel("AW3 / ", "拖车", "称重（整车）")
+                        : renderLoadRoleLabel("AW3 / ", "拖架", "称重")
+                    }
                     value={massAw3TrailerValue}
                     onChange={setMassAw3TrailerValue}
                   />
@@ -2193,11 +2335,17 @@ export function WorkbenchPage({
                 <div style={{ display: "grid", gap: "12px" }}>
                   <FieldBlock
                     label="动车转向架重量 bogie_weight (ton)"
+                    labelContent={
+                      loadInputMode === "car" ? undefined : renderBogieWeightLabel("动架")
+                    }
                     value={bogieWeightPoweredValue}
                     onChange={setBogieWeightPoweredValue}
                   />
                   <FieldBlock
                     label="拖车转向架重量 bogie_weight (ton)"
+                    labelContent={
+                      loadInputMode === "car" ? undefined : renderBogieWeightLabel("拖架")
+                    }
                     value={bogieWeightTrailerValue}
                     onChange={setBogieWeightTrailerValue}
                   />

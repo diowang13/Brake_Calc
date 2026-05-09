@@ -1,4 +1,4 @@
-import type { ReactElement } from "react";
+import type { ReactElement, ReactNode } from "react";
 
 import {
   activeTabStyle,
@@ -107,6 +107,8 @@ export function SupplementCard({
 
 export function FieldBlock({
   label,
+  labelContent,
+  ariaLabel,
   value,
   onChange,
   onBlur,
@@ -118,6 +120,8 @@ export function FieldBlock({
   disabled = false
 }: {
   label: string;
+  labelContent?: ReactNode;
+  ariaLabel?: string;
   value?: string;
   onChange?: (value: string) => void;
   onBlur?: () => void;
@@ -132,7 +136,7 @@ export function FieldBlock({
 
   return (
     <div style={{ display: "grid", gap: "8px" }}>
-      <strong style={fieldLabelStyle}>{label}</strong>
+      <strong style={fieldLabelStyle}>{labelContent ?? label}</strong>
       {isInteractive ? (
         <>
           <div
@@ -147,7 +151,7 @@ export function FieldBlock({
             }}
           >
             <input
-              aria-label={label}
+              aria-label={ariaLabel ?? label}
               type={inputMode === "text" ? "text" : "number"}
               value={value ?? ""}
               onChange={(event) => onChange(event.target.value)}

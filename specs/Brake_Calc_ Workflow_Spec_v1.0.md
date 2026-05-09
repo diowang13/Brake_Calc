@@ -27,9 +27,9 @@
     - V1 Markdown 报告至少包含：
       - 顶层标题固定为：`Summary / Key Tables / Checks / Controller Development Parameters`
       - `Summary`：配置摘要与自动调整记录
-      - `Key Tables`：`Pressure / Dynamic Load Matrix` 紧凑矩阵，同时展示动态载荷、空簧压力和各制动类型 BCP；公式来源于 AW0/AW3 的标准空簧与动态载荷点
+      - `Key Tables`：`Pressure / Dynamic Load Matrix` 紧凑矩阵，同时展示动态载荷、空簧压力和各制动类型 BCP；当存在实例级静态称重覆盖时，动态载荷与空簧压力按实例结果展示
       - `Checks`：理论速度检查、停放制动力校核结果、电制动摘要
-      - `Controller Development Parameters`：`Calibration Summary`、动态载荷公式、压力转换参数、力到压力公式，展示“空簧压力→动态载荷拟合公式（动架/拖架）”
+      - `Controller Development Parameters`：`Calibration Summary`、动态载荷公式、压力转换参数、力到压力公式；默认保留动架/拖架类型级公式，且在存在实例级静态称重覆盖时，需额外展示实例级“空簧压力→动态载荷拟合公式”
       - `delta_BCP` 保留为结构化兼容字段，但不作为 Markdown 主视图展示
 
 
@@ -164,6 +164,10 @@
   - fitted_from_points：输入若干 `[pressure_kpa, sprung_mass_by_spring_ton]`
   - explicit_linear：输入 airspring_k、airspring_b
 - `mass_params`：转向架类型级质量参数，承载静态质量、转向架自重和旋转质量因子。`mass_static` 与 `bogie_weight` 均使用 `ton`，并在后续计算中保持 `ton`，不再换算为 `kg`。
+  - `mass_params` 继续作为类型默认值存在
+  - `mass_static` 可被实例级 `mass_static_override` 覆盖
+  - `bogie_weight`、`rotational_mass_factor`、`air_spring` 在本次扩展中仍保持类型级共享，不支持实例级覆盖
+  - 当同类型实例存在不同 `mass_static_override` 时，类型级参数仍作为共享基础参数使用，实例差异仅体现在静态称重输入
   - 车控时，输入中的 `bogie_weight` 仍表示单个 bogie 自重；后台按一车两转向架聚合时乘 2
   - `powered_bogie` / `trailer_bogie` 的旋转质量参数（如 `rotational_mass_factor`）
   - 建议结构：
@@ -194,39 +198,54 @@
         - 快速制动（FB）**必须**采用 `equal_adhesion`
         - 最大常用制动（FSB）及以 FSB 百分比定义的自定义类型按 `allocation_strategy` 配置执行
         - 若用户配置 `equal_wear` 但在当前载荷关系下超过全局黏着限制 `adhesion.mu_limit`，软件应自动切换为 `equal_adhesion`，并记录告警与自动调整信息
-
 - `vehicle_config`：逐控制器实例配置，配置形态由 `controller_type` 决定
+  - 所有实例都必须定义：
+    - `name`：内部唯一标识，用于计算、存储、结果映射和实例关联
+  - 所有实例都可选定义：
+    - `display_name`：展示别名，仅用于前端与 report 展示，不参与内部主键、唯一性或实例关联
+    - `mass_static_override`：实例级静态称重覆盖；一旦启用，必须完整给出 `AW0 / AW2 / AW3`
   - 当 `controller_type = bogie` 时，每个转向架实例对应一个控制器：
-    - `name`
     - `bogie_type`：`powered_bogie` / `trailer_bogie`
     - 建议结构：
       ```yaml
       vehicle_config:
         bogies:
           - name: trailer_bogie_1
+            display_name: 1号拖架（司机室端）
             bogie_type: trailer_bogie
+            mass_static_override:
+              AW0: 15.80
+              AW2: 22.70
+              AW3: 25.60
           - name: powered_bogie_3
+            display_name: 3号动架
             bogie_type: powered_bogie
       ```
     - `trailer_bogie_1` 表示编号为 1 的拖车转向架实例
     - `powered_bogie_3` 表示编号为 3 的动力转向架实例
   - 当 `controller_type = car` 时，每辆车对应一个控制器：
-    - `name`
     - `car_type`：`powered_car` / `trailer_car`
     - 建议结构：
       ```yaml
       vehicle_config:
         cars:
           - name: trailer_car_1
+            display_name: 1号拖车
             car_type: trailer_car
+            mass_static_override:
+              AW0: 31.60
+              AW2: 45.40
+              AW3: 51.20
           - name: powered_car_2
+            display_name: 2号动车
             car_type: powered_car
       ```
     - `powered_car` 表示该控制器控制一辆由两个动力转向架组成的车辆
     - `trailer_car` 表示该控制器控制一辆由两个拖车转向架组成的车辆
     - 若一辆车存在动架与拖架混合，则业务上不采用车控 BCU，而改用架控
-- 静态质量不在实例层配置；实例的 `bogie_type` 或 `car_type` 用于到 `mass_params` 中读取对应类型参数
-
+    - 车控模式允许整车级 `mass_static_override`
+    - 不支持在车控模式下表达“一辆车内部两个 bogie 的静态质量不同”；若存在车内 bogie 差异，应改用架控
+- 默认静态质量仍按类型级参数配置；实例的 `bogie_type` 或 `car_type` 用于到 `mass_params` 中读取对应类型参数。若个别实例存在独立称重，可在实例层通过 `mass_static_override` 定义 AW0 / AW2 / AW3 的静态质量覆盖；未配置 override 时，回退到 `mass_params` 中的类型默认值
 - `mass_static` = `sprung_mass` + `bogie_weight`
 - `sprung_mass` = `mass_static` - `bogie_weight`    
 - `mech_params`：制动缸机械模型参数，全列共享一套，用于在 S7 中由 `F_by_controller` 反算基础制动缸压力 `BCP_base_by_controller`，并内部推导基础力-压力转换系数 `k_initial`。V1 支持：
@@ -385,7 +404,7 @@
 | `load_summary` | `[load_group, controller] -> {mass_dynamic, spring_pressure}`（同一 `load_group` 内同 `bogie_type` 控制器值应一致，S9 拟合可按 bogie_type 取代表值） | ton, kPa | s9 | report |
 | `controller_pressure_standards` | `[load_group, brake_type, controller]` | kPa | s9 | report / Markdown |
 | `theoretical_speed_checks` | `[brake_type, speed_kmh] -> {requirement_a_mean, theoretical_distance_m, beta_used}` | m/s², m | s9 | report / Markdown |
-| `controller_code_params` | `{dynamic_mass_formula, pressure_conversion}` | mixed | s9 | report / Markdown |
+| `controller_code_params` | `{dynamic_mass_formula, dynamic_mass_formula_by_controller, pressure_conversion}` | mixed | s9 | report / Markdown |
 | `mass_dyn_formula_by_bogie_type` | `[bogie_type] -> {k, b, aw0: {spring_kPa, mass_dyn_t}, aw3: {spring_kPa, mass_dyn_t}, formula}` | ton/kPa, ton | s9 | report / Markdown |
 | `calibration_summary` | `{service_brake, emergency_brake}`，每组包含 `{BCP0, BCP0_for_code, point_pair_mode, input_points, curve_points, linear_formula_for_code}` | mixed | s9 | report / Markdown |
 | `parking_brake_check_result` | `{per_car, whole_train, pass}`（兼容字段，默认取首个已配置载荷组结果） | mixed | s9 | report / Markdown |
@@ -498,7 +517,7 @@ flowchart TD
 
 4) `calc_dynamic_load_and_mass`
 
-- in: validated_inputs（由 `bogie_type` 或 `car_type` 去 `mass_params` 中读取质量参数、`air_spring`、`bogie_weight`）
+- in: validated_inputs（由 `bogie_type` 或 `car_type` 去 `mass_params` 中读取共享质量参数、`air_spring`、`bogie_weight`；若实例配置 `mass_static_override`，则优先使用实例级静态质量覆盖）
 - out: `Mass_by_controller`、`AirSpringPressure_by_controller`、`AirSpringFit_by_bogie_type`
 - note:
     - 架控时，一个 controller 对应一个 bogie
@@ -510,11 +529,14 @@ flowchart TD
       - `bogie_weight` 聚合时乘 2
       - `mass_dynamic` 为整车级动态制动质量
       - `n_springs_by_controller = 4`
-    - 空簧压力公式始终输出**单个空簧压力标准**
-    - 先算 `sprung_mass = mass_static - bogie_weight`
-    - 再按 `sprung_mass_by_spring_ton = sprung_mass / n_springs_by_controller` 计算单个空簧承担的簧上质量
-    - 动态制动质量按 `mass_dynamic = mass_static[load_group] + mass_static[AW0] * rotational_mass_factor` 计算，即旋转质量增量以同类型 AW0 静态质量为基准
-
+- `mass_static` 的来源规则：
+  - 默认取 `mass_params.<type>.mass_static`
+  - 若实例定义 `mass_static_override`，则优先使用 override
+- `bogie_weight`、`rotational_mass_factor`、`air_spring` 在本次扩展中仍按类型共享，不支持实例级覆盖
+- 空簧压力公式始终输出**单个空簧压力标准**
+- 先算 `sprung_mass = mass_static - bogie_weight`
+- 再按 `sprung_mass_by_spring_ton = sprung_mass / n_springs_by_controller` 计算单个空簧承担的簧上质量
+- 动态制动质量按 `mass_dynamic = mass_static[load_group] + mass_static[AW0] * rotational_mass_factor` 计算，即旋转质量增量以同一实例 AW0 静态质量为基准
 
 5) `calc_required_brake_force`
 
@@ -628,7 +650,10 @@ flowchart TD
     - `EB`：使用其自身响应模型
     - `FB`：控制目标减速度取 `Beta_EB`，但理论速度检查时使用 `FB` 自身的响应模型（`t1 + impulse_rate`）
     - `ratio_of_FSB` 类型不单独生成理论速度检查
-  - `controller_code_params`：控制器开发用动态载荷公式和压力转换圆整参数；还需包括“按 AW0/AW3 两点拟合的 mass_dyn_t = k * spring_kPa + b（按 bogie_type 输出）”
+  - `controller_code_params`：控制器开发用动态载荷公式和压力转换圆整参数；需同时包括：
+    - `dynamic_mass_formula`：按 bogie_type 输出的兼容动态载荷公式
+    - `dynamic_mass_formula_by_controller`：按 controller 实例输出的动态载荷公式；当同类型实例存在不同 `mass_static_override` 时，应以实例级公式为准
+    - 压力转换圆整参数
   - `calibration_summary`：标定试验点、生成的 `k_sb(f)` / `k_eb(f)`、`BCP0_sb` / `BCP0_eb`、以及 AW0/AW2/AW3 对应的 `k_for_code`
     - 对 Markdown 主视图：
       - 必须展示最终生效的 `BCP0` 与 `BCP0_for_code`
@@ -880,7 +905,7 @@ workflow:
   - id: s4
     use: calc_dynamic_load_and_mass
     needs: [s3]
-    desc: 按 AW0/AW2/AW3 和转向架类型计算 Mass_by_controller（静态+含旋转质量的动态制动质量）,同时产出空簧压力标准和空簧拟合公式供调试/报告使用
+    desc: 按 AW0/AW2/AW3 和控制器实例计算 Mass_by_controller（静态+含旋转质量的动态制动质量）；默认静态质量来自转向架类型参数，若实例定义 `mass_static_override` 则优先使用实例覆盖；同时产出空簧压力标准和空簧拟合公式供调试/报告使用
   - id: s5
     use: calc_required_brake_force
     needs: [s4]

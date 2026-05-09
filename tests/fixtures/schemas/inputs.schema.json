@@ -494,7 +494,15 @@
       "description": "\u505c\u653e\u5236\u52a8\u529b\u6821\u6838\u914d\u7f6e\u3002",
       "properties": {
         "cylinder": {
-          "$ref": "#/$defs/ParkingBrakeCylinderConfig",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ParkingBrakeCylinderConfig"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
           "description": "\u5355\u4f4d: -"
         },
         "enabled": {
@@ -503,32 +511,59 @@
           "type": "boolean"
         },
         "environment": {
-          "$ref": "#/$defs/ParkingBrakeEnvironmentConfig",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ParkingBrakeEnvironmentConfig"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
           "description": "\u5355\u4f4d: -"
         },
         "n_parking_cylinders_by_car": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
           "description": "\u5355\u4f4d: -",
-          "title": "N Parking Cylinders By Car",
-          "type": "integer"
+          "title": "N Parking Cylinders By Car"
         },
         "required_safety_margin": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
           "description": "\u5355\u4f4d: -",
-          "title": "Required Safety Margin",
-          "type": "number"
+          "title": "Required Safety Margin"
         },
         "static_friction_coefficient": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
           "description": "\u5355\u4f4d: -",
-          "title": "Static Friction Coefficient",
-          "type": "number"
+          "title": "Static Friction Coefficient"
         }
       },
       "required": [
-        "enabled",
-        "required_safety_margin",
-        "static_friction_coefficient",
-        "n_parking_cylinders_by_car",
-        "cylinder",
-        "environment"
+        "enabled"
       ],
       "title": "ParkingBrakeCheckConfig",
       "type": "object"
@@ -663,7 +698,15 @@
       "description": "\u538b\u529b\u6807\u5b9a\u914d\u7f6e\u3002",
       "properties": {
         "emergency_brake": {
-          "$ref": "#/$defs/PressureCalibrationCase",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/PressureCalibrationCase"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
           "description": "\u5355\u4f4d: -"
         },
         "enabled": {
@@ -673,14 +716,18 @@
           "type": "boolean"
         },
         "service_brake": {
-          "$ref": "#/$defs/PressureCalibrationCase",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/PressureCalibrationCase"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
           "description": "\u5355\u4f4d: -"
         }
       },
-      "required": [
-        "service_brake",
-        "emergency_brake"
-      ],
       "title": "PressureCalibrationConfig",
       "type": "object"
     },

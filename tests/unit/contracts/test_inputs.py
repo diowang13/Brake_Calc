@@ -393,6 +393,25 @@ def test_inputs_reject_legacy_pressure_calibration_shape() -> None:
         "fallback": {"AW2": "AW3"},
     }
 
+    with pytest.raises(ValueError, match="calibrated|fallback"):
+        Inputs.model_validate(payload)
+
+
+def test_inputs_allow_disabled_pressure_calibration_without_detail_blocks() -> None:
+    payload = make_valid_bogie_payload()
+    payload["pressure_calibration"] = {"enabled": False}
+
+    model = Inputs.model_validate(payload)
+
+    assert model.pressure_calibration.enabled is False
+    assert model.pressure_calibration.service_brake is None
+    assert model.pressure_calibration.emergency_brake is None
+
+
+def test_enabled_pressure_calibration_requires_detail_blocks() -> None:
+    payload = make_valid_bogie_payload()
+    payload["pressure_calibration"] = {"enabled": True}
+
     with pytest.raises(ValueError, match="service_brake"):
         Inputs.model_validate(payload)
 
@@ -402,6 +421,28 @@ def test_parking_brake_check_requires_cylinder_block() -> None:
     del payload["parking_brake_check"]["cylinder"]
 
     with pytest.raises(ValueError, match="cylinder"):
+        Inputs.model_validate(payload)
+
+
+def test_inputs_allow_disabled_parking_brake_check_without_detail_blocks() -> None:
+    payload = make_valid_bogie_payload()
+    payload["parking_brake_check"] = {"enabled": False}
+
+    model = Inputs.model_validate(payload)
+
+    assert model.parking_brake_check.enabled is False
+    assert model.parking_brake_check.required_safety_margin is None
+    assert model.parking_brake_check.static_friction_coefficient is None
+    assert model.parking_brake_check.n_parking_cylinders_by_car is None
+    assert model.parking_brake_check.cylinder is None
+    assert model.parking_brake_check.environment is None
+
+
+def test_enabled_parking_brake_check_requires_detail_blocks() -> None:
+    payload = make_valid_bogie_payload()
+    payload["parking_brake_check"] = {"enabled": True}
+
+    with pytest.raises(ValueError, match="required_safety_margin"):
         Inputs.model_validate(payload)
 
 

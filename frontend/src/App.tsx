@@ -816,6 +816,12 @@ export function App(): ReactElement {
     const nextTrailerCount = parseCount(trailerCars, 1);
     const nextMixedCount = parseCount(mixedCars, 0);
 
+    setLoadInputMode(controllerConfigType);
+    setAirSpringMassUnit("ton");
+    setAirSpringInputMode("fitted_from_points");
+    setEmergencyRequirementMode("a_mean");
+    setFastBrakeEnabled(false);
+    setBaseBrakeCylinderType("tread_cylinder");
     setTargetPoweredCount(nextPoweredCount);
     setTargetTrailerCount(nextTrailerCount);
     setTargetMixedCount(controllerConfigType === "bogie" && hasMixedBogieVehicles ? nextMixedCount : 0);
@@ -826,6 +832,19 @@ export function App(): ReactElement {
         : generateBogieRows(nextPoweredCount, nextTrailerCount)
     );
     setActiveWorkbenchSection("requirements");
+    setOverviewData(null);
+    setActiveInputConfigId(null);
+    setImportProjectName("");
+    setImportProjectCode("");
+    setImportResult(null);
+    setImportYamlText("schema_version: 1\nv0: 80\n");
+    setYamlChangedLineIndexes([]);
+    setYamlChangedPaths([]);
+    setRuntimeReport(emptyReport);
+    setRuntimeWarnings([]);
+    setRuntimeAutoAdjustments([]);
+    setRuntimeFormState(null);
+    setRuntimeStatus("idle");
     setHasImportedConfig(false);
     setHasUnsavedWorkbenchChanges(false);
     setRequireReloadForWorkbench(false);

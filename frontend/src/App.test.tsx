@@ -11,6 +11,7 @@ import {
   openProject,
   previewCalibration,
   runConfig,
+  saveConfig,
 } from "./api/configClient";
 
 vi.mock("./api/configClient", () => {
@@ -444,15 +445,42 @@ async function openWorkbenchFromHome(user: ReturnType<typeof userEvent.setup>): 
     expect(screen.getByRole("heading", { level: 3, name: "空簧特性输入" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "按整车录入（推荐）" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "按转向架录入" })).toBeInTheDocument();
-    expect(screen.getAllByText(/动车称重（整车）/).length).toBeGreaterThan(0);
-    expect(screen.getAllByText(/拖车称重（整车）/).length).toBeGreaterThan(0);
+    expect(
+      screen.getAllByText((_, node) => (node?.textContent ?? "").includes("动车称重（整车）")).length
+    ).toBeGreaterThan(0);
+    expect(
+      screen.getAllByText((_, node) => (node?.textContent ?? "").includes("拖车称重（整车）")).length
+    ).toBeGreaterThan(0);
     expect(screen.getByRole("button", { name: "质量单位：ton" })).toBeInTheDocument();
     expect(
       screen.getByRole("button", { name: "质量单位：kN（前端辅助换算）" })
-    ).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "特征点拟合" })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "显式线性公式" })).toBeInTheDocument();
-  });
+      ).toBeInTheDocument();
+      expect(screen.getByRole("button", { name: "特征点拟合" })).toBeInTheDocument();
+      expect(screen.getByRole("button", { name: "显式线性公式" })).toBeInTheDocument();
+    });
+
+  it("emphasizes vehicle and bogie role words in load-entry labels", async () => {
+    const user = userEvent.setup();
+
+    render(<App />);
+
+    await openWorkbenchFromHome(user);
+    await user.click(screen.getByRole("button", { name: /^载荷与空簧/ }));
+
+    const poweredCarLabel = screen.getAllByText("动车")[0];
+    const trailerCarLabel = screen.getAllByText("拖车")[0];
+
+    expect(poweredCarLabel).toHaveStyle({ color: "#c64532", fontWeight: "700" });
+    expect(trailerCarLabel).toHaveStyle({ color: "#c64532", fontWeight: "700" });
+
+    await user.click(screen.getByRole("button", { name: "按转向架录入" }));
+
+    const poweredRoleLabel = screen.getAllByText("动架")[0];
+    const trailerRoleLabel = screen.getAllByText("拖架")[0];
+
+      expect(poweredRoleLabel).toHaveStyle({ color: "#c64532", fontWeight: "700" });
+      expect(trailerRoleLabel).toHaveStyle({ color: "#c64532", fontWeight: "700" });
+    });
 
   it("switches the air spring input mode between fitted points and explicit linear formula", async () => {
     const user = userEvent.setup();
@@ -1590,6 +1618,112 @@ async function openWorkbenchFromHome(user: ReturnType<typeof userEvent.setup>): 
     expect(screen.getByText("当前状态：未补充停放校核")).toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "启用停放校核" }));
     expect(screen.getByText("当前状态：已补充停放校核")).toBeInTheDocument();
+  });
+
+  it("omits disabled calibration and parking details when saving a workbench draft", async () => {
+    const user = userEvent.setup();
+
+    render(<App />);
+    await openWorkbenchFromHome(user);
+
+    await user.click(screen.getByRole("button", { name: /^标定/ }));
+    await user.click(screen.getByRole("button", { name: "停用标定" }));
+    await user.click(screen.getByRole("button", { name: /^停放校核/ }));
+    await user.click(screen.getByRole("button", { name: "停用停放校核" }));
+
+    await user.click(screen.getByRole("button", { name: "保存" }));
+    await user.click(screen.getByRole("button", { name: "确认保存" }));
+
+    const savePayload = vi.mocked(saveConfig).mock.calls.at(-1)?.[0] as
+      | { form_state?: Record<string, unknown> }
+      | undefined;
+    const formState = savePayload?.form_state ?? {};
+    const pressureCalibration = (formState.pressure_calibration ?? {}) as Record<string, unknown>;
+    const parkingBrakeCheck = (formState.parking_brake_check ?? {}) as Record<string, unknown>;
+
+    expect(pressureCalibration.enabled).toBe(false);
+    expect(pressureCalibration).not.toHaveProperty("service_brake");
+    expect(pressureCalibration).not.toHaveProperty("emergency_brake");
+    expect(parkingBrakeCheck.enabled).toBe(false);
+    expect(parkingBrakeCheck).not.toHaveProperty("cylinder");
+    expect(parkingBrakeCheck).not.toHaveProperty("environment");
+  });
+
+  it("omits Dw and Rf when saving tread cylinder mech params", async () => {
+    const user = userEvent.setup();
+
+    render(<App />);
+    await openWorkbenchFromHome(user);
+
+    await user.click(screen.getByRole("button", { name: /^基础制动机械参数/ }));
+    expect(screen.getByRole("button", { name: "踏面制动 tread_cylinder" })).toHaveAttribute(
+      "aria-pressed",
+      "true"
+    );
+
+    await user.click(screen.getByRole("button", { name: "保存" }));
+    await user.click(screen.getByRole("button", { name: "确认保存" }));
+
+    const savePayload = vi.mocked(saveConfig).mock.calls.at(-1)?.[0] as
+      | { form_state?: Record<string, unknown> }
+      | undefined;
+    const mechParams = ((savePayload?.form_state ?? {}).mech_params ?? {}) as Record<string, unknown>;
+
+    expect(mechParams.cylinder_type).toBe("tread_cylinder");
+    expect(mechParams).not.toHaveProperty("Dw");
+    expect(mechParams).not.toHaveProperty("Rf");
+  });
+
+  it("starts a fresh draft from new initializer instead of inheriting the active config", async () => {
+    const user = userEvent.setup();
+
+    render(<App />);
+
+    const yamlText = [
+      "schema_version: 1",
+      "mech_params:",
+      "  cylinder_type: caliper_cylinder",
+      "  Sc: 0.0248",
+      "  xi: 0.29",
+      "  Li: 3.4",
+      "  eta_i: 0.95",
+      "  Lo: 1.0",
+      "  eta_o: 1.0",
+      "  Fs1: 1.0",
+      "  Fs2: 0.25",
+      "  Dw: 0.84",
+      "  Rf: 0.12",
+      "",
+    ].join("\n");
+    const file = new File([yamlText], "example_new_initializer_reset.yaml", { type: "text/yaml" });
+    await user.upload(screen.getByLabelText("上传 YAML 文件"), file);
+    await screen.findByRole("heading", { level: 2, name: "导入摘要" });
+    await user.type(screen.getByRole("textbox", { name: "项目名称" }), "旧配置项目");
+    await user.type(screen.getByRole("textbox", { name: "项目编号" }), "IMP-RESET-001");
+    await user.click(screen.getByRole("button", { name: "保存并查看总览" }));
+    await screen.findByRole("heading", { level: 2, name: /上海机场线制动项目|旧配置项目/ });
+
+    await user.click(screen.getByRole("button", { name: "新建初始化" }));
+    await user.click(screen.getByRole("button", { name: "生成配置并进入工作台" }));
+    await user.click(screen.getByRole("button", { name: /^基础制动机械参数/ }));
+
+    expect(screen.getByRole("button", { name: "踏面制动 tread_cylinder" })).toHaveAttribute(
+      "aria-pressed",
+      "true"
+    );
+
+    await user.click(screen.getByRole("button", { name: "保存" }));
+    await user.click(screen.getByRole("button", { name: "确认保存" }));
+
+    const savePayload = vi.mocked(saveConfig).mock.calls.at(-1)?.[0] as
+      | { form_state?: Record<string, unknown>; source_input_config_id?: string }
+      | undefined;
+    const mechParams = ((savePayload?.form_state ?? {}).mech_params ?? {}) as Record<string, unknown>;
+
+    expect(savePayload?.source_input_config_id).toBeUndefined();
+    expect(mechParams.cylinder_type).toBe("tread_cylinder");
+    expect(mechParams).not.toHaveProperty("Dw");
+    expect(mechParams).not.toHaveProperty("Rf");
   });
 
   it("prompts before leaving workbench with unsaved changes and respects cancel or confirm", async () => {

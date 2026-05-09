@@ -347,8 +347,19 @@ class PressureCalibrationConfig(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     enabled: bool = Field(default=True, description="单位: -")
-    service_brake: PressureCalibrationCase = Field(..., description="单位: -")
-    emergency_brake: PressureCalibrationCase = Field(..., description="单位: -")
+    service_brake: PressureCalibrationCase | None = Field(default=None, description="单位: -")
+    emergency_brake: PressureCalibrationCase | None = Field(default=None, description="单位: -")
+
+    @model_validator(mode="after")
+    def validate_enabled_shape(self) -> "PressureCalibrationConfig":
+        """仅在启用标定时要求完整结构。"""
+        if not self.enabled:
+            return self
+        if self.service_brake is None:
+            raise ValueError("service_brake is required when pressure_calibration.enabled = true")
+        if self.emergency_brake is None:
+            raise ValueError("emergency_brake is required when pressure_calibration.enabled = true")
+        return self
 
 
 class ParkingBrakeCylinderConfig(BaseModel):
@@ -409,15 +420,33 @@ class ParkingBrakeCheckConfig(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     enabled: bool = Field(..., description="单位: -")
-    required_safety_margin: float = Field(..., description="单位: -")
-    static_friction_coefficient: float = Field(..., description="单位: -")
-    n_parking_cylinders_by_car: int = Field(..., description="单位: -")
-    cylinder: ParkingBrakeCylinderConfig = Field(..., description="单位: -")
-    environment: ParkingBrakeEnvironmentConfig = Field(..., description="单位: -")
+    required_safety_margin: float | None = Field(default=None, description="单位: -")
+    static_friction_coefficient: float | None = Field(default=None, description="单位: -")
+    n_parking_cylinders_by_car: int | None = Field(default=None, description="单位: -")
+    cylinder: ParkingBrakeCylinderConfig | None = Field(default=None, description="单位: -")
+    environment: ParkingBrakeEnvironmentConfig | None = Field(default=None, description="单位: -")
 
     @model_validator(mode="after")
     def validate_values(self) -> "ParkingBrakeCheckConfig":
         """校验停放制动力校核配置。"""
+        if not self.enabled:
+            return self
+        if self.required_safety_margin is None:
+            raise ValueError(
+                "required_safety_margin is required when parking_brake_check.enabled = true"
+            )
+        if self.static_friction_coefficient is None:
+            raise ValueError(
+                "static_friction_coefficient is required when parking_brake_check.enabled = true"
+            )
+        if self.n_parking_cylinders_by_car is None:
+            raise ValueError(
+                "n_parking_cylinders_by_car is required when parking_brake_check.enabled = true"
+            )
+        if self.cylinder is None:
+            raise ValueError("cylinder is required when parking_brake_check.enabled = true")
+        if self.environment is None:
+            raise ValueError("environment is required when parking_brake_check.enabled = true")
         if self.required_safety_margin <= 0:
             raise ValueError("required_safety_margin must be > 0")
         if self.static_friction_coefficient <= 0:
