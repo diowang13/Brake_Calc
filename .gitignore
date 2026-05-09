@@ -187,3 +187,8 @@ frontend/*.tsbuildinfo
 
 # Codex
 .codex/
+
+# Runtime outputs
+out/
+*.db
+*.db.bak_*

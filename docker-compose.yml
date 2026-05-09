@@ -7,7 +7,7 @@ services:
     environment:
       BRAKE_CALC_DB_PATH: /data/brake_calc.db
     volumes:
-      - brake_calc_data:/data
+      - /opt/brakehub/data:/data
     ports:
       - "8000:8000"
     restart: unless-stopped
@@ -25,6 +25,3 @@ services:
     volumes:
       - /opt/brakehub/certs:/etc/letsencrypt:ro
     restart: unless-stopped
-
-volumes:
-  brake_calc_data:
