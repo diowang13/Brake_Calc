@@ -2561,6 +2561,46 @@ async function openWorkbenchFromHome(user: ReturnType<typeof userEvent.setup>): 
     expect(vi.mocked(listProjects).mock.calls.length).toBeGreaterThan(initialCalls);
   });
 
+  it("keeps the previously loaded real project list when returning home refresh fails", async () => {
+    const user = userEvent.setup();
+    vi.mocked(listProjects)
+      .mockResolvedValueOnce({
+        items: [
+          {
+            project_name: "成都30号线",
+            project_code: "TKQ604X",
+            updated_at: "2026-05-14T10:00:00Z",
+            latest_input_config_id: "cfg-chengdu",
+            controller_type: "bogie",
+            latest_run: null,
+          },
+          {
+            project_name: "北京11号线",
+            project_code: "TKQ604J",
+            updated_at: "2026-05-14T09:00:00Z",
+            latest_input_config_id: "cfg-beijing",
+            controller_type: "car",
+            latest_run: null,
+          },
+        ],
+      })
+      .mockRejectedValueOnce(new Error("network_failed"));
+
+    render(<App />);
+
+    expect(await screen.findByText("成都30号线 / TKQ604X")).toBeInTheDocument();
+    expect(screen.getByText("北京11号线 / TKQ604J")).toBeInTheDocument();
+
+    await user.click(screen.getAllByRole("button", { name: "打开" })[0]);
+    await screen.findByRole("button", { name: "修订" });
+    await user.click(screen.getByRole("button", { name: "首页 / 项目列表" }));
+
+    expect(await screen.findByText("成都30号线 / TKQ604X")).toBeInTheDocument();
+    expect(screen.getByText("北京11号线 / TKQ604J")).toBeInTheDocument();
+    expect(screen.queryByText("上海机场线制动项目 / SH-HX-026")).not.toBeInTheDocument();
+    expect(screen.queryByText("崇明线预研项目 / CM-PR-011")).not.toBeInTheDocument();
+  });
+
   it("downloads YAML from workbench", async () => {
     const user = userEvent.setup();
     Object.defineProperty(window.URL, "createObjectURL", {

@@ -14,13 +14,15 @@ export function HomePage({
   onOpenProject,
   onOpenProjectSelector,
   onImportYamlFile,
-  projects
+  projects,
+  projectsLoadFailed,
 }: {
   onCreateProject: () => void;
   onOpenProject: (projectCode: string) => void;
   onOpenProjectSelector: () => void;
   onImportYamlFile: (yamlText: string) => void;
   projects: ProjectListItem[];
+  projectsLoadFailed: boolean;
 }): ReactElement {
   const formatUpdatedAt = (value: string): string => {
     const parsed = new Date(value);
@@ -49,25 +51,6 @@ export function HomePage({
     event.target.value = "";
   };
 
-  const rows =
-    projects.length > 0
-      ? projects
-      : [
-          {
-            project_name: "上海机场线制动项目",
-            project_code: "SH-HX-026",
-            updated_at: "最后修改时间",
-            latest_input_config_id: null,
-            latest_run: { calculation_run_id: "", status: "succeeded", report: null, created_at: "" },
-          },
-          {
-            project_name: "崇明线预研项目",
-            project_code: "CM-PR-011",
-            updated_at: "最后修改时间",
-            latest_input_config_id: null,
-            latest_run: { calculation_run_id: "", status: "failed", report: null, created_at: "" },
-          },
-        ];
   return (
     <div style={{ display: "grid", gap: "20px" }}>
       <section
@@ -146,29 +129,46 @@ export function HomePage({
             默认按最后修改时间倒序；列表内显示项目身份、BCU 类型和最近运行状态。
           </p>
         </div>
-        {rows.map((item) => (
-          <ProjectRow
-            key={item.project_code}
-            title={`${item.project_name} / ${item.project_code}`}
-            subtitle="适用于既有项目打开与重算"
-            updatedAt={formatUpdatedAt(item.updated_at)}
-            controllerMode={
-              item.controller_type === "bogie"
-                ? "架控"
-                : item.controller_type === "car"
-                  ? "车控"
-                  : "未知"
-            }
-            status={
-              item.latest_run?.status === "succeeded"
-                ? "最近运行成功"
-                : item.latest_run?.status === "failed"
-                  ? "最近运行失败"
-                  : "暂无运行记录"
-            }
-            onOpen={() => onOpenProject(item.project_code)}
-          />
-        ))}
+        {projects.length > 0 ? (
+          projects.map((item) => (
+            <ProjectRow
+              key={item.project_code}
+              title={`${item.project_name} / ${item.project_code}`}
+              subtitle="适用于既有项目打开与重算"
+              updatedAt={formatUpdatedAt(item.updated_at)}
+              controllerMode={
+                item.controller_type === "bogie"
+                  ? "架控"
+                  : item.controller_type === "car"
+                    ? "车控"
+                    : "未知"
+              }
+              status={
+                item.latest_run?.status === "succeeded"
+                  ? "最近运行成功"
+                  : item.latest_run?.status === "failed"
+                    ? "最近运行失败"
+                    : "暂无运行记录"
+              }
+              onOpen={() => onOpenProject(item.project_code)}
+            />
+          ))
+        ) : (
+          <div
+            style={{
+              border: "1px dashed #ccbca8",
+              borderRadius: "16px",
+              padding: "18px",
+              background: "#f8f2eb",
+              color: "#6b6259",
+              lineHeight: 1.7,
+            }}
+          >
+            {projectsLoadFailed
+              ? "项目列表加载失败，请稍后重试或刷新页面。"
+              : "当前暂无项目，请先新建项目计算。"}
+          </div>
+        )}
       </section>
     </div>
   );

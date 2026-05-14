@@ -309,6 +309,7 @@ export function App(): ReactElement {
   const [runtimeFormState, setRuntimeFormState] = useState<Record<string, unknown> | null>(null);
   const [runtimeStatus, setRuntimeStatus] = useState<"idle" | "succeeded" | "failed">("idle");
   const [projects, setProjects] = useState<ProjectListItem[]>([]);
+  const [projectsLoadFailed, setProjectsLoadFailed] = useState(false);
   const [isProjectSelectorOpen, setIsProjectSelectorOpen] = useState(false);
   const [selectedProjectCodeForSelector, setSelectedProjectCodeForSelector] = useState("");
   const [projectVersionOptions, setProjectVersionOptions] = useState<ProjectVersionListItem[]>([]);
@@ -330,9 +331,10 @@ export function App(): ReactElement {
     listProjects()
       .then((result) => {
         setProjects(result.items);
+        setProjectsLoadFailed(false);
       })
       .catch(() => {
-        setProjects([]);
+        setProjectsLoadFailed(true);
       });
   };
 
@@ -1024,6 +1026,7 @@ export function App(): ReactElement {
             setActiveScreen("import-summary");
           }}
           projects={projects}
+          projectsLoadFailed={projectsLoadFailed}
         />
       );
     }
